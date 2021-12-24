@@ -22,8 +22,6 @@ import static org.apache.hadoop.fs.permission.AclEntryType.GROUP;
 import static org.apache.hadoop.fs.permission.AclEntryType.OTHER;
 import static org.apache.hadoop.fs.permission.AclEntryType.USER;
 
-import org.junit.After;
-
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.security.PrivilegedExceptionAction;
@@ -49,15 +47,9 @@ public class TestStorageBasedMetastoreAuthorizationProviderWithACL
 
   protected static MiniDFSShim dfs = null;
   protected static Path warehouseDir = null;
-  protected static Path extWarehouseDir = null;
   protected UserGroupInformation userUgi = null;
   protected String testUserName = "test_user";
-  protected String proxyUserName = null;
 
-  @Override
-  protected String getProxyUserName() {
-    return proxyUserName;
-  }
 
   @Override
   protected boolean isTestEnabled() {
@@ -82,19 +74,17 @@ public class TestStorageBasedMetastoreAuthorizationProviderWithACL
 
     // Hadoop FS ACLs do not work with LocalFileSystem, so set up MiniDFS.
     HiveConf conf = super.createHiveConf();
-    proxyUserName = Utils.getUGI().getShortUserName();
+    String currentUserName = Utils.getUGI().getShortUserName();
     conf.set("dfs.namenode.acls.enabled", "true");
-    conf.set("hadoop.proxyuser." + proxyUserName + ".groups", "*");
-    conf.set("hadoop.proxyuser." + proxyUserName + ".hosts", "*");
+    conf.set("hadoop.proxyuser." + currentUserName + ".groups", "*");
+    conf.set("hadoop.proxyuser." + currentUserName + ".hosts", "*");
     dfs = ShimLoader.getHadoopShims().getMiniDfs(conf, 4, true, null);
     FileSystem fs = dfs.getFileSystem();
 
     warehouseDir = new Path(new Path(fs.getUri()), "/warehouse");
     fs.mkdirs(warehouseDir);
     conf.setVar(HiveConf.ConfVars.METASTOREWAREHOUSE, warehouseDir.toString());
-    extWarehouseDir = new Path(new Path(fs.getUri()), "/external");
-    fs.mkdirs(extWarehouseDir);
-    conf.setVar(HiveConf.ConfVars.HIVE_METASTORE_WAREHOUSE_EXTERNAL, extWarehouseDir.toString());
+    conf.setBoolVar(HiveConf.ConfVars.HIVE_WAREHOUSE_SUBDIR_INHERIT_PERMS, true);
 
     // Set up scratch directory
     Path scratchDir = new Path(new Path(fs.getUri()), "/scratchdir");
@@ -113,8 +103,8 @@ public class TestStorageBasedMetastoreAuthorizationProviderWithACL
     return userUgi.getShortUserName();
   }
 
-  @After
-  public void tearDown() throws Exception {
+  @Override
+  protected void tearDown() throws Exception {
     super.tearDown();
 
     if (dfs != null) {
@@ -181,23 +171,9 @@ public class TestStorageBasedMetastoreAuthorizationProviderWithACL
         .setPermission(permission).build();
   }
 
-  @Override
-  protected boolean mayTestLocation() {
-    return false;
-  }
-
-  @Override
   protected void allowCreateDatabase(String userName)
       throws Exception {
     allowWriteAccessViaAcl(userName, warehouseDir.toString());
-    allowWriteAccessViaAcl(userName, extWarehouseDir.toString());
-  }
-
-  @Override
-  protected void disallowCreateDatabase(String userName)
-      throws Exception {
-    disallowWriteAccessViaAcl(userName, warehouseDir.toString());
-    disallowWriteAccessViaAcl(userName, extWarehouseDir.toString());
   }
 
   @Override

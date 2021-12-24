@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,28 +17,26 @@
  */
 package org.apache.hadoop.hive.ql.udf.generic;
 
-import java.time.ZonedDateTime;
-import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.udf.UDFType;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 
-// This function is not a deterministic function, but a runtime constant.
-// The return value is constant within a query but can be different between queries.
-@UDFType(deterministic = false, runtimeConstant = true)
+// If there is a new UDFType to describe a function that is deterministic within a query
+// but changes value between queries, this function would fall into that category.
+@UDFType(deterministic = true)
 @Description(name = "current_timestamp",
     value = "_FUNC_() - Returns the current timestamp at the start of query evaluation."
     + " All calls of current_timestamp within the same query return the same value.")
 @NDV(maxNdv = 1)
 public class GenericUDFCurrentTimestamp extends GenericUDF {
 
-  protected TimestampWritableV2 currentTimestamp;
+  protected TimestampWritable currentTimestamp;
 
   @Override
   public ObjectInspector initialize(ObjectInspector[] arguments)
@@ -50,11 +48,7 @@ public class GenericUDFCurrentTimestamp extends GenericUDF {
     }
 
     if (currentTimestamp == null) {
-      SessionState ss = SessionState.get();
-      ZonedDateTime dateTime = ss.getQueryCurrentTimestamp().atZone(
-          ss.getConf().getLocalTimeZone());
-      currentTimestamp = new TimestampWritableV2(
-          Timestamp.valueOf(dateTime.toLocalDateTime().toString()));
+      currentTimestamp = new TimestampWritable(SessionState.get().getQueryCurrentTimestamp());
     }
 
     return PrimitiveObjectInspectorFactory.writableTimestampObjectInspector;
@@ -65,11 +59,11 @@ public class GenericUDFCurrentTimestamp extends GenericUDF {
     return currentTimestamp;
   }
 
-  public TimestampWritableV2 getCurrentTimestamp() {
+  public TimestampWritable getCurrentTimestamp() {
     return currentTimestamp;
   }
 
-  public void setCurrentTimestamp(TimestampWritableV2 currentTimestamp) {
+  public void setCurrentTimestamp(TimestampWritable currentTimestamp) {
     this.currentTimestamp = currentTimestamp;
   }
 
@@ -84,7 +78,7 @@ public class GenericUDFCurrentTimestamp extends GenericUDF {
     // Need to preserve currentTimestamp
     GenericUDFCurrentTimestamp other = (GenericUDFCurrentTimestamp) newInstance;
     if (this.currentTimestamp != null) {
-      other.currentTimestamp = new TimestampWritableV2(this.currentTimestamp);
+      other.currentTimestamp = new TimestampWritable(this.currentTimestamp);
     }
   }
 }

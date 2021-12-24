@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,19 +18,15 @@
  */
 package org.apache.hive.hcatalog.api.repl.commands;
 
-
+import junit.framework.TestCase;
 import org.apache.hive.hcatalog.api.repl.Command;
 import org.apache.hive.hcatalog.api.repl.CommandTestUtils;
-import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
-/**
- * TestNoopCommand.
- */
-public class TestNoopCommand {
+public class TestNoopCommand extends TestCase {
 
   @Test
-  public void testCommand(){
+  public static void testCommand(){
     int evid = 999;
     Command testCmd = new NoopCommand(evid);
 

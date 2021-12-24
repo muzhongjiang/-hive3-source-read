@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,24 +18,23 @@
 
 package org.apache.hive.hplsql;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.math.RoundingMode;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.text.DecimalFormat;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.List;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.io.IOException;
 
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.apache.commons.lang3.StringEscapeUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hive.hplsql.executor.QueryExecutor;
-import org.apache.hive.hplsql.executor.QueryResult;
+import org.apache.hive.hplsql.Var;
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
 public class Copy {
   
@@ -55,13 +54,11 @@ public class Copy {
   boolean overwrite = false;
   boolean delete = false;
   boolean ignore = false;
-  private QueryExecutor queryExecutor;
-
-  Copy(Exec e, QueryExecutor queryExecutor) {
-    exec = e;
+  
+  Copy(Exec e) {
+    exec = e;  
     trace = exec.getTrace();
     info = exec.getInfo();
-    this.queryExecutor = queryExecutor;
   }
   
   /**
@@ -71,18 +68,21 @@ public class Copy {
     trace(ctx, "COPY");
     initOptions(ctx);
     StringBuilder sql = new StringBuilder();
+    String conn = null;
     if (ctx.table_name() != null) {
       String table = evalPop(ctx.table_name()).toString();
+      conn = exec.getObjectConnection(ctx.table_name().getText());
       sql.append("SELECT * FROM ");
       sql.append(table); 
     }
     else {
       sql.append(evalPop(ctx.select_stmt()).toString());
+      conn = exec.getStatementConnection();
       if (trace) {
         trace(ctx, "Statement:\n" + sql);
       }
     }
-    QueryResult query = queryExecutor.executeQuery(sql.toString(), ctx);
+    Query query = exec.executeQuery(ctx, sql.toString(), conn);
     if (query.error()) { 
       exec.signal(query);
       return 1;
@@ -95,11 +95,13 @@ public class Copy {
       else {
         copyToFile(ctx, query);
       }
-    } catch (Exception e) {
+    }
+    catch (Exception e) {
       exec.signal(e);
       return 1;
-    } finally {
-      query.close();
+    }
+    finally {
+      exec.closeQuery(query, conn);
     }
     return 0;
   }
@@ -108,8 +110,13 @@ public class Copy {
    * Copy the query results to another table
    * @throws Exception 
    */
-  void copyToTable(HplsqlParser.Copy_stmtContext ctx, QueryResult query) throws Exception {
-    int cols = query.columnCount();
+  void copyToTable(HplsqlParser.Copy_stmtContext ctx, Query query) throws Exception {
+    ResultSet rs = query.getResultSet();
+    if (rs == null) {
+      return;
+    }
+    ResultSetMetaData rm = rs.getMetaData();
+    int cols = rm.getColumnCount();
     int rows = 0;
     if (trace) {
       trace(ctx, "SELECT executed: " + cols + " columns");
@@ -128,9 +135,9 @@ public class Copy {
     long start = timer.start();
     long prev = start;
     boolean batchOpen = false;
-    while (query.next()) {
-      for (int i = 0; i < cols; i++) {
-        ps.setObject(i, query.column(i, Object.class));
+    while (rs.next()) {
+      for (int i = 1; i <= cols; i++) {
+        ps.setObject(i, rs.getObject(i));
       }
       rows++;
       if (batchSize > 1) {
@@ -160,9 +167,7 @@ public class Copy {
     exec.setRowCount(rows);
     long elapsed = timer.stop();
     if (info) {
-      DecimalFormat df = new DecimalFormat("#,##0.00");
-      df.setRoundingMode(RoundingMode.HALF_UP);
-      info(ctx, "COPY completed: " + rows + " row(s), " + timer.format() + ", " + df.format(rows/(elapsed/1000.0)) + " rows/sec");
+      info(ctx, "COPY completed: " + rows + " row(s), " + timer.format() + ", " + rows/(elapsed/1000) + " rows/sec");
     }
   }
   
@@ -170,7 +175,12 @@ public class Copy {
    * Copy the query results to a file
    * @throws Exception 
    */
-  void copyToFile(HplsqlParser.Copy_stmtContext ctx, QueryResult query) throws Exception {
+  void copyToFile(HplsqlParser.Copy_stmtContext ctx, Query query) throws Exception {
+    ResultSet rs = query.getResultSet();
+    if (rs == null) {
+      return;
+    }
+    ResultSetMetaData rm = rs.getMetaData();
     String filename = null;
     if (ctx.copy_target().expr() != null) {
       filename = evalPop(ctx.copy_target().expr()).toString();
@@ -181,7 +191,7 @@ public class Copy {
     byte[] del = delimiter.getBytes();
     byte[] rowdel = "\n".getBytes();
     byte[] nullstr = "NULL".getBytes();
-    int cols = query.columnCount();
+    int cols = rm.getColumnCount();
     int rows = 0;
     long bytes = 0;
     if (trace || info) {
@@ -219,16 +229,16 @@ public class Copy {
         sql = "INSERT INTO " + sqlInsertName + " VALUES (";
         rowdel = ");\n".getBytes();
       }
-      while (query.next()) {
+      while (rs.next()) {
         if (sqlInsert) {
           out.write(sql.getBytes());
         }
-        for (int i = 0; i < cols; i++) {
-          if (i > 0) {
+        for (int i = 1; i <= cols; i++) {
+          if (i > 1) {
             out.write(del);
             bytes += del.length;
           }
-          col = query.column(i, String.class);
+          col = rs.getString(i);
           if (col != null) {
             if (sqlInsert) {
               col = Utils.quoteString(col);
@@ -254,9 +264,7 @@ public class Copy {
     }
     long elapsed = timer.stop();
     if (info) {
-      DecimalFormat df = new DecimalFormat("#,##0.00");
-      df.setRoundingMode(RoundingMode.HALF_UP);
-      info(ctx, "COPY completed: " + rows + " row(s), " + Utils.formatSizeInBytes(bytes) + ", " + timer.format() + ", " + df.format(rows/(elapsed/1000.0)) + " rows/sec");
+      info(ctx, "COPY completed: " + rows + " row(s), " + Utils.formatSizeInBytes(bytes) + ", " + timer.format() + ", " + rows/elapsed/1000 + " rows/sec");
     }
   }
   
@@ -266,7 +274,7 @@ public class Copy {
   public Integer runFromLocal(HplsqlParser.Copy_from_local_stmtContext ctx) { 
     trace(ctx, "COPY FROM LOCAL");
     initFileOptions(ctx.copy_file_option());
-    HashMap<String, Pair<String, Long>> srcFiles = new HashMap<>();
+    HashMap<String, Pair<String, Long>> srcFiles = new HashMap<String, Pair<String, Long>>();  
     String src = evalPop(ctx.copy_source(0)).toString();
     String dest = evalPop(ctx.copy_target()).toString();
     int srcItems = ctx.copy_source().size();
@@ -282,7 +290,7 @@ public class Copy {
     }
     timer.start();
     File file = new File();
-    FileSystem fs;
+    FileSystem fs = null;
     int succeed = 0;
     int failed = 0;
     long copiedSize = 0;
@@ -295,7 +303,7 @@ public class Copy {
       for (Map.Entry<String, Pair<String, Long>> i : srcFiles.entrySet()) {
         try {
           Path s = new Path(i.getKey());           
-          Path d;
+          Path d = null;
           if (multi) {
             String relativePath = i.getValue().getLeft();
             if (relativePath == null) {
@@ -363,7 +371,7 @@ public class Copy {
       if (file.isDirectory()) {
         for (java.io.File i : file.listFiles()) {
           if (i.isDirectory()) {
-            String rel;
+            String rel = null;
             if (relativePath == null) {
               rel = i.getName();
             }
@@ -400,12 +408,12 @@ public class Copy {
       else if (option.T_SQLINSERT() != null) {
         sqlInsert = true;
         delimiter = ", ";
-        if (option.qident() != null) {
-          sqlInsertName = option.qident().getText();
+        if (option.ident() != null) {
+          sqlInsertName = option.ident().getText();
         }
       }
       else if (option.T_AT() != null) {
-        targetConn = option.qident().getText();
+        targetConn = option.ident().getText();
         if (ctx.copy_target().expr() != null) {
           sqlInsertName = evalPop(ctx.copy_target().expr()).toString();
         }

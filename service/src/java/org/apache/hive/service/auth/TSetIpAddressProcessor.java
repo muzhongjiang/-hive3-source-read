@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -31,12 +31,12 @@ import org.slf4j.LoggerFactory;
 
 /**
  * This class is responsible for setting the ipAddress for operations executed via HiveServer2.
- * <br>
+ * <p>
  * <ul>
  * <li>IP address is only set for operations that calls listeners with hookContext</li>
  * <li>IP address is only set if the underlying transport mechanism is socket</li>
  * </ul>
- * <br>
+ * </p>
  *
  * @see org.apache.hadoop.hive.ql.hooks.ExecuteWithHookContext
  */
@@ -49,12 +49,11 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
   }
 
   @Override
-  public void process(final TProtocol in, final TProtocol out) throws TException {
+  public boolean process(final TProtocol in, final TProtocol out) throws TException {
     setIpAddress(in);
     setUserName(in);
     try {
-      super.process(in, out);
-      return;
+      return super.process(in, out);
     } finally {
       THREAD_LOCAL_USER_NAME.remove();
       THREAD_LOCAL_IP_ADDRESS.remove();

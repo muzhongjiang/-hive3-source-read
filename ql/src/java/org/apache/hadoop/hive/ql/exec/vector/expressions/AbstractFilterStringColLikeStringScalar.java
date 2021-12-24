@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharsetDecoder;
@@ -29,12 +30,10 @@ import java.util.StringTokenizer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.hadoop.conf.Configuration;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * An abstract class for LIKE and REGEXP expressions. LIKE and REGEXP expression share similar
@@ -44,32 +43,17 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpression {
   private static final long serialVersionUID = 1L;
 
-  private final int colNum;
-
+  private int colNum;
   private String pattern;
-
-  // Transient members initialized by transientInit method.
-  transient Checker checker;
-
-  public AbstractFilterStringColLikeStringScalar(int colNum, String pattern) {
-    super();
-    this.colNum = colNum;
-    this.pattern = pattern;
-  }
+  transient Checker checker = null;
 
   public AbstractFilterStringColLikeStringScalar() {
     super();
-
-    // Dummy final assignments.
-    colNum = -1;
-    pattern = null;
   }
 
-  @Override
-  public void transientInit(Configuration conf) throws HiveException {
-    super.transientInit(conf);
-
-    checker = createChecker(pattern);
+  public AbstractFilterStringColLikeStringScalar(int colNum, String pattern) {
+    this.colNum = colNum;
+    this.pattern = pattern;
   }
 
   protected abstract List<CheckerFactory> getCheckerFactories();
@@ -90,7 +74,11 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
+
+    if (checker == null) {
+      checker = createChecker(pattern);
+    }
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
@@ -192,6 +180,16 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
     }
   }
 
+  @Override
+  public int getOutputColumn() {
+    return -1;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
   /**
    * A Checker contains a pattern and checks whether a given string matches or not.
    */
@@ -227,7 +225,11 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
     final byte [] byteSub;
 
     NoneChecker(String pattern) {
-      byteSub = pattern.getBytes(StandardCharsets.UTF_8);
+      try {
+        byteSub = pattern.getBytes("UTF-8");
+      } catch (UnsupportedEncodingException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     public boolean check(byte[] byteS, int start, int len) {
@@ -251,7 +253,11 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
     final byte[] byteSub;
 
     BeginChecker(String pattern) {
-      byteSub = pattern.getBytes(StandardCharsets.UTF_8);
+      try {
+        byteSub = pattern.getBytes("UTF-8");
+      } catch (UnsupportedEncodingException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     public boolean check(byte[] byteS, int start, int len) {
@@ -270,7 +276,11 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
     final byte[] byteSub;
 
     EndChecker(String pattern) {
-      byteSub = pattern.getBytes(StandardCharsets.UTF_8);
+      try {
+        byteSub = pattern.getBytes("UTF-8");
+      } catch (UnsupportedEncodingException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     public boolean check(byte[] byteS, int start, int len) {
@@ -405,7 +415,11 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
     }
 
     private int utf8Length(String chunk) {
-      return chunk.getBytes(StandardCharsets.UTF_8).length;
+      try {
+        return chunk.getBytes("UTF-8").length;
+      } catch (UnsupportedEncodingException ue) {
+        throw new RuntimeException(ue);
+      }
     }
 
   }
@@ -472,6 +486,14 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
     }
   }
 
+  public int getColNum() {
+    return colNum;
+  }
+
+  public void setColNum(int colNum) {
+    this.colNum = colNum;
+  }
+
   public String getPattern() {
     return pattern;
   }
@@ -482,7 +504,7 @@ public abstract class AbstractFilterStringColLikeStringScalar extends VectorExpr
 
   @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, colNum) + ", pattern " + pattern;
+    return "col " + colNum + ", pattern " + pattern;
   }
 
   @Override

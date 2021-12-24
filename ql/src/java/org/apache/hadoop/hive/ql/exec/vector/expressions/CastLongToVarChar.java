@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,8 +28,8 @@ public class CastLongToVarChar extends CastLongToString implements TruncStringOu
     super();
   }
 
-  public CastLongToVarChar(int inputColumn, int outputColumnNum) {
-    super(inputColumn, outputColumnNum);
+  public CastLongToVarChar(int inputColumn, int outputColumn) {
+    super(inputColumn, outputColumn);
   }
 
   @Override
@@ -38,6 +38,11 @@ public class CastLongToVarChar extends CastLongToString implements TruncStringOu
   }
 
   @Override
+  public String getOutputType() {
+    return "VarChar";
+  }
+  
+    @Override
   public int getMaxLength() {
     return maxLength;
   }
@@ -49,6 +54,6 @@ public class CastLongToVarChar extends CastLongToString implements TruncStringOu
 
   @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", maxLength " + maxLength;
+    return "col " + inputColumn + ", maxLength " + maxLength;
   }
 }

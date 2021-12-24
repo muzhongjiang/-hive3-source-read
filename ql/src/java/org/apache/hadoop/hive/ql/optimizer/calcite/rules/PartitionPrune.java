@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -112,7 +112,7 @@ public class PartitionPrune {
         hiveUDF = SqlFunctionConverter.getHiveUDF(call.getOperator(),
             call.getType(), call.operands.size());
         if (hiveUDF != null &&
-            !FunctionRegistry.isConsistentWithinQuery(hiveUDF)) {
+            !FunctionRegistry.isDeterministic(hiveUDF)) {
           return null;
         }
       } finally {
@@ -120,7 +120,9 @@ public class PartitionPrune {
           try {
             hiveUDF.close();
           } catch (IOException  e) {
-            LOG.debug("Exception in closing {}", hiveUDF, e);
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Exception in closing " + hiveUDF, e);
+            }
           }
         }
       }

@@ -18,6 +18,7 @@
  */
 package org.apache.hive.ptest.execution;
 
+import org.approvaltests.Approvals;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,10 +27,6 @@ import java.io.File;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.Set;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public class TestTestCheckPhase extends AbstractTestPhase {
   private TestCheckPhase phase;
@@ -45,7 +42,7 @@ public class TestTestCheckPhase extends AbstractTestPhase {
     File patchFile = new File(url.getFile());
     Set<String> addedTests = new HashSet<String>();
     phase = new TestCheckPhase(hostExecutors, localCommandFactory,
-      templateDefaults, url.toString(), patchFile, logger, addedTests);
+      templateDefaults, patchFile, logger, addedTests);
     phase.execute();
 
     Assert.assertEquals(addedTests.size(), 0);
@@ -58,7 +55,7 @@ public class TestTestCheckPhase extends AbstractTestPhase {
     File patchFile = new File(url.getFile());
     Set<String> addedTests = new HashSet<String>();
     phase = new TestCheckPhase(hostExecutors, localCommandFactory,
-      templateDefaults, url.toString(), patchFile, logger, addedTests);
+      templateDefaults, patchFile, logger, addedTests);
     phase.execute();
 
     Assert.assertEquals(addedTests.size(), 3);
@@ -73,7 +70,7 @@ public class TestTestCheckPhase extends AbstractTestPhase {
     File patchFile = new File(url.getFile());
     Set<String> addedTests = new HashSet<String>();
     phase = new TestCheckPhase(hostExecutors, localCommandFactory,
-      templateDefaults, url.toString(), patchFile, logger, addedTests);
+      templateDefaults, patchFile, logger, addedTests);
     phase.execute();
 
     Assert.assertEquals(addedTests.size(), 1);
@@ -86,32 +83,9 @@ public class TestTestCheckPhase extends AbstractTestPhase {
     File patchFile = new File(url.getFile());
     Set<String> addedTests = new HashSet<String>();
     phase = new TestCheckPhase(hostExecutors, localCommandFactory,
-      templateDefaults, url.toString(), patchFile, logger, addedTests);
+      templateDefaults, patchFile, logger, addedTests);
     phase.execute();
 
     Assert.assertEquals(addedTests.size(), 0);
-  }
-
-  @Test
-  public void testSamePatchMultipleTimes() throws Exception {
-    int executions = 0;
-    try {
-      URL url = this.getClass().getResource("/HIVE-19077.1.patch");
-      File patchFile = new File(url.getFile());
-      Set<String> addedTests = new HashSet<String>();
-      phase = new TestCheckPhase(hostExecutors, localCommandFactory,
-              templateDefaults, url.toString(), patchFile, logger, addedTests);
-      phase.execute();
-      executions++;
-      phase = new TestCheckPhase(hostExecutors, localCommandFactory,
-              templateDefaults, url.toString(), patchFile, logger, addedTests);
-      phase.execute();
-      executions++;
-      fail("Should've thrown exception");
-    } catch (Exception ex) {
-      assertTrue(ex.getMessage().contains("HIVE-19077.1.patch was found in seen patch url's cache " +
-              "and a test was probably run already on it. Aborting..."));
-    }
-    assertEquals(1, executions);
   }
 }

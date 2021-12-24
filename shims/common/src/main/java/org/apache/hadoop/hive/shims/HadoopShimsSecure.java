@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,7 +30,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang.ArrayUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -125,7 +125,9 @@ public abstract class HadoopShimsSecure implements HadoopShims {
     protected CombineFileSplit split;
     protected JobConf jc;
     protected Reporter reporter;
+    protected Class<RecordReader<K, V>> rrClass;
     protected Constructor<RecordReader<K, V>> rrConstructor;
+    protected FileSystem fs;
 
     protected int idx;
     protected long progress;
@@ -191,6 +193,7 @@ public abstract class HadoopShimsSecure implements HadoopShims {
         throws IOException {
       this.split = split;
       this.jc = job;
+      this.rrClass = rrClass;
       this.reporter = reporter;
       this.idx = 0;
       this.curReader = null;

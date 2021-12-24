@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -36,12 +36,12 @@ import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.SparkHashTableSinkOperator;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.parse.spark.GenSparkProcContext;
@@ -55,17 +55,16 @@ import org.apache.hadoop.hive.ql.plan.SparkEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.SparkHashTableSinkDesc;
 import org.apache.hadoop.hive.ql.plan.SparkWork;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
-import org.apache.hadoop.hive.ql.util.NullOrdering;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 
-public class SparkReduceSinkMapJoinProc implements SemanticNodeProcessor {
+public class SparkReduceSinkMapJoinProc implements NodeProcessor {
 
   public static final Logger LOG = LoggerFactory.getLogger(SparkReduceSinkMapJoinProc.class.getName());
 
-  public static class SparkMapJoinFollowedByGroupByProcessor implements SemanticNodeProcessor {
+  public static class SparkMapJoinFollowedByGroupByProcessor implements NodeProcessor {
     private boolean hasGroupBy = false;
 
     @Override
@@ -88,11 +87,11 @@ public class SparkReduceSinkMapJoinProc implements SemanticNodeProcessor {
   private boolean hasGroupBy(Operator<? extends OperatorDesc> mapjoinOp,
                              GenSparkProcContext context) throws SemanticException {
     List<Operator<? extends OperatorDesc>> childOps = mapjoinOp.getChildOperators();
-    Map<SemanticRule, SemanticNodeProcessor> rules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> rules = new LinkedHashMap<Rule, NodeProcessor>();
     SparkMapJoinFollowedByGroupByProcessor processor = new SparkMapJoinFollowedByGroupByProcessor();
     rules.put(new RuleRegExp("GBY", GroupByOperator.getOperatorName() + "%"), processor);
-    SemanticDispatcher disp = new DefaultRuleDispatcher(null, rules, context);
-    SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+    Dispatcher disp = new DefaultRuleDispatcher(null, rules, context);
+    GraphWalker ogw = new DefaultGraphWalker(disp);
     ArrayList<Node> topNodes = new ArrayList<Node>();
     topNodes.addAll(childOps);
     ogw.startWalking(topNodes, null);
@@ -213,7 +212,7 @@ public class SparkReduceSinkMapJoinProc implements SemanticNodeProcessor {
     StringBuilder keyNullOrder = new StringBuilder();
     for (int i = 0; i < keyCols.size(); i++) {
       keyOrder.append("+");
-      keyNullOrder.append(NullOrdering.defaultNullOrder(context.conf));
+      keyNullOrder.append("a");
     }
     TableDesc keyTableDesc = PlanUtils.getReduceKeyTableDesc(PlanUtils
         .getFieldSchemasFromColumnList(keyCols, "mapjoinkey"), keyOrder.toString(),

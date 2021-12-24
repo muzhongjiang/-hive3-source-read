@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -58,7 +58,7 @@ public class DefaultFetchFormatter<T> implements FetchFormatter<String> {
       serdeProps.put(SERIALIZATION_FORMAT, props.getProperty(SERIALIZATION_FORMAT));
       serdeProps.put(SERIALIZATION_NULL_FORMAT, props.getProperty(SERIALIZATION_NULL_FORMAT));
     }
-    serde.initialize(conf, serdeProps, null);
+    SerDeUtils.initializeSerDe(serde, conf, serdeProps, null);
     return serde;
   }
 

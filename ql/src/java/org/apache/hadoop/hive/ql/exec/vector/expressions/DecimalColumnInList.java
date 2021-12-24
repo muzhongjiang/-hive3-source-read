@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,13 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor.Descriptor;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 
 import java.util.Arrays;
@@ -35,7 +33,9 @@ import java.util.HashSet;
  */
 public class DecimalColumnInList extends VectorExpression implements IDecimalInExpr {
   private static final long serialVersionUID = 1L;
+  private int inputCol;
   private HiveDecimal[] inListValues;
+  private int outputColumn;
 
   // The set object containing the IN list.
   // We use a HashSet of HiveDecimalWritable objects instead of HiveDecimal objects so
@@ -45,39 +45,39 @@ public class DecimalColumnInList extends VectorExpression implements IDecimalInE
 
   public DecimalColumnInList() {
     super();
+    inSet = null;
   }
 
   /**
    * After construction you must call setInListValues() to add the values to the IN set.
    */
-  public DecimalColumnInList(int colNum, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  public DecimalColumnInList(int colNum, int outputColumn) {
+    this.inputCol = colNum;
+    this.outputColumn = outputColumn;
+    inSet = null;
   }
 
   @Override
-  public void transientInit(Configuration conf) throws HiveException {
-    super.transientInit(conf);
-
-    inSet = new HashSet<HiveDecimalWritable>(inListValues.length);
-    for (HiveDecimal val : inListValues) {
-      inSet.add(new HiveDecimalWritable(val));
-    }
-  }
-
-  @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    DecimalColumnVector inputColumnVector = (DecimalColumnVector) batch.cols[inputColumnNum[0]];
-    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumnNum];
+    if (inSet == null) {
+      inSet = new HashSet<HiveDecimalWritable>(inListValues.length);
+      for (HiveDecimal val : inListValues) {
+        inSet.add(new HiveDecimalWritable(val));
+      }
+    }
+
+    DecimalColumnVector inputColVector = (DecimalColumnVector) batch.cols[inputCol];
+    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
-    boolean[] inputIsNull = inputColumnVector.isNull;
-    boolean[] outputIsNull = outputColVector.isNull;
+    boolean[] nullPos = inputColVector.isNull;
+    boolean[] outNulls = outputColVector.isNull;
     int n = batch.size;
-    HiveDecimalWritable[] vector = inputColumnVector.vector;
+    HiveDecimalWritable[] vector = inputColVector.vector;
     long[] outputVector = outputColVector.vector;
 
     // return immediately if batch is empty
@@ -85,73 +85,65 @@ public class DecimalColumnInList extends VectorExpression implements IDecimalInE
       return;
     }
 
-    // We do not need to do a column reset since we are carefully changing the output.
     outputColVector.isRepeating = false;
+    outputColVector.noNulls = inputColVector.noNulls;
+    if (inputColVector.noNulls) {
+      if (inputColVector.isRepeating) {
 
-    if (inputColumnVector.isRepeating) {
-      if (inputColumnVector.noNulls || !inputIsNull[0]) {
-        outputIsNull[0] = false;
+        // All must be selected otherwise size would be zero
+        // Repeating property will not change.
         outputVector[0] = inSet.contains(vector[0]) ? 1 : 0;
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-      }
-      outputColVector.isRepeating = true;
-      return;
-    }
-
-    if (inputColumnVector.noNulls) {
-      if (batch.selectedInUse) {
-
-        // CONSIDER: For large n, fill n or all of isNull array and use the tighter ELSE loop.
-
-        if (!outputColVector.noNulls) {
-          for(int j = 0; j != n; j++) {
-           final int i = sel[j];
-           // Set isNull before call in case it changes it mind.
-           outputIsNull[i] = false;
-           outputVector[i] = inSet.contains(vector[i]) ? 1 : 0;
-         }
-        } else {
-          for(int j = 0; j != n; j++) {
-            final int i = sel[j];
-            outputVector[i] = inSet.contains(vector[i]) ? 1 : 0;
-          }
+        outputColVector.isRepeating = true;
+      } else if (batch.selectedInUse) {
+        for(int j = 0; j != n; j++) {
+          int i = sel[j];
+          outputVector[i] = inSet.contains(vector[i]) ? 1 : 0;
         }
       } else {
-        if (!outputColVector.noNulls) {
-
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
-        }
         for(int i = 0; i != n; i++) {
           outputVector[i] = inSet.contains(vector[i]) ? 1 : 0;
         }
       }
-    } else /* there are NULLs in the inputColVector */ {
+    } else {
+      if (inputColVector.isRepeating) {
 
-      // Carefully handle NULLs...
-      outputColVector.noNulls = false;
-
-      if (batch.selectedInUse) {
+        //All must be selected otherwise size would be zero
+        //Repeating property will not change.
+        if (!nullPos[0]) {
+          outputVector[0] = inSet.contains(vector[0]) ? 1 : 0;
+          outNulls[0] = false;
+        } else {
+          outNulls[0] = true;
+        }
+        outputColVector.isRepeating = true;
+      } else if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
-          outputIsNull[i] = inputIsNull[i];
-          if (!inputIsNull[i]) {
+          outNulls[i] = nullPos[i];
+          if (!nullPos[i]) {
             outputVector[i] = inSet.contains(vector[i]) ? 1 : 0;
           }
         }
       } else {
-        System.arraycopy(inputIsNull, 0, outputIsNull, 0, n);
+        System.arraycopy(nullPos, 0, outNulls, 0, n);
         for(int i = 0; i != n; i++) {
-          if (!inputIsNull[i]) {
+          if (!nullPos[i]) {
             outputVector[i] = inSet.contains(vector[i]) ? 1 : 0;
           }
         }
       }
     }
+  }
+
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
+  @Override
+  public int getOutputColumn() {
+    return outputColumn;
   }
 
   @Override
@@ -167,7 +159,7 @@ public class DecimalColumnInList extends VectorExpression implements IDecimalInE
 
   @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", values " + Arrays.toString(inListValues);
+    return "col " + inputCol + ", values " + Arrays.toString(inListValues);
   }
 
 }

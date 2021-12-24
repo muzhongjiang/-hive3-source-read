@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
@@ -35,8 +37,6 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorMapOperator;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MapredLocalWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
-import org.apache.hadoop.hive.ql.plan.PartitionDesc;
-import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -44,8 +44,6 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * ExecMapper is the generic Map class for Hive. Together with ExecReducer it is
@@ -83,10 +81,6 @@ public class ExecMapper extends MapReduceBase implements Mapper {
 
       // create map and fetch operators
       MapWork mrwork = Utilities.getMapWork(job);
-      for (PartitionDesc part : mrwork.getAliasToPartnInfo().values()) {
-        TableDesc tableDesc = part.getTableDesc();
-        Utilities.copyJobSecretToTableProperties(tableDesc);
-      }
 
       CompilationOpContext runtimeCtx = new CompilationOpContext();
       if (mrwork.getVectorMode()) {
@@ -135,7 +129,13 @@ public class ExecMapper extends MapReduceBase implements Mapper {
   @Override
   public void map(Object key, Object value, OutputCollector output,
       Reporter reporter) throws IOException {
-    ensureOutputInitialize(output, reporter);
+    if (oc == null) {
+      oc = output;
+      rp = reporter;
+      OperatorUtils.setChildrenCollector(mo.getChildOperators(), output);
+      mo.setReporter(rp);
+      MapredContext.get().setReporter(reporter);
+    }
     // reset the execContext for each new row
     execContext.resetRow();
 
@@ -156,16 +156,6 @@ public class ExecMapper extends MapReduceBase implements Mapper {
         l4j.error(StringUtils.stringifyException(e));
         throw new RuntimeException(e);
       }
-    }
-  }
-
-  public void ensureOutputInitialize(OutputCollector output, Reporter reporter) {
-    if (oc == null) {
-      oc = output;
-      rp = reporter;
-      OperatorUtils.setChildrenCollector(mo.getChildOperators(), output);
-      mo.setReporter(rp);
-      MapredContext.get().setReporter(reporter);
     }
   }
 

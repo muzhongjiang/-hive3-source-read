@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,15 +18,12 @@
 
 package org.apache.hadoop.hive.ql.security.authorization;
 
-import java.util.Collection;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.HiveMetaStore;
-import org.apache.hadoop.hive.metastore.IHMSHandler;
+import org.apache.hadoop.hive.metastore.HiveMetaStore.HMSHandler;
 import org.apache.hadoop.hive.metastore.api.Database;
-import org.apache.hadoop.hive.ql.hooks.ReadEntity;
-import org.apache.hadoop.hive.ql.hooks.WriteEntity;
 import org.apache.hadoop.hive.ql.metadata.AuthorizationException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
@@ -48,8 +45,7 @@ public class MetaStoreAuthzAPIAuthorizerEmbedOnly extends HiveAuthorizationProvi
   }
 
   @Override
-  public void authorizeDbLevelOperations(Privilege[] readRequiredPriv, Privilege[] writeRequiredPriv,
-      Collection<ReadEntity> inputs, Collection<WriteEntity> outputs)
+  public void authorize(Privilege[] readRequiredPriv, Privilege[] writeRequiredPriv)
       throws HiveException, AuthorizationException {
     // not authorized by this implementation, ie operation is allowed by it
   }
@@ -80,7 +76,7 @@ public class MetaStoreAuthzAPIAuthorizerEmbedOnly extends HiveAuthorizationProvi
   }
 
   @Override
-  public void setMetaStoreHandler(IHMSHandler handler) {
+  public void setMetaStoreHandler(HMSHandler handler) {
     // no-op - HMSHander not needed by this impl
   }
 

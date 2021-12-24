@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -86,20 +86,16 @@ public class GenericUDFNullif extends GenericUDF {
   public Object evaluate(DeferredObject[] arguments) throws HiveException {
     Object arg0 = arguments[0].get();
     Object arg1 = arguments[1].get();
-    Object value0 = null;
-    if (arg0 != null) {
-      value0 = returnOIResolver.convertIfNecessary(arg0, argumentOIs[0], false);
-    }
     if (arg0 == null || arg1 == null) {
-      return value0;
+      return arg0;
     }
     PrimitiveObjectInspector compareOI = (PrimitiveObjectInspector) returnOIResolver.get();
     if (PrimitiveObjectInspectorUtils.comparePrimitiveObjects(
-        value0, compareOI,
+        arg0, compareOI,
         returnOIResolver.convertIfNecessary(arg1, argumentOIs[1], false), compareOI)) {
       return null;
     }
-    return value0;
+    return arg0;
   }
 
   @Override

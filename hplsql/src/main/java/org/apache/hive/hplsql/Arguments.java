@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,15 +37,9 @@ public class Arguments {
   String fileName;  
   String main;
   Map<String, String> vars = new HashMap<String, String>();
-
-  public static Arguments script(String str) {
-    Arguments arguments = new Arguments();
-    arguments.parse(new String[]{"-e", str});
-    return arguments;
-  }
-
+  
   @SuppressWarnings("static-access")
-  public Arguments() {
+  Arguments() {
     // -e 'query'
     options.addOption(OptionBuilder
         .hasArg()

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,8 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.HashTableDummyDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
-import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.hive.serde2.Deserializer;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 
 public class HashTableDummyOperator extends Operator<HashTableDummyDesc> implements Serializable {
   private static final long serialVersionUID = 1L;
@@ -44,11 +45,12 @@ public class HashTableDummyOperator extends Operator<HashTableDummyDesc> impleme
     super.initializeOp(hconf);
     TableDesc tbl = this.getConf().getTbl();
     try {
-      AbstractSerDe serDe = tbl.getSerDeClass().newInstance();
-      serDe.initialize(hconf, tbl.getProperties(), null);
-      this.outputObjInspector = serDe.getObjectInspector();
+      Deserializer serde = tbl.getDeserializerClass().newInstance();
+      SerDeUtils.initializeSerDe(serde, hconf, tbl.getProperties(), null);
+      this.outputObjInspector = serde.getObjectInspector();
     } catch (Exception e) {
       LOG.error("Generating output obj inspector from dummy object error", e);
+      e.printStackTrace();
     }
   }
 
@@ -77,9 +79,10 @@ public class HashTableDummyOperator extends Operator<HashTableDummyDesc> impleme
 
   @Override
   public boolean equals(Object obj) {
-    return super.equals(obj) || (obj instanceof HashTableDummyOperator) && ((HashTableDummyOperator)obj).operatorId.equals(operatorId);
+    return super.equals(obj) || (obj instanceof HashTableDummyOperator)
+        && (((HashTableDummyOperator)obj).operatorId == operatorId);
   }
-
+  
   @Override
   public int hashCode() {
     return operatorId.hashCode();

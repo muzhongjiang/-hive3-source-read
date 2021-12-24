@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,20 +17,16 @@
  */
 package org.apache.hadoop.hive.conf;
 
-import com.google.common.collect.Lists;
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+import org.apache.hadoop.util.Shell;
 import org.apache.hive.common.util.HiveTestUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.File;
 import java.io.UnsupportedEncodingException;
-import java.net.URL;
 import java.net.URLEncoder;
-import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
 
@@ -85,10 +81,6 @@ public class TestHiveConf {
     checkConfVar(ConfVars.HIVETESTMODEDUMMYSTATAGGR, "");
     checkHiveConf(ConfVars.HIVETESTMODEDUMMYSTATAGGR.varname, "value2");
 
-    //Property defined for hive masking algorithm
-    checkConfVar(ConfVars.HIVE_MASKING_ALGO, "sha256");
-    checkHiveConf(ConfVars.HIVE_MASKING_ALGO.varname, "sha256");
-
     // Property defined in hive-site.xml only
     checkHadoopConf("test.property1", null);
     checkHiveConf("test.property1", "value1");
@@ -119,60 +111,33 @@ public class TestHiveConf {
     Assert.assertEquals(TimeUnit.MILLISECONDS, HiveConf.unitFor("ms", null));
     Assert.assertEquals(TimeUnit.MILLISECONDS, HiveConf.unitFor("msecs", null));
     Assert.assertEquals(TimeUnit.MICROSECONDS, HiveConf.unitFor("us", null));
-    Assert.assertEquals(TimeUnit.MICROSECONDS, HiveConf.unitFor("usecs", null));
+    Assert.assertEquals(TimeUnit.MICROSECONDS, HiveConf.unitFor("useconds", null));
     Assert.assertEquals(TimeUnit.NANOSECONDS, HiveConf.unitFor("ns", null));
     Assert.assertEquals(TimeUnit.NANOSECONDS, HiveConf.unitFor("nsecs", null));
   }
 
   @Test
-  public void testToSizeBytes() throws Exception {
-    Assert.assertEquals(1L, HiveConf.toSizeBytes("1b"));
-    Assert.assertEquals(1L, HiveConf.toSizeBytes("1bytes"));
-    Assert.assertEquals(1024L, HiveConf.toSizeBytes("1kb"));
-    Assert.assertEquals(1048576L, HiveConf.toSizeBytes("1mb"));
-    Assert.assertEquals(1073741824L, HiveConf.toSizeBytes("1gb"));
-    Assert.assertEquals(1099511627776L, HiveConf.toSizeBytes("1tb"));
-    Assert.assertEquals(1125899906842624L, HiveConf.toSizeBytes("1pb"));
-  }
-
-  @Test
   public void testHiddenConfig() throws Exception {
     HiveConf conf = new HiveConf();
-
-    // check that a change to the hidden list should fail
+    // check password configs are hidden
+    Assert.assertTrue(conf.isHiddenConfig(HiveConf.ConfVars.METASTOREPWD.varname));
+    Assert.assertTrue(conf.isHiddenConfig(
+        HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname));
+    // check change hidden list should fail
     try {
       final String name = HiveConf.ConfVars.HIVE_CONF_HIDDEN_LIST.varname;
       conf.verifyAndSet(name, "");
-      conf.verifyAndSet(name + "postfix", "");
       Assert.fail("Setting config property " + name + " should fail");
     } catch (IllegalArgumentException e) {
       // the verifyAndSet in this case is expected to fail with the IllegalArgumentException
     }
-
-    ArrayList<String> hiddenList = Lists.newArrayList(
-        HiveConf.ConfVars.METASTOREPWD.varname,
-        HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname,
-        "fs.s3.awsSecretAccessKey",
-        "fs.s3n.awsSecretAccessKey",
-        "dfs.adls.oauth2.credential",
-        "fs.adl.oauth2.credential",
-        "fs.azure.account.oauth2.client.secret"
-    );
-
-    for (String hiddenConfig : hiddenList) {
-      // check configs are hidden
-      Assert.assertTrue("config " + hiddenConfig + " should be hidden",
-          conf.isHiddenConfig(hiddenConfig));
-      // check stripHiddenConfigurations removes the property
-      Configuration conf2 = new Configuration(conf);
-      conf2.set(hiddenConfig, "password");
-      conf.stripHiddenConfigurations(conf2);
-      // check that a property that begins the same is also hidden
-      Assert.assertTrue(conf.isHiddenConfig(
-          hiddenConfig + "postfix"));
-      // Check the stripped property is the empty string
-      Assert.assertEquals("", conf2.get(hiddenConfig));
-    }
+    // check stripHiddenConfigurations
+    Configuration conf2 = new Configuration(conf);
+    conf2.set(HiveConf.ConfVars.METASTOREPWD.varname, "password");
+    conf2.set(HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname, "password");
+    conf.stripHiddenConfigurations(conf2);
+    Assert.assertEquals("", conf2.get(HiveConf.ConfVars.METASTOREPWD.varname));
+    Assert.assertEquals("", conf2.get(HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname));
   }
 
   @Test
@@ -195,58 +160,5 @@ public class TestHiveConf {
     conf.setQueryString(query);
     Assert.assertEquals(URLEncoder.encode(query, "UTF-8"), conf.get(ConfVars.HIVEQUERYSTRING.varname));
     Assert.assertEquals(query, conf.getQueryString());
-  }
-
-  @Test
-  public void testAdditionalConfigFiles() throws Exception{
-    URL url = ClassLoader.getSystemResource("hive-site.xml");
-    File fileHiveSite = new File(url.getPath());
-
-    String parFolder = fileHiveSite.getParent();
-    //back up hive-site.xml
-    String bakHiveSiteFileName = parFolder + "/hive-site-bak.xml";
-    File fileBakHiveSite = new File(bakHiveSiteFileName);
-    FileUtils.copyFile(fileHiveSite, fileBakHiveSite);
-
-    String content = FileUtils.readFileToString(fileHiveSite);
-    content = content.substring(0, content.lastIndexOf("</configuration>"));
-
-    String testHiveSiteString = content + "<property>\n" +
-            " <name>HIVE_SERVER2_PLAIN_LDAP_DOMAIN</name>\n" +
-            " <value>a.com</value>\n" +
-            "</property>\n" +
-            "\n" +
-            " <property>\n" +
-            "   <name>hive.additional.config.files</name>\n" +
-            "   <value>ldap-site.xml,other.xml</value>\n" +
-            "   <description>additional config dir for Hive to load</description>\n" +
-            " </property>\n" +
-            "\n" +
-            "</configuration>";
-
-    FileUtils.writeStringToFile(fileHiveSite, testHiveSiteString);
-
-    String testLdapString = "<?xml version=\"1.0\"?>\n" +
-            "<?xml-stylesheet type=\"text/xsl\" href=\"configuration.xsl\"?>\n" +
-            "<configuration>\n" +
-            "  <property>\n" +
-            "  <name>hive.server2.authentication.ldap.Domain</name>\n" +
-            "  <value>b.com</value>\n" +
-            "</property>\n" +
-            "\n" +
-            "</configuration>";
-
-
-    String newFileName = parFolder+"/ldap-site.xml";
-    File f2 = new File(newFileName);
-    FileUtils.writeStringToFile(f2, testLdapString);
-
-    HiveConf conf = new HiveConf();
-    String val = conf.getVar(ConfVars.HIVE_SERVER2_PLAIN_LDAP_DOMAIN);
-    Assert.assertEquals("b.com", val);
-    //restore and clean up
-    FileUtils.copyFile(fileBakHiveSite, fileHiveSite);
-    f2.delete();
-    fileBakHiveSite.delete();
   }
 }

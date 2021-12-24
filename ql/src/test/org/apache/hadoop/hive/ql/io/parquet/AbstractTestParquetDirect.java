@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -167,7 +167,7 @@ public abstract class AbstractTestParquetDirect {
     Properties props = new Properties();
     props.setProperty(serdeConstants.LIST_COLUMNS, COMMA.join(columnNames));
     props.setProperty(serdeConstants.LIST_COLUMN_TYPES, COMMA.join(columnTypes));
-    serde.initialize(null, props, null);
+    serde.initialize(null, props);
     serde.deserialize(record);
   }
 }

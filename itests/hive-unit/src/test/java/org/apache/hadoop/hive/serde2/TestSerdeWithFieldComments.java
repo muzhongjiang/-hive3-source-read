@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,8 +17,8 @@
  */
 package org.apache.hadoop.hive.serde2;
 
-
-import org.apache.hadoop.hive.metastore.HiveMetaStoreUtils;
+import junit.framework.TestCase;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -30,13 +30,8 @@ import java.util.List;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
-/**
- * TestSerdeWithFieldComments.
- */
-public class TestSerdeWithFieldComments {
+public class TestSerdeWithFieldComments extends TestCase {
 
   private StructField mockedStructField(String name, String oiTypeName,
                                         String comment) {
@@ -52,7 +47,6 @@ public class TestSerdeWithFieldComments {
     return m;
   }
 
-  @Test
   public void testFieldComments() throws MetaException, SerDeException {
     StructObjectInspector mockSOI = mock(StructObjectInspector.class);
     when(mockSOI.getCategory()).thenReturn(ObjectInspector.Category.STRUCT);
@@ -67,7 +61,7 @@ public class TestSerdeWithFieldComments {
     Deserializer mockDe = mock(Deserializer.class);
     when(mockDe.getObjectInspector()).thenReturn(mockSOI);
     List<FieldSchema> result =
-        HiveMetaStoreUtils.getFieldsFromDeserializer("testTable", mockDe);
+        MetaStoreUtils.getFieldsFromDeserializer("testTable", mockDe);
 
     assertEquals(2, result.size());
     assertEquals("first", result.get(0).getName());

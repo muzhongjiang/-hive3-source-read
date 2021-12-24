@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,17 +27,14 @@ import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
-import org.apache.hadoop.hive.ql.exec.vector.Decimal64ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ListColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
@@ -47,15 +44,14 @@ import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.UnionColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
-import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
 import org.apache.hadoop.hive.serde2.io.ByteWritable;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.ListTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
@@ -91,8 +87,6 @@ public abstract class BatchToRowReader<StructType, UnionType>
   private final boolean[] included;
   private int rowInBatch = 0;
 
-  protected List<VirtualColumnHandler> virtualColumnHandlers;
-
   public BatchToRowReader(RecordReader<NullWritable, VectorizedRowBatch> vrbReader,
       VectorizedRowBatchCtx vrbCtx, List<Integer> includedCols) {
     this.vrbReader = vrbReader;
@@ -108,43 +102,15 @@ public abstract class BatchToRowReader<StructType, UnionType>
     } else {
       Arrays.fill(included, true);
     }
-
-    virtualColumnHandlers = requestedVirtualColumns();
-    for (VirtualColumnHandler handler : virtualColumnHandlers) {
-      int idx = vrbCtx.findVirtualColumnNum(handler.virtualColumn);
-      if (idx >= 0) {
-        included[idx] = true;
-        handler.indexInSchema = idx;
-      }
-    }
-
     if (LOG.isDebugEnabled()) {
       LOG.debug("Including the columns " + DebugUtils.toString(included));
     }
     this.included = included;
   }
 
-  /**
-   * Wrapper class to map a virtual column to a handler defined by subclasses of {@link BatchToRowReader}.
-   * The handler should be a set operation which sets the value of the virtual column value
-   * in the current row.
-   */
-  public static class VirtualColumnHandler {
-    private final VirtualColumn virtualColumn;
-    private final Consumer<Object> handler;
-    private int indexInSchema = -1;
-
-    public VirtualColumnHandler(VirtualColumn virtualColumn, Consumer<Object> handler) {
-      this.virtualColumn = virtualColumn;
-      this.handler = handler;
-    }
-  }
-
-  protected abstract List<VirtualColumnHandler> requestedVirtualColumns();
   protected abstract StructType createStructObject(Object previous, List<TypeInfo> childrenTypes);
   protected abstract void setStructCol(StructType structObj, int i, Object value);
   protected abstract Object getStructCol(StructType structObj, int i);
-  protected abstract int getStructLength(StructType structObj);
   protected abstract UnionType createUnionObject(List<TypeInfo> childrenTypes, Object previous);
   protected abstract void setUnion(UnionType unionObj, byte tag, Object object);
   protected abstract Object getUnionField(UnionType unionObj);
@@ -170,45 +136,25 @@ public abstract class BatchToRowReader<StructType, UnionType>
   }
 
   @Override
-  @SuppressWarnings("unchecked")
   public boolean next(NullWritable key, Object previous) throws IOException {
     if (!ensureBatch()) {
       return false;
     }
-
-    virtualColumnHandlers.forEach(handler -> handler.handler.accept(null));
-
-    StructType value = (StructType) previous;
+    @SuppressWarnings("unchecked")
+    StructType value = (StructType)previous;
     for (int i = 0; i < schema.size(); ++i) {
-      if (!included[i] || i >= getStructLength(value)) continue;
+      if (!included[i]) continue; // TODO: shortcut for last col below length?
       try {
         setStructCol(value, i,
             nextValue(batch.cols[i], rowInBatch, schema.get(i), getStructCol(value, i)));
       } catch (Throwable t) {
-        throwIOException(i, t);
+        LOG.error("Error at row " + rowInBatch + "/" + batch.size + ", column " + i
+            + "/" + schema.size() + " " + batch.cols[i], t);
+        throw (t instanceof IOException) ? (IOException)t : new IOException(t);
       }
     }
-
-    for (VirtualColumnHandler handler : virtualColumnHandlers) {
-      if (handler.indexInSchema < 0 || !included[handler.indexInSchema] ||
-              handler.indexInSchema >= getStructLength(value)) {
-        continue;
-      }
-      try {
-        handler.handler.accept(getStructCol(value, handler.indexInSchema));
-      } catch (Throwable t) {
-        throwIOException(handler.indexInSchema, t);
-      }
-    }
-
     ++rowInBatch;
     return true;
-  }
-
-  private void throwIOException(int i, Throwable t) throws IOException {
-    LOG.error("Error at row " + rowInBatch + "/" + batch.size + ", column " + i
-        + "/" + schema.size() + " " + batch.cols[i], t);
-    throw (t instanceof IOException) ? (IOException) t : new IOException(t);
   }
 
   /**
@@ -469,30 +415,25 @@ public abstract class BatchToRowReader<StructType, UnionType>
       } else {
         result = (HiveDecimalWritable) previous;
       }
-      if (vector instanceof Decimal64ColumnVector) {
-        long value = ((Decimal64ColumnVector) vector).vector[row];
-        result.deserialize64(value, ((Decimal64ColumnVector) vector).scale);
-      } else {
-        result.set(((DecimalColumnVector) vector).vector[row]);
-      }
+      result.set(((DecimalColumnVector) vector).vector[row]);
       return result;
     } else {
       return null;
     }
   }
 
-  public static DateWritableV2 nextDate(ColumnVector vector,
-                                        int row,
-                                        Object previous) {
+  public static DateWritable nextDate(ColumnVector vector,
+                               int row,
+                               Object previous) {
     if (vector.isRepeating) {
       row = 0;
     }
     if (vector.noNulls || !vector.isNull[row]) {
-      DateWritableV2 result;
-      if (previous == null || previous.getClass() != DateWritableV2.class) {
-        result = new DateWritableV2();
+      DateWritable result;
+      if (previous == null || previous.getClass() != DateWritable.class) {
+        result = new DateWritable();
       } else {
-        result = (DateWritableV2) previous;
+        result = (DateWritable) previous;
       }
       int date = (int) ((LongColumnVector) vector).vector[row];
       result.set(date);
@@ -502,18 +443,18 @@ public abstract class BatchToRowReader<StructType, UnionType>
     }
   }
 
-  public static TimestampWritableV2 nextTimestamp(ColumnVector vector,
-                                                  int row,
-                                                  Object previous) {
+  public static TimestampWritable nextTimestamp(ColumnVector vector,
+                                         int row,
+                                         Object previous) {
     if (vector.isRepeating) {
       row = 0;
     }
     if (vector.noNulls || !vector.isNull[row]) {
-      TimestampWritableV2 result;
-      if (previous == null || previous.getClass() != TimestampWritableV2.class) {
-        result = new TimestampWritableV2();
+      TimestampWritable result;
+      if (previous == null || previous.getClass() != TimestampWritable.class) {
+        result = new TimestampWritable();
       } else {
-        result = (TimestampWritableV2) previous;
+        result = (TimestampWritable) previous;
       }
       TimestampColumnVector tcv = (TimestampColumnVector) vector;
       result.setInternal(tcv.time[row], tcv.nanos[row]);
@@ -600,7 +541,7 @@ public abstract class BatchToRowReader<StructType, UnionType>
     }
   }
 
-  private Map<Object,Object> nextMap(
+  private HashMap<Object,Object> nextMap(
       ColumnVector vector, int row, MapTypeInfo schema, Object previous) {
     if (vector.isRepeating) {
       row = 0;
@@ -611,11 +552,11 @@ public abstract class BatchToRowReader<StructType, UnionType>
       int offset = (int) map.offsets[row];
       TypeInfo keyType = schema.getMapKeyTypeInfo();
       TypeInfo valueType = schema.getMapValueTypeInfo();
-      LinkedHashMap<Object,Object> result;
-      if (previous == null || previous.getClass() != LinkedHashMap.class) {
-        result = new LinkedHashMap<Object,Object>(length);
+      HashMap<Object,Object> result;
+      if (previous == null || previous.getClass() != HashMap.class) {
+        result = new HashMap<Object,Object>(length);
       } else {
-        result = (LinkedHashMap<Object,Object>) previous;
+        result = (HashMap<Object,Object>) previous;
         // I couldn't think of a good way to reuse the keys and value objects
         // without even more allocations, so take the easy and safe approach.
         result.clear();

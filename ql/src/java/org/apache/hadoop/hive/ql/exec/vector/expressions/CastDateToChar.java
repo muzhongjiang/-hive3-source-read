@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,6 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 
 public class CastDateToChar extends CastDateToString implements TruncStringOutput {
-
   private static final long serialVersionUID = 1L;
   private int maxLength; // Must be manually set with setMaxLength.
 
@@ -29,8 +28,8 @@ public class CastDateToChar extends CastDateToString implements TruncStringOutpu
     super();
   }
 
-  public CastDateToChar(int inputColumn, int outputColumnNum) {
-    super(inputColumn, outputColumnNum);
+  public CastDateToChar(int inputColumn, int outputColumn) {
+    super(inputColumn, outputColumn);
   }
 
   @Override
@@ -39,6 +38,11 @@ public class CastDateToChar extends CastDateToString implements TruncStringOutpu
   }
 
   @Override
+  public String getOutputType() {
+    return "Char";
+  }
+  
+    @Override
   public int getMaxLength() {
     return maxLength;
   }
@@ -49,6 +53,6 @@ public class CastDateToChar extends CastDateToString implements TruncStringOutpu
   }
 
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", maxLength " + maxLength;
+    return "col " + inputColumn + ", maxLength " + maxLength;
   }
 }

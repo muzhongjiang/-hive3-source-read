@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.udf.generic;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredJavaObject;
@@ -28,15 +28,9 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
-/**
- * TestGenericUDFSha2.
- */
-public class TestGenericUDFSha2 {
+public class TestGenericUDFSha2 extends TestCase {
 
-  @Test
   public void testSha0Str() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -55,7 +49,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyStr(null, lenWr, null, udf);
   }
 
-  @Test
   public void testSha0Bin() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableBinaryObjectInspector;
@@ -74,7 +67,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyBin(null, lenWr, null, udf);
   }
 
-  @Test
   public void testSha200Str() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -88,7 +80,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyStr("ABC", lenWr, null, udf);
   }
 
-  @Test
   public void testSha200Bin() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableBinaryObjectInspector;
@@ -102,7 +93,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyBin(new byte[] { 65, 66, 67 }, lenWr, null, udf);
   }
 
-  @Test
   public void testSha256Str() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -121,7 +111,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyStr(null, lenWr, null, udf);
   }
 
-  @Test
   public void testSha256Bin() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableBinaryObjectInspector;
@@ -140,7 +129,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyBin(null, lenWr, null, udf);
   }
 
-  @Test
   public void testSha384Str() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -165,7 +153,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyStr(null, lenWr, null, udf);
   }
 
-  @Test
   public void testSha384Bin() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableBinaryObjectInspector;
@@ -190,7 +177,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyBin(null, lenWr, null, udf);
   }
 
-  @Test
   public void testSha512Str() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -215,7 +201,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyStr(null, lenWr, null, udf);
   }
 
-  @Test
   public void testSha512Bin() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableBinaryObjectInspector;
@@ -240,7 +225,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyBin(null, lenWr, null, udf);
   }
 
-  @Test
   public void testShaNullStr() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -254,7 +238,6 @@ public class TestGenericUDFSha2 {
     runAndVerifyStr("ABC", lenWr, null, udf);
   }
 
-  @Test
   public void testShaNullBin() throws HiveException {
     GenericUDFSha2 udf = new GenericUDFSha2();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableBinaryObjectInspector;

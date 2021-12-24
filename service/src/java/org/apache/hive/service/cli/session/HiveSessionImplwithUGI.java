@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +19,6 @@
 package org.apache.hive.service.cli.session;
 
 import java.io.IOException;
-import java.util.List;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -27,6 +26,7 @@ import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.HiveSQLException;
@@ -50,9 +50,8 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
   private HiveSession proxySession = null;
 
   public HiveSessionImplwithUGI(SessionHandle sessionHandle, TProtocolVersion protocol, String username,
-    String password, HiveConf hiveConf, String ipAddress, String delegationToken,
-    final List<String> forwardedAddresses) throws HiveSQLException {
-    super(sessionHandle, protocol, username, password, hiveConf, ipAddress, forwardedAddresses);
+    String password, HiveConf hiveConf, String ipAddress, String delegationToken) throws HiveSQLException {
+    super(sessionHandle, protocol, username, password, hiveConf, ipAddress);
     setSessionUGI(username);
     setDelegationToken(delegationToken);
   }
@@ -114,7 +113,7 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
     if (hmsDelegationTokenStr != null) {
       getHiveConf().setVar(HiveConf.ConfVars.METASTORE_TOKEN_SIGNATURE, HS2TOKEN);
       try {
-        SessionUtils.setTokenStr(sessionUgi, hmsDelegationTokenStr, HS2TOKEN);
+        Utils.setTokenStr(sessionUgi, hmsDelegationTokenStr, HS2TOKEN);
       } catch (IOException e) {
         throw new HiveSQLException("Couldn't setup delegation token in the ugi: " + e, e);
       }
@@ -126,8 +125,6 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
     if (hmsDelegationTokenStr != null) {
       try {
         Hive.get(getHiveConf()).cancelDelegationToken(hmsDelegationTokenStr);
-        hmsDelegationTokenStr = null;
-        getHiveConf().setVar(HiveConf.ConfVars.METASTORE_TOKEN_SIGNATURE, "");
       } catch (HiveException e) {
         throw new HiveSQLException("Couldn't cancel delegation token", e);
       }

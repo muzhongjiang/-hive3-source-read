@@ -1,4 +1,4 @@
-/*
+/**
  *  Licensed to the Apache Software Foundation (ASF) under one
  *  or more contributor license agreements.  See the NOTICE file
  *  distributed with this work for additional information
@@ -21,6 +21,8 @@ package org.apache.hadoop.hive.ql.parse.spark;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
+import org.apache.hadoop.hive.ql.hooks.ReadEntity;
+import org.apache.hadoop.hive.ql.hooks.WriteEntity;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
 
@@ -39,12 +41,17 @@ public class OptimizeSparkProcContext implements NodeProcessorCtx {
 
   private final ParseContext parseContext;
   private final HiveConf conf;
+  private final Set<ReadEntity> inputs;
+  private final Set<WriteEntity> outputs;
   private final Set<ReduceSinkOperator> visitedReduceSinks = new HashSet<ReduceSinkOperator>();
   private final Map<MapJoinOperator, Long> mjOpSizes = new HashMap<MapJoinOperator, Long>();
 
-  public OptimizeSparkProcContext(HiveConf conf, ParseContext parseContext) {
+  public OptimizeSparkProcContext(HiveConf conf, ParseContext parseContext,
+    Set<ReadEntity> inputs, Set<WriteEntity> outputs) {
     this.conf = conf;
     this.parseContext = parseContext;
+    this.inputs = inputs;
+    this.outputs = outputs;
   }
 
   public ParseContext getParseContext() {
@@ -53,6 +60,14 @@ public class OptimizeSparkProcContext implements NodeProcessorCtx {
 
   public HiveConf getConf() {
     return conf;
+  }
+
+  public Set<ReadEntity> getInputs() {
+    return inputs;
+  }
+
+  public Set<WriteEntity> getOutputs() {
+    return outputs;
   }
 
   public Set<ReduceSinkOperator> getVisitedReduceSinks() {

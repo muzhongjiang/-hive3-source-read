@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,27 +26,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import junit.framework.TestCase;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.Driver;
-import org.apache.hadoop.hive.ql.exec.vector.VectorSelectOperator;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.io.IOContextMap;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.optimizer.ConvertJoinMapJoin;
-import org.apache.hadoop.hive.ql.optimizer.physical.LlapClusterStateForCompile;
-import org.apache.hadoop.hive.ql.parse.SemanticAnalyzer;
-import org.apache.hadoop.hive.ql.parse.type.ExprNodeTypeCheck;
-import org.apache.hadoop.hive.ql.plan.AggregationDesc;
+import org.apache.hadoop.hive.ql.parse.TypeCheckProcFactory;
 import org.apache.hadoop.hive.ql.plan.CollectDesc;
-import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
-import org.apache.hadoop.hive.ql.plan.GroupByDesc;
 import org.apache.hadoop.hive.ql.plan.MapredWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.PartitionDesc;
@@ -54,10 +45,8 @@ import org.apache.hadoop.hive.ql.plan.PlanUtils;
 import org.apache.hadoop.hive.ql.plan.ScriptDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
-import org.apache.hadoop.hive.ql.plan.VectorSelectDesc;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator;
 import org.apache.hadoop.hive.serde2.objectinspector.InspectableObject;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
@@ -65,33 +54,25 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.junit.Assert;
-import org.mockito.Mockito;
-import static org.mockito.Mockito.when;
-
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import org.junit.Before;
 import org.junit.Test;
 
 /**
  * TestOperators.
  *
  */
-public class TestOperators {
+public class TestOperators extends TestCase {
 
   // this is our row to test expressions on
   protected InspectableObject[] r;
 
-  @Before
-  public void setUp() {
+  @Override
+  protected void setUp() {
     r = new InspectableObject[5];
     ArrayList<String> names = new ArrayList<String>(3);
     names.add("col0");
@@ -121,7 +102,7 @@ public class TestOperators {
     }
   }
 
-  private void testTaskIds(String[] taskIds, String expectedAttemptId, String expectedTaskId) {
+  private void testTaskIds(String [] taskIds, String expectedAttemptId, String expectedTaskId) {
     Configuration conf = new JobConf(TestOperators.class);
     for (String one: taskIds) {
       conf.set("mapred.task.id", one);
@@ -129,8 +110,8 @@ public class TestOperators {
       assertEquals(expectedAttemptId, attemptId);
       assertEquals(Utilities.getTaskIdFromFilename(attemptId), expectedTaskId);
       assertEquals(Utilities.getTaskIdFromFilename(attemptId + ".gz"), expectedTaskId);
-      assertEquals(Utilities.getTaskIdFromFilename(
-                   Utilities.toTempPath(new Path(attemptId + ".gz")).toString()), expectedTaskId);
+      assertEquals(Utilities.getTaskIdFromFilename
+                   (Utilities.toTempPath(new Path(attemptId + ".gz")).toString()), expectedTaskId);
     }
   }
 
@@ -139,27 +120,26 @@ public class TestOperators {
    * file naming libraries
    * The old test was deactivated as part of hive-405
    */
-  @Test
   public void testFileSinkOperator() throws Throwable {
 
     try {
-      testTaskIds(new String[] {
+      testTaskIds (new String [] {
           "attempt_200707121733_0003_m_000005_0",
           "attempt_local_0001_m_000005_0",
           "task_200709221812_0001_m_000005_0",
           "task_local_0001_m_000005_0"
-          }, "000005_0", "000005");
+        }, "000005_0", "000005");
 
-      testTaskIds(new String[] {
+      testTaskIds (new String [] {
           "job_local_0001_map_000005",
           "job_local_0001_reduce_000005",
-          }, "000005", "000005");
+        }, "000005", "000005");
 
-      testTaskIds(new String[] {"1234567"},
+      testTaskIds (new String [] {"1234567"},
                    "1234567", "1234567");
 
-      assertEquals(Utilities.getTaskIdFromFilename(
-                   "/mnt/dev005/task_local_0001_m_000005_0"),
+      assertEquals(Utilities.getTaskIdFromFilename
+                   ("/mnt/dev005/task_local_0001_m_000005_0"),
                    "000005");
 
       System.out.println("FileSink Operator ok");
@@ -174,7 +154,6 @@ public class TestOperators {
    *  variables. But environment variables have some system limitations and we have to check
    *  job configuration properties firstly. This test checks that staff.
    */
-  @Test
   public void testScriptOperatorEnvVarsProcessing() throws Throwable {
     try {
       ScriptOperator scriptOperator = new ScriptOperator(new CompilationOpContext());
@@ -188,7 +167,7 @@ public class TestOperators {
       assertEquals("value", scriptOperator.safeEnvVarValue("value", "name", true));
 
       //Environment Variables long values
-      char[] array = new char[20*1024+1];
+      char [] array = new char[20*1024+1];
       Arrays.fill(array, 'a');
       String hugeEnvVar = new String(array);
       assertEquals(20*1024+1, hugeEnvVar.length());
@@ -215,7 +194,6 @@ public class TestOperators {
     }
   }
 
-  @Test
   public void testScriptOperatorBlacklistedEnvVarsProcessing() {
     ScriptOperator scriptOperator = new ScriptOperator(new CompilationOpContext());
 
@@ -231,18 +209,16 @@ public class TestOperators {
     Assert.assertTrue(env.containsKey("barfoo"));
   }
 
-  @Test
   public void testScriptOperator() throws Throwable {
     try {
       System.out.println("Testing Script Operator");
       // col1
-      ExprNodeDesc exprDesc1 = new ExprNodeColumnDesc(TypeInfoFactory.stringTypeInfo, "col1", "",
-          false);
+      ExprNodeDesc exprDesc1 = TestExecDriver.getStringColumn("col1");
+
       // col2
-      ExprNodeDesc expr1 = new ExprNodeColumnDesc(TypeInfoFactory.stringTypeInfo, "col0", "",
-          false);
+      ExprNodeDesc expr1 = TestExecDriver.getStringColumn("col0");
       ExprNodeDesc expr2 = new ExprNodeConstantDesc("1");
-      ExprNodeDesc exprDesc2 = ExprNodeTypeCheck.getExprNodeDefaultExprProcessor()
+      ExprNodeDesc exprDesc2 = TypeCheckProcFactory.DefaultExprProcessor
           .getFuncExprNodeDesc("concat", expr1, expr2);
 
       // select operator to project these two columns
@@ -306,7 +282,6 @@ public class TestOperators {
     }
   }
 
-  @Test
   public void testMapOperator() throws Throwable {
     try {
       System.out.println("Testing Map Operator");
@@ -317,10 +292,10 @@ public class TestOperators {
           new Path("hdfs:///testDir/testFile"));
 
       // initialize pathToAliases
-      List<String> aliases = new ArrayList<String>();
+      ArrayList<String> aliases = new ArrayList<String>();
       aliases.add("a");
       aliases.add("b");
-      Map<Path, List<String>> pathToAliases = new LinkedHashMap<>();
+      LinkedHashMap<Path, ArrayList<String>> pathToAliases = new LinkedHashMap<>();
       pathToAliases.put(new Path("hdfs:///testDir"), aliases);
 
       // initialize pathToTableInfo
@@ -328,7 +303,7 @@ public class TestOperators {
       TableDesc td = Utilities.defaultTd;
       PartitionDesc pd = new PartitionDesc(td, null);
       LinkedHashMap<Path, org.apache.hadoop.hive.ql.plan.PartitionDesc> pathToPartitionInfo =
-          new LinkedHashMap<>();
+        new LinkedHashMap<>();
       pathToPartitionInfo.put(new Path("hdfs:///testDir"), pd);
 
       // initialize aliasToWork
@@ -341,7 +316,7 @@ public class TestOperators {
           .get(ctx, CollectDesc.class);
       cdop2.setConf(cd);
       LinkedHashMap<String, Operator<? extends OperatorDesc>> aliasToWork =
-          new LinkedHashMap<String, Operator<? extends OperatorDesc>>();
+        new LinkedHashMap<String, Operator<? extends OperatorDesc>>();
       aliasToWork.put("a", cdop1);
       aliasToWork.put("b", cdop2);
 
@@ -412,7 +387,6 @@ public class TestOperators {
       // ensure that both of the partitions are in the complete list.
       String[] dirs = job.get("hive.complete.dir.list").split("\t");
       assertEquals(2, dirs.length);
-      Arrays.sort(dirs);
       assertEquals(true, dirs[0].endsWith("/state=CA"));
       assertEquals(true, dirs[1].endsWith("/state=OR"));
       return super.getSplits(job, splits);
@@ -434,265 +408,31 @@ public class TestOperators {
         "inputformat 'org.apache.hadoop.hive.ql.exec.TestOperators$CustomInFmt' " +
         "outputformat 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat' " +
         "tblproperties ('myprop1'='val1', 'myprop2' = 'val2')";
-    Driver driver = new Driver(conf);
+    Driver driver = new Driver();
+    driver.init();
     CommandProcessorResponse response = driver.run(cmd);
+    assertEquals(0, response.getResponseCode());
     List<Object> result = new ArrayList<Object>();
 
     cmd = "load data local inpath '../data/files/employee.dat' " +
         "overwrite into table fetchOp partition (state='CA')";
+    driver.init();
     response = driver.run(cmd);
+    assertEquals(0, response.getResponseCode());
 
     cmd = "load data local inpath '../data/files/employee2.dat' " +
         "overwrite into table fetchOp partition (state='OR')";
+    driver.init();
     response = driver.run(cmd);
+    assertEquals(0, response.getResponseCode());
 
     cmd = "select * from fetchOp";
+    driver.init();
     driver.setMaxRows(500);
     response = driver.run(cmd);
+    assertEquals(0, response.getResponseCode());
     driver.getResults(result);
     assertEquals(20, result.size());
     driver.close();
   }
-
-  @Test
-  public void testNoConditionalTaskSizeForLlap() {
-    ConvertJoinMapJoin convertJoinMapJoin = new ConvertJoinMapJoin();
-    long defaultNoConditionalTaskSize = 1024L * 1024L * 1024L;
-    HiveConf hiveConf = new HiveConf();
-    hiveConf.setLongVar(HiveConf.ConfVars.HIVECONVERTJOINNOCONDITIONALTASKTHRESHOLD, defaultNoConditionalTaskSize);
-
-    LlapClusterStateForCompile llapInfo = null;
-    if ("llap".equalsIgnoreCase(hiveConf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_MODE))) {
-      llapInfo = LlapClusterStateForCompile.getClusterInfo(hiveConf);
-      llapInfo.initClusterInfo();
-    }
-    // execution mode not set, null is returned
-    assertEquals(defaultNoConditionalTaskSize,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getAdjustedNoConditionalTaskSize());
-    hiveConf.set(HiveConf.ConfVars.HIVE_EXECUTION_MODE.varname, "llap");
-
-    if ("llap".equalsIgnoreCase(hiveConf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_MODE))) {
-      llapInfo = LlapClusterStateForCompile.getClusterInfo(hiveConf);
-      llapInfo.initClusterInfo();
-    }
-
-    // default executors is 4, max slots is 3. so 3 * 20% of noconditional task size will be oversubscribed
-    hiveConf.set(HiveConf.ConfVars.LLAP_MAPJOIN_MEMORY_OVERSUBSCRIBE_FACTOR.varname, "0.2");
-    hiveConf.set(HiveConf.ConfVars.LLAP_MEMORY_OVERSUBSCRIPTION_MAX_EXECUTORS_PER_QUERY.varname, "3");
-    double fraction = hiveConf.getFloatVar(HiveConf.ConfVars.LLAP_MAPJOIN_MEMORY_OVERSUBSCRIBE_FACTOR);
-    int maxSlots = 3;
-    long expectedSize = (long) (defaultNoConditionalTaskSize + (defaultNoConditionalTaskSize * fraction * maxSlots));
-    assertEquals(expectedSize,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo)
-        .getAdjustedNoConditionalTaskSize());
-
-    // num executors is less than max executors per query (which is not expected case), default executors will be
-    // chosen. 4 * 20% of noconditional task size will be oversubscribed
-    int chosenSlots = hiveConf.getIntVar(HiveConf.ConfVars.LLAP_DAEMON_NUM_EXECUTORS);
-    hiveConf.set(HiveConf.ConfVars.LLAP_MEMORY_OVERSUBSCRIPTION_MAX_EXECUTORS_PER_QUERY.varname, "5");
-    expectedSize = (long) (defaultNoConditionalTaskSize + (defaultNoConditionalTaskSize * fraction * chosenSlots));
-    assertEquals(expectedSize,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo)
-        .getAdjustedNoConditionalTaskSize());
-
-    // disable memory checking
-    hiveConf.set(HiveConf.ConfVars.LLAP_MAPJOIN_MEMORY_MONITOR_CHECK_INTERVAL.varname, "0");
-    assertFalse(
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).doMemoryMonitoring());
-
-    // invalid inflation factor
-    hiveConf.set(HiveConf.ConfVars.LLAP_MAPJOIN_MEMORY_MONITOR_CHECK_INTERVAL.varname, "10000");
-    hiveConf.set(HiveConf.ConfVars.HIVE_HASH_TABLE_INFLATION_FACTOR.varname, "0.0f");
-    assertFalse(
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).doMemoryMonitoring());
-  }
-
-  @Test
-  public void testLlapMemoryOversubscriptionMaxExecutorsPerQueryCalculation() {
-    ConvertJoinMapJoin convertJoinMapJoin = new ConvertJoinMapJoin();
-    HiveConf hiveConf = new HiveConf();
-
-    LlapClusterStateForCompile llapInfo = Mockito.mock(LlapClusterStateForCompile.class);
-
-    when(llapInfo.getNumExecutorsPerNode()).thenReturn(1);
-    assertEquals(1,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
-    assertEquals(3,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, null).getMaxExecutorsOverSubscribeMemory());
-
-    when(llapInfo.getNumExecutorsPerNode()).thenReturn(6);
-    assertEquals(2,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
-
-    when(llapInfo.getNumExecutorsPerNode()).thenReturn(30);
-    assertEquals(8,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
-
-    hiveConf.set(HiveConf.ConfVars.LLAP_MEMORY_OVERSUBSCRIPTION_MAX_EXECUTORS_PER_QUERY.varname, "5");
-    assertEquals(5,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
-    assertEquals(5,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, null).getMaxExecutorsOverSubscribeMemory());
-  }
-
-  @Test public void testHashGroupBy() throws HiveException {
-    InspectableObject[] input = constructHashAggrInputData(5, 3);
-    System.out.println("---------------Begin to Construct Groupby Desc-------------");
-    // 1. Build AggregationDesc
-    String aggregate = "MAX";
-    ExprNodeDesc inputColumn = new ExprNodeColumnDesc(TypeInfoFactory.stringTypeInfo, "col0", "table", false);
-    ArrayList<ExprNodeDesc> params = new ArrayList<ExprNodeDesc>();
-    params.add(inputColumn);
-    GenericUDAFEvaluator genericUDAFEvaluator =
-        SemanticAnalyzer.getGenericUDAFEvaluator(aggregate, params, null, false, false);
-    AggregationDesc agg =
-        new AggregationDesc(aggregate, genericUDAFEvaluator, params, false, GenericUDAFEvaluator.Mode.PARTIAL1);
-    ArrayList<AggregationDesc> aggs = new ArrayList<AggregationDesc>();
-    aggs.add(agg);
-
-    // 2. aggr keys
-    ExprNodeDesc key1 = new ExprNodeColumnDesc(TypeInfoFactory.stringTypeInfo, "col1", "table", false);
-    ExprNodeDesc key2 = new ExprNodeColumnDesc(TypeInfoFactory.stringTypeInfo, "col2", "table", false);
-    ArrayList<ExprNodeDesc> keys = new ArrayList<>();
-    keys.add(key1);
-    keys.add(key2);
-
-    // 3. outputCols
-    // @see org.apache.hadoop.hive.ql.exec.GroupByOperator.forward
-    // outputColumnNames, including: group by keys, agg evaluators output cols.
-    ArrayList<String> outputColumnNames = new ArrayList<String>();
-    for (int i = 0; i < keys.size() + aggs.size(); i++) {
-      outputColumnNames.add("_col" + i);
-    }
-    // 4. build GroupByDesc desc
-    GroupByDesc desc = new GroupByDesc();
-    desc.setOutputColumnNames(outputColumnNames);
-    desc.setAggregators(aggs);
-    desc.setKeys(keys);
-    desc.setMode(GroupByDesc.Mode.HASH);
-    desc.setMemoryThreshold(1.0f);
-    desc.setGroupByMemoryUsage(1.0f);
-    // minReductionHashAggr
-    desc.setMinReductionHashAggr(0.5f);
-
-    // 5. Configure hive conf and  Build group by operator
-    HiveConf hconf = new HiveConf();
-    HiveConf.setIntVar(hconf, HiveConf.ConfVars.HIVEGROUPBYMAPINTERVAL, 1);
-
-    // 6. test hash aggr without grouping sets
-    System.out.println("---------------Begin to test hash group by without grouping sets-------------");
-    int withoutGroupingSetsExpectSize = 3;
-    GroupByOperator op = new GroupByOperator(new CompilationOpContext());
-    op.setConf(desc);
-    testHashAggr(op, hconf, input, withoutGroupingSetsExpectSize);
-
-    // 7. test hash aggr with  grouping sets
-    System.out.println("---------------Begin to test hash group by with grouping sets------------");
-    int groupingSetsExpectSize = 6;
-
-    desc.setGroupingSetsPresent(true);
-    ArrayList<Long> groupingSets = new ArrayList<>();
-    // groupingSets
-    groupingSets.add(1L);
-    groupingSets.add(2L);
-    desc.setListGroupingSets(groupingSets);
-    // add grouping sets dummy key
-    ExprNodeDesc groupingSetDummyKey = new ExprNodeConstantDesc(TypeInfoFactory.longTypeInfo, 0L);
-    keys.add(groupingSetDummyKey);
-    desc.setKeys(keys);
-    // groupingSet Position
-    desc.setGroupingSetPosition(2);
-    op = new GroupByOperator(new CompilationOpContext());
-    op.setConf(desc);
-    testHashAggr(op, hconf, input, groupingSetsExpectSize);
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void testSetDoneFromChildOperators() throws HiveException {
-    VectorSelectDesc vectorSelectDesc = new VectorSelectDesc();
-    vectorSelectDesc.setProjectedOutputColumns(new int[0]);
-    vectorSelectDesc.setSelectExpressions(new VectorExpression[0]);
-    VectorSelectOperator selOp = new VectorSelectOperator(new CompilationOpContext(),
-        new SelectDesc(), new VectorizationContext("dummy"), vectorSelectDesc);
-    VectorSelectOperator childOp = new VectorSelectOperator(new CompilationOpContext(),
-        new SelectDesc(), new VectorizationContext("dummy"), vectorSelectDesc);
-
-    selOp.childOperatorsArray = new Operator[1];
-    selOp.childOperatorsArray[0] = childOp;
-    selOp.childOperatorsTag = new int[1];
-    selOp.childOperatorsTag[0] = 0;
-
-    childOp.childOperatorsArray = new Operator[0];
-
-    Assert.assertFalse(selOp.getDone());
-    Assert.assertFalse(childOp.getDone());
-
-    selOp.process(new VectorizedRowBatch(1), 0);
-    childOp.setDone(true);
-
-    // selOp is not done, it will detect child's done=true during the next process(batch) call
-    Assert.assertFalse(selOp.getDone());
-    Assert.assertTrue(childOp.getDone());
-
-    selOp.process(new VectorizedRowBatch(1), 0);
-
-    // selOp detects child's done=true, so it turns to done=true
-    Assert.assertTrue(selOp.getDone());
-    Assert.assertTrue(childOp.getDone());
-  }
-
-  private void testHashAggr(GroupByOperator op, HiveConf hconf, InspectableObject[] r, int expectOutputSize)
-      throws HiveException {
-    // 1. Collect operator to observe the output of the group by operator
-    CollectDesc cd = new CollectDesc(expectOutputSize + 10);
-    CollectOperator cdop = (CollectOperator) OperatorFactory.getAndMakeChild(cd, op);
-    op.initialize(hconf, new ObjectInspector[] { r[0].oi });
-    // 2. Evaluate on rows and check hashAggr flag
-    for (int i = 0; i < r.length; i++) {
-      op.process(r[i].o, 0);
-    }
-    op.close(false);
-    InspectableObject io = new InspectableObject();
-    int output = 0;
-    // 3. Print group by results
-    do {
-      cdop.retrieve(io);
-      if (io.o != null) {
-        System.out.println("io.o = " + io.o);
-        output++;
-      }
-    } while (io.o != null);
-    // 4. Check partial result size
-    assertEquals(expectOutputSize, output);
-  }
-
-  private InspectableObject[] constructHashAggrInputData(int rowNum, int rowNumWithSameKeys) {
-    InspectableObject[] r;
-    r = new InspectableObject[rowNum];
-    ArrayList<String> names = new ArrayList<String>(3);
-    names.add("col0");
-    names.add("col1");
-    names.add("col2");
-    ArrayList<ObjectInspector> objectInspectors = new ArrayList<ObjectInspector>(3);
-    objectInspectors.add(PrimitiveObjectInspectorFactory.javaStringObjectInspector);
-    objectInspectors.add(PrimitiveObjectInspectorFactory.javaStringObjectInspector);
-    objectInspectors.add(PrimitiveObjectInspectorFactory.javaStringObjectInspector);
-    // 3 rows with the same col1, col2
-    for (int i = 0; i < rowNum; i++) {
-      ArrayList<String> data = new ArrayList<String>();
-      data.add("" + i);
-      data.add("" + (i < rowNumWithSameKeys ? -1 : i));
-      data.add("" + (i < rowNumWithSameKeys ? -1 : i));
-      try {
-        r[i] = new InspectableObject();
-        r[i].o = data;
-        r[i].oi = ObjectInspectorFactory.getStandardStructObjectInspector(names, objectInspectors);
-      } catch (Throwable e) {
-        throw new RuntimeException(e);
-      }
-    }
-    return r;
-  }
-
 }

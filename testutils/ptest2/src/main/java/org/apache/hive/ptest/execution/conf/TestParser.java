@@ -276,8 +276,7 @@ public class TestParser {
         .getLogger(TestParser.class);
     File workingDir = new File("../..");
     File testConfigurationFile = new File(args[0]);
-    final Context ctx = Context.fromFile(testConfigurationFile);
-    TestConfiguration conf = TestConfiguration.withContext(ctx, log);
+    TestConfiguration conf = TestConfiguration.fromFile(testConfigurationFile, log);
     TestParser testParser = new TestParser(conf.getContext(), new AtomicInteger(1), "test", workingDir, log);
     List<TestBatch> testBatches = testParser.parse().get();
     for (TestBatch testBatch : testBatches) {

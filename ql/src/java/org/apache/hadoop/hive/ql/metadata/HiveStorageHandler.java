@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,25 +18,16 @@
 
 package org.apache.hadoop.hive.ql.metadata;
 
+import java.util.Map;
+
 import org.apache.hadoop.conf.Configurable;
-import org.apache.hadoop.hive.common.classification.InterfaceAudience;
-import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.apache.hadoop.hive.metastore.HiveMetaHook;
-import org.apache.hadoop.hive.metastore.api.LockType;
-import org.apache.hadoop.hive.metastore.api.MetaException;
-import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.ql.hooks.WriteEntity;
-import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
-import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
-import org.apache.hadoop.hive.ql.security.authorization.HiveAuthorizationProvider;
-import org.apache.hadoop.hive.ql.stats.Partish;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.hive.ql.security.authorization.HiveAuthorizationProvider;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputFormat;
-
-import java.util.Map;
 
 /**
  * HiveStorageHandler defines a pluggable interface for adding
@@ -56,8 +47,6 @@ import java.util.Map;
  * Storage handler classes are plugged in using the STORED BY 'classname'
  * clause in CREATE TABLE.
  */
-@InterfaceAudience.Public
-@InterfaceStability.Stable
 public interface HiveStorageHandler extends Configurable {
   /**
    * @return Class providing an implementation of {@link InputFormat}
@@ -110,12 +99,6 @@ public interface HiveStorageHandler extends Configurable {
     Map<String, String> jobProperties);
 
   /**
-   * This method is called to allow the StorageHandlers the chance to
-   * populate secret keys into the job's credentials.
-   */
-  public abstract void configureInputJobCredentials(TableDesc tableDesc, Map<String, String> secrets);
-
-  /**
    * This method is called to allow the StorageHandlers the chance
    * to populate the JobContext.getConfiguration() with properties that
    * maybe be needed by the handler's bundled artifacts (ie InputFormat, SerDe, etc).
@@ -156,103 +139,7 @@ public interface HiveStorageHandler extends Configurable {
    * Called just before submitting MapReduce job.
    *
    * @param tableDesc descriptor for the table being accessed
-   * @param jobConf jobConf for MapReduce job
+   * @param JobConf jobConf for MapReduce job
    */
   public void configureJobConf(TableDesc tableDesc, JobConf jobConf);
-
-  /**
-   * Used to fetch runtime information about storage handler during DESCRIBE EXTENDED statement
-   *
-   * @param table table definition
-   * @return StorageHandlerInfo containing runtime information about storage handler
-   * OR `null` if the storage handler choose to not provide any runtime information.
-   */
-  public default StorageHandlerInfo getStorageHandlerInfo(Table table) throws MetaException
-  {
-    return null;
-  }
-
-  default LockType getLockType(WriteEntity writeEntity){
-    return LockType.EXCLUSIVE;
-  }
-
-  /**
-   * Test if the storage handler allows the push-down of join filter predicate to prune further the splits.
-   *
-   * @param table The table to filter.
-   * @param syntheticFilterPredicate Join filter predicate.
-   * @return true if supports dynamic split pruning for the given predicate.
-   */
-
-  default boolean addDynamicSplitPruningEdge(org.apache.hadoop.hive.ql.metadata.Table table,
-      ExprNodeDesc syntheticFilterPredicate) {
-    return false;
-  }
-
-  /**
-   * Used to add additional operator specific information from storage handler during DESCRIBE EXTENDED statement.
-   *
-   * @param operatorDesc operatorDesc
-   * @param initialProps Map containing initial operator properties
-   * @return Map<String, String> containing additional operator specific information from storage handler
-   * OR `initialProps` if the storage handler choose to not provide any such information.
-   */
-  default Map<String, String> getOperatorDescProperties(OperatorDesc operatorDesc, Map<String, String> initialProps) {
-    return initialProps;
-  }
-
-  /**
-   * Return some basic statistics (numRows, numFiles, totalSize) calculated by the underlying storage handler
-   * implementation.
-   * @param partish a partish wrapper class
-   * @return map of basic statistics, can be null
-   */
-  default Map<String, String> getBasicStatistics(Partish partish) {
-    return null;
-  }
-
-  /**
-   * Check if the storage handler can provide basic statistics.
-   * @return true if the storage handler can supply the basic statistics
-   */
-  default boolean canProvideBasicStatistics() {
-    return false;
-  }
-
-  /**
-   * Check if CTAS operations should behave in a direct-insert manner (i.e. no move task).
-   *
-   * If true, the compiler will not include the table creation task and move task into the execution plan.
-   * Instead, it's the responsibility of storage handler/serde to create the table during the compilation phase.
-   * Please note that the atomicity of the operation will suffer in this case, i.e. the created table might become
-   * exposed, depending on the implementation, before the CTAS operations finishes.
-   * Rollback (e.g. dropping the table) is also the responsibility of the storage handler in case of failures.
-   *
-   * @return whether direct insert CTAS is required
-   */
-  default boolean directInsertCTAS() {
-    return false;
-  }
-
-  /**
-   * Check if partition columns should be removed and added to the list of regular columns in HMS.
-   * This can be useful for non-native tables where the table format/layout differs from the standard Hive table layout,
-   * e.g. Iceberg tables. For these table formats, the partition column values are stored in the data files along with
-   * regular column values, therefore the object inspectors should include the partition columns as well.
-   * Any partitioning scheme provided via the standard HiveQL syntax will be honored but stored in someplace
-   * other than HMS, depending on the storage handler implementation.
-   *
-   * @return whether table should always be unpartitioned from the perspective of HMS
-   */
-  default boolean alwaysUnpartitioned() {
-    return false;
-  }
-
-  /**
-   * Check if the underlying storage handler implementation support partition transformations.
-   * @return true if the storage handler can support it
-   */
-  default boolean supportsPartitionTransform() {
-    return false;
-  }
 }

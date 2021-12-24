@@ -1,4 +1,3 @@
---! qt:dataset:part
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 SET hive.vectorized.execution.enabled = true;
@@ -9,21 +8,21 @@ set hive.fetch.task.conversion=none;
 
 -- Test timestamp functions in vectorized mode to verify they run correctly end-to-end.
 
-CREATE TABLE date_udf_flight_n0 (
+CREATE TABLE date_udf_flight (
   origin_city_name STRING,
   dest_city_name STRING,
   fl_date DATE,
   arr_delay FLOAT,
   fl_num INT
 );
-LOAD DATA LOCAL INPATH '../../data/files/flights_tiny.txt.1' OVERWRITE INTO TABLE date_udf_flight_n0;
+LOAD DATA LOCAL INPATH '../../data/files/flights_tiny.txt.1' OVERWRITE INTO TABLE date_udf_flight;
 
 CREATE TABLE date_udf_flight_orc (
   fl_date DATE,
   fl_time TIMESTAMP
 ) STORED AS ORC;
 
-INSERT INTO TABLE date_udf_flight_orc SELECT fl_date, to_utc_timestamp(fl_date, 'America/Los_Angeles') FROM date_udf_flight_n0;
+INSERT INTO TABLE date_udf_flight_orc SELECT fl_date, to_utc_timestamp(fl_date, 'America/Los_Angeles') FROM date_udf_flight;
 
 SELECT * FROM date_udf_flight_orc;
 

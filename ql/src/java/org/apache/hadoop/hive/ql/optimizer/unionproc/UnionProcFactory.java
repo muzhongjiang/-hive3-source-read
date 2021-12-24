@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,15 +24,13 @@ import java.util.Map;
 import java.util.Stack;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.ql.exec.AbstractFileMergeOperator;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorFactory;
 import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.UnionOperator;
-import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.optimizer.unionproc.UnionProcContext.UnionParseContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -65,7 +63,7 @@ public final class UnionProcFactory {
   /**
    * MapRed subquery followed by Union.
    */
-  public static class MapRedUnion implements SemanticNodeProcessor {
+  public static class MapRedUnion implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -90,7 +88,7 @@ public final class UnionProcFactory {
   /**
    * Map-only subquery followed by Union.
    */
-  public static class MapUnion implements SemanticNodeProcessor {
+  public static class MapUnion implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -115,7 +113,7 @@ public final class UnionProcFactory {
   /**
    * Union subquery followed by Union.
    */
-  public static class UnknownUnion implements SemanticNodeProcessor {
+  public static class UnknownUnion implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -173,7 +171,7 @@ public final class UnionProcFactory {
    *   select * from (subq1 where filter union all subq2 where filter ...)x;
    * and then optimized.
    */
-  public static class UnionNoProcessFile implements SemanticNodeProcessor {
+  public static class UnionNoProcessFile implements NodeProcessor {
 
     private void pushOperatorsAboveUnion(UnionOperator union,
       Stack<Node> stack, int pos) throws SemanticException {
@@ -221,12 +219,9 @@ public final class UnionProcFactory {
 
         for (Operator<? extends OperatorDesc> parent : parents) {
           FileSinkDesc fileSinkDesc = (FileSinkDesc) fileSinkOp.getConf().clone();
-          fileSinkDesc.setDirName(new Path(parentDirName, AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + parent.getIdentifier()));
+          fileSinkDesc.setDirName(new Path(parentDirName, parent.getIdentifier()));
           fileSinkDesc.setLinkedFileSink(true);
-          if (Utilities.FILE_OP_LOGGER.isTraceEnabled()) {
-            Utilities.FILE_OP_LOGGER.trace("Created LinkedFileSink for union " + fileSinkDesc.getDirName()
-                + "; parent " + parentDirName);
-          }
+          fileSinkDesc.setParentDir(parentDirName);
           parent.setChildOperators(null);
           Operator<? extends OperatorDesc> tmpFileSinkOp =
             OperatorFactory.getAndMakeChild(fileSinkDesc, parent.getSchema(), parent);
@@ -310,7 +305,7 @@ public final class UnionProcFactory {
   /**
    * Default processor.
    */
-  public static class NoUnion implements SemanticNodeProcessor {
+  public static class NoUnion implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -319,23 +314,23 @@ public final class UnionProcFactory {
     }
   }
 
-  public static SemanticNodeProcessor getMapRedUnion() {
+  public static NodeProcessor getMapRedUnion() {
     return new MapRedUnion();
   }
 
-  public static SemanticNodeProcessor getMapUnion() {
+  public static NodeProcessor getMapUnion() {
     return new MapUnion();
   }
 
-  public static SemanticNodeProcessor getUnknownUnion() {
+  public static NodeProcessor getUnknownUnion() {
     return new UnknownUnion();
   }
 
-  public static SemanticNodeProcessor getNoUnion() {
+  public static NodeProcessor getNoUnion() {
     return new NoUnion();
   }
 
-  public static SemanticNodeProcessor getUnionNoProcessFile() {
+  public static NodeProcessor getUnionNoProcessFile() {
     return new UnionNoProcessFile();
   }
 }

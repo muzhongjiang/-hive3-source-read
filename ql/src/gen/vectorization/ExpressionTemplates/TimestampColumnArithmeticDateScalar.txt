@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions.gen;
 
-import java.util.Arrays;
 import java.sql.Timestamp;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
@@ -29,8 +28,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.NullUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.*;
 import org.apache.hadoop.hive.ql.util.DateTimeMath;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 
 /**
  * Generated from template TimestampColumnArithmeticDateScalar.txt, which covers binary arithmetic
@@ -40,130 +38,83 @@ public class <ClassName> extends VectorExpression {
 
   private static final long serialVersionUID = 1L;
 
-  private final Timestamp value;
+  private int colNum;
+  private Timestamp value;
+  private int outputColumn;
+  private DateTimeMath dtm = new DateTimeMath();
 
-  private transient final DateTimeMath dtm = new DateTimeMath();
-
-  public <ClassName>(int colNum, long value, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  public <ClassName>(int colNum, long value, int outputColumn) {
+    this.colNum = colNum;
     this.value = new Timestamp(0);
-    this.value.setTime(DateWritableV2.daysToMillis((int) value));
+    this.value.setTime(DateWritable.daysToMillis((int) value));
+    this.outputColumn = outputColumn;
   }
 
   public <ClassName>() {
-     super();
-
-    // Dummy final assignments.
-    value = null;
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
-
-    // return immediately if batch is empty
-    final int n = batch.size;
-    if (n == 0) {
-      return;
-    }
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
      // Input #1 is type <OperandType1>.
-    <InputColumnVectorType1> inputColVector1 = (<InputColumnVectorType1>) batch.cols[inputColumnNum[0]];
+    <InputColumnVectorType1> inputColVector1 = (<InputColumnVectorType1>) batch.cols[colNum];
 
     // Output is type <ReturnType>.
-    <OutputColumnVectorType> outputColVector = (<OutputColumnVectorType>) batch.cols[outputColumnNum];
+    <OutputColumnVectorType> outputColVector = (<OutputColumnVectorType>) batch.cols[outputColumn];
 
     int[] sel = batch.selected;
     boolean[] inputIsNull = inputColVector1.isNull;
     boolean[] outputIsNull = outputColVector.isNull;
+    outputColVector.noNulls = inputColVector1.noNulls;
+    outputColVector.isRepeating = inputColVector1.isRepeating;
+    int n = batch.size;
 
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
-    if (inputColVector1.isRepeating) {
-      if (inputColVector1.noNulls || !inputIsNull[0]) {
-        outputIsNull[0] = false;
-        dtm.<OperatorMethod>(
-            inputColVector1.asScratch<CamelOperandType1>(0), value, outputColVector.getScratch<CamelReturnType>());
-        outputColVector.setFromScratch<CamelReturnType>(0);
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-      }
-      outputColVector.isRepeating = true;
-      NullUtil.setNullOutputEntriesColScalar(outputColVector, batch.selectedInUse, sel, n);
+    // return immediately if batch is empty
+    if (n == 0) {
       return;
     }
 
-    if (inputColVector1.noNulls) {
+    if (inputColVector1.isRepeating) {
+      dtm.<OperatorMethod>(
+          inputColVector1.asScratch<CamelOperandType1>(0), value, outputColVector.getScratch<CamelReturnType>());
+      outputColVector.setFromScratch<CamelReturnType>(0);
+      // Even if there are no nulls, we always copy over entry 0. Simplifies code.
+      outputIsNull[0] = inputIsNull[0];
+    } else if (inputColVector1.noNulls) {
       if (batch.selectedInUse) {
-
-         // CONSIDER: For large n, fill n or all of isNull array and use the tighter ELSE loop.
-
-         if (!outputColVector.noNulls) {
-           for(int j = 0; j != n; j++) {
-             final int i = sel[j];
-             outputIsNull[i] = false;
-             dtm.<OperatorMethod>(
-                inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
-             outputColVector.setFromScratch<CamelReturnType>(i);
-          }
-         } else {
-           for(int j = 0; j != n; j++) {
-             final int i = sel[j];
-             dtm.<OperatorMethod>(
-                inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
-             outputColVector.setFromScratch<CamelReturnType>(i);
-           }
-         }
-      } else {
-        if (!outputColVector.noNulls) {
-
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
+        for(int j = 0; j != n; j++) {
+          int i = sel[j];
+          dtm.<OperatorMethod>(
+              inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
+          outputColVector.setFromScratch<CamelReturnType>(i);
         }
+      } else {
         for(int i = 0; i != n; i++) {
           dtm.<OperatorMethod>(
               inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
           outputColVector.setFromScratch<CamelReturnType>(i);
         }
       }
-    } else /* there are NULLs in the inputColVector */ {
-
-      /*
-       * Do careful maintenance of the outputColVector.noNulls flag.
-       */
-
+    } else /* there are nulls */ {
       if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
-          if (!inputIsNull[i]) {
-            outputIsNull[i] = false;
-            dtm.<OperatorMethod>(
-                inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
-            outputColVector.setFromScratch<CamelReturnType>(i);
-          } else {
-            outputIsNull[i] = true;
-            outputColVector.noNulls = false;
-          }
+          dtm.<OperatorMethod>(
+              inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
+          outputColVector.setFromScratch<CamelReturnType>(i);
+          outputIsNull[i] = inputIsNull[i];
         }
       } else {
         for(int i = 0; i != n; i++) {
-         if (!inputIsNull[i]) {
-            outputIsNull[i] = false;
-            dtm.<OperatorMethod>(
-                inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
-            outputColVector.setFromScratch<CamelReturnType>(i);
-          } else {
-            outputIsNull[i] = true;
-            outputColVector.noNulls = false;
-          }
+          dtm.<OperatorMethod>(
+              inputColVector1.asScratch<CamelOperandType1>(i), value, outputColVector.getScratch<CamelReturnType>());
+          outputColVector.setFromScratch<CamelReturnType>(i);
         }
+        System.arraycopy(inputIsNull, 0, outputIsNull, 0, n);
       }
     }
 
@@ -171,8 +122,18 @@ public class <ClassName> extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "<ReturnType>";
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", val " + org.apache.hadoop.hive.common.type.Date.ofEpochMilli(value.getTime());
+    return "col " + colNum + ", val " + value.toString();
   }
 
   @Override

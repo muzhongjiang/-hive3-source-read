@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,15 +18,13 @@
 
 package org.apache.hadoop.hive.ql.exec.tez;
 
+import org.apache.hadoop.hive.ql.exec.tez.TezSessionPoolManager.TezSessionPoolSession;
 
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.SettableFuture;
 import java.io.IOException;
-import java.util.concurrent.ScheduledExecutorService;
+import java.net.URISyntaxException;
+
 import javax.security.auth.login.LoginException;
+
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -38,28 +36,17 @@ import org.apache.tez.dag.api.TezException;
  * use case from hive server 2, we need a session simulation.
  *
  */
-public class SampleTezSessionState extends WmTezSession {
+public class SampleTezSessionState extends TezSessionPoolSession {
 
   private boolean open;
   private final String sessionId;
-  private final HiveConf hiveConf;
+  private HiveConf hiveConf;
   private String user;
   private boolean doAsEnabled;
-  private ListenableFuture<Boolean> waitForAmRegFuture;
 
-  public SampleTezSessionState(
-      String sessionId, TezSessionPoolSession.Manager parent, HiveConf conf) {
-    super(sessionId, parent, (parent instanceof TezSessionPoolManager)
-        ? ((TezSessionPoolManager)parent).getExpirationTracker() : null, conf);
+  public SampleTezSessionState(String sessionId, TezSessionPoolManager parent) {
+    super(sessionId, parent);
     this.sessionId = sessionId;
-    this.hiveConf = conf;
-    waitForAmRegFuture = createDefaultWaitForAmRegistryFuture();
-  }
-
-  private SettableFuture<Boolean> createDefaultWaitForAmRegistryFuture() {
-    SettableFuture<Boolean> noWait = SettableFuture.create();
-    noWait.set(true); // By default, do not wait.
-    return noWait;
   }
 
   @Override
@@ -72,25 +59,17 @@ public class SampleTezSessionState extends WmTezSession {
   }
 
   @Override
-  public void open() throws LoginException, IOException {
+  public void open(HiveConf conf) throws IOException, LoginException, URISyntaxException,
+      TezException {
+    this.hiveConf = conf;
     UserGroupInformation ugi = Utils.getUGI();
     user = ugi.getShortUserName();
-    this.doAsEnabled = hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ENABLE_DOAS);
+    this.doAsEnabled = conf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ENABLE_DOAS);
     setOpen(true);
   }
 
   @Override
-  public void open(HiveResources resources) throws LoginException, IOException {
-    open();
-  }
-
-  @Override
-  public void open(String[] additionalFiles) throws IOException, LoginException {
-    open();
-  }
-
-  @Override
-  void close(boolean keepTmpDir) throws TezException, IOException {
+  public void close(boolean keepTmpDir) throws TezException, IOException {
     open = keepTmpDir;
   }
 
@@ -112,28 +91,5 @@ public class SampleTezSessionState extends WmTezSession {
   @Override
   public boolean getDoAsEnabled() {
     return this.doAsEnabled;
-  }
-
-  @Override
-  public SettableFuture<WmTezSession> waitForAmRegistryAsync(
-      int timeoutMs, ScheduledExecutorService timeoutPool) {
-    final SampleTezSessionState session = this;
-    final SettableFuture<WmTezSession> future = SettableFuture.create();
-    Futures.addCallback(waitForAmRegFuture, new FutureCallback<Boolean>() {
-      @Override
-      public void onSuccess(Boolean result) {
-        future.set(session);
-      }
-
-      @Override
-      public void onFailure(Throwable t) {
-        future.setException(t);
-      }
-    }, MoreExecutors.directExecutor());
-    return future;
-  }
-
-  public void setWaitForAmRegistryFuture(ListenableFuture<Boolean> future) {
-    waitForAmRegFuture = future != null ? future : createDefaultWaitForAmRegistryFuture();
   }
 }

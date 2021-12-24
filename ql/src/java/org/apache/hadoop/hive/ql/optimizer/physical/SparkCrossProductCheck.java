@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.ql.exec.JoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.spark.SparkTask;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
 import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.lib.TaskGraphWalker;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -34,12 +34,13 @@ import org.apache.hadoop.hive.ql.plan.ReduceWork;
 import org.apache.hadoop.hive.ql.plan.SparkWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
+import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
-import java.util.TreeMap;
 
 /**
  * Check each MapJoin and ShuffleJoin Operator to see if they are performing a cross product.
@@ -52,20 +53,20 @@ import java.util.TreeMap;
  * If the keys expr list on the mapJoin Desc is an empty list for any input,
  * this implies a cross product.
  */
-public class SparkCrossProductCheck implements PhysicalPlanResolver, SemanticDispatcher {
+public class SparkCrossProductCheck implements PhysicalPlanResolver, Dispatcher {
 
   @Override
   public Object dispatch(Node nd, Stack<Node> stack, Object... nodeOutputs)
       throws SemanticException {
     @SuppressWarnings("unchecked")
-    Task<?> currTask = (Task<?>) nd;
+    Task<? extends Serializable> currTask = (Task<? extends Serializable>) nd;
     if (currTask instanceof SparkTask) {
       SparkWork sparkWork = ((SparkTask) currTask).getWork();
       checkShuffleJoin(sparkWork);
       checkMapJoin((SparkTask) currTask);
     } else if (currTask instanceof ConditionalTask) {
-      List<Task<?>> taskList = ((ConditionalTask) currTask).getListTasks();
-      for (Task<?> task : taskList) {
+      List<Task<? extends Serializable>> taskList = ((ConditionalTask) currTask).getListTasks();
+      for (Task<? extends Serializable> task : taskList) {
         dispatch(task, stack, nodeOutputs);
       }
     }
@@ -84,16 +85,18 @@ public class SparkCrossProductCheck implements PhysicalPlanResolver, SemanticDis
   }
 
   private void warn(String msg) {
-    SessionState.getConsole().printInfo("Warning: " + msg, false);
+    SessionState.getConsole().getInfoStream().println(
+        String.format("Warning: %s", msg));
   }
 
   private void checkShuffleJoin(SparkWork sparkWork) throws SemanticException {
     for (ReduceWork reduceWork : sparkWork.getAllReduceWork()) {
       Operator<? extends OperatorDesc> reducer = reduceWork.getReducer();
       if (reducer instanceof JoinOperator || reducer instanceof CommonMergeJoinOperator) {
-        Map<Integer, CrossProductHandler.ExtractReduceSinkInfo.Info> rsInfo = new TreeMap<Integer, CrossProductHandler.ExtractReduceSinkInfo.Info>();
+        Map<Integer, CrossProductCheck.ExtractReduceSinkInfo.Info> rsInfo =
+            new HashMap<Integer, CrossProductCheck.ExtractReduceSinkInfo.Info>();
         for (BaseWork parent : sparkWork.getParents(reduceWork)) {
-          rsInfo.putAll(new CrossProductHandler.ExtractReduceSinkInfo(null).analyze(parent));
+          rsInfo.putAll(new CrossProductCheck.ExtractReduceSinkInfo(null).analyze(parent));
         }
         checkForCrossProduct(reduceWork.getName(), reducer, rsInfo);
       }
@@ -102,9 +105,9 @@ public class SparkCrossProductCheck implements PhysicalPlanResolver, SemanticDis
 
   private void checkMapJoin(SparkTask sparkTask) throws SemanticException {
     SparkWork sparkWork = sparkTask.getWork();
-    for (BaseWork baseWork : sparkWork.getAllWork()) {
+    for (BaseWork baseWork : sparkWork.getAllWorkUnsorted()) {
       List<String> warnings =
-          new CrossProductHandler.MapJoinCheck(sparkTask.toString()).analyze(baseWork);
+          new CrossProductCheck.MapJoinCheck(sparkTask.toString()).analyze(baseWork);
       for (String w : warnings) {
         warn(w);
       }
@@ -113,12 +116,12 @@ public class SparkCrossProductCheck implements PhysicalPlanResolver, SemanticDis
 
   private void checkForCrossProduct(String workName,
       Operator<? extends OperatorDesc> reducer,
-      Map<Integer, CrossProductHandler.ExtractReduceSinkInfo.Info> rsInfo) {
+      Map<Integer, CrossProductCheck.ExtractReduceSinkInfo.Info> rsInfo) {
     if (rsInfo.isEmpty()) {
       return;
     }
-    Iterator<CrossProductHandler.ExtractReduceSinkInfo.Info> it = rsInfo.values().iterator();
-    CrossProductHandler.ExtractReduceSinkInfo.Info info = it.next();
+    Iterator<CrossProductCheck.ExtractReduceSinkInfo.Info> it = rsInfo.values().iterator();
+    CrossProductCheck.ExtractReduceSinkInfo.Info info = it.next();
     if (info.keyCols.size() == 0) {
       List<String> iAliases = new ArrayList<String>();
       iAliases.addAll(info.inputAliases);

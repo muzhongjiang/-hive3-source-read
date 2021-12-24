@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.session.ISessionAuthState;
+import org.apache.hadoop.hive.ql.session.SessionState;
 
 /**
  * HiveAuthenticationProvider is an interface for authentication. The
@@ -41,6 +41,6 @@ public interface HiveAuthenticationProvider extends Configurable{
    * SessionState is not a public interface.
    * @param ss SessionState that created this instance
    */
-  public void setSessionState(ISessionAuthState ss);
+  public void setSessionState(SessionState ss);
 
 }

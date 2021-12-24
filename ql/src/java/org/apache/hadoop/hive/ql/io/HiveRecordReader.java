@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -35,12 +35,12 @@ public class HiveRecordReader<K extends WritableComparable, V extends Writable>
 
 
 
-  public HiveRecordReader(RecordReader<K, V> recordReader)
+  public HiveRecordReader(RecordReader recordReader)
       throws IOException {
     super(recordReader);
   }
 
-  public HiveRecordReader(RecordReader<K, V> recordReader, JobConf conf)
+  public HiveRecordReader(RecordReader recordReader, JobConf conf)
       throws IOException {
     super(recordReader, conf);
   }
@@ -50,17 +50,14 @@ public class HiveRecordReader<K extends WritableComparable, V extends Writable>
     recordReader.close();
   }
 
-  @Override
   public K createKey() {
-    return recordReader.createKey();
+    return (K) recordReader.createKey();
   }
 
-  @Override
   public V createValue() {
-    return recordReader.createValue();
+    return (V) recordReader.createValue();
   }
 
-  @Override
   public long getPos() throws IOException {
     return recordReader.getPos();
   }

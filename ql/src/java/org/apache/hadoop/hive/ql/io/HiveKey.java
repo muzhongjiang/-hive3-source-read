@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -36,10 +36,6 @@ public class HiveKey extends BytesWritable {
 
   public HiveKey() {
     hashCodeValid = false;
-  }
-
-  public HiveKey(byte[] bytes) {
-    super(bytes);
   }
 
   public HiveKey(byte[] bytes, int hashcode) {

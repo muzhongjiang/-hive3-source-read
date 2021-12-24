@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,8 +17,16 @@
  */
 package org.apache.hive.beeline;
 
-import org.junit.Assert;
+import junit.framework.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
+
+import java.io.*;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Properties;
+
 import static org.mockito.Mockito.*;
 
 public class TestBeeLineOpts {

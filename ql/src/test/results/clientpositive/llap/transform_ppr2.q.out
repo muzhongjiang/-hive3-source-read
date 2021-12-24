@@ -8,11 +8,6 @@ FROM (
 ) tmap
 SELECT tmap.tkey, tmap.tvalue WHERE tmap.tkey < 100
 PREHOOK: type: QUERY
-PREHOOK: Input: cat
-PREHOOK: Input: default@srcpart
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: EXPLAIN EXTENDED
 FROM (
   FROM srcpart src
@@ -23,11 +18,6 @@ FROM (
 ) tmap
 SELECT tmap.tkey, tmap.tvalue WHERE tmap.tkey < 100
 POSTHOOK: type: QUERY
-POSTHOOK: Input: cat
-POSTHOOK: Input: default@srcpart
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -44,7 +34,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: (ds = '2008-04-08') (type: boolean)
                   Statistics: Num rows: 1000 Data size: 178000 Basic stats: COMPLETE Column stats: COMPLETE
                   GatherStats: false
                   Select Operator
@@ -57,7 +46,6 @@ STAGE PLANS:
                           input format: org.apache.hadoop.mapred.TextInputFormat
                           output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                           properties:
-                            bucketing_version -1
                             columns _col0,_col1,_col2
                             columns.types string,string,string
                             field.delim 9
@@ -68,23 +56,20 @@ STAGE PLANS:
                       Filter Operator
                         isSamplingPred: false
                         predicate: (_col1 < 100) (type: boolean)
-                        Statistics: Num rows: 333 Data size: 90576 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 333 Data size: 2664 Basic stats: COMPLETE Column stats: COMPLETE
                         Reduce Output Operator
-                          bucketingVersion: 2
                           key expressions: _col1 (type: string)
                           null sort order: a
-                          numBuckets: -1
                           sort order: +
                           Map-reduce partition columns: _col1 (type: string)
-                          Statistics: Num rows: 333 Data size: 90576 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 333 Data size: 2664 Basic stats: COMPLETE Column stats: COMPLETE
                           tag: -1
                           value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: string)
                           auto parallelism: true
             Path -> Alias:
-              hdfs://### HDFS PATH ### [src]
-              hdfs://### HDFS PATH ### [src]
+#### A masked pattern was here ####
             Path -> Partition:
-              hdfs://### HDFS PATH ### 
+#### A masked pattern was here ####
                 Partition
                   base file name: hr=11
                   input format: org.apache.hadoop.mapred.TextInputFormat
@@ -93,37 +78,44 @@ STAGE PLANS:
                     ds 2008-04-08
                     hr 11
                   properties:
-                    column.name.delimiter ,
+                    COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true","value":"true"}}
+                    bucket_count -1
                     columns key,value
+                    columns.comments 'default','default'
                     columns.types string:string
 #### A masked pattern was here ####
-                    location hdfs://### HDFS PATH ###
                     name default.srcpart
+                    numFiles 1
+                    numRows 500
                     partition_columns ds/hr
                     partition_columns.types string:string
+                    rawDataSize 5312
+                    serialization.ddl struct srcpart { string key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    totalSize 5812
+#### A masked pattern was here ####
                   serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                 
                     input format: org.apache.hadoop.mapred.TextInputFormat
                     output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                     properties:
-                      bucketing_version 2
-                      column.name.delimiter ,
+                      bucket_count -1
                       columns key,value
                       columns.comments 'default','default'
                       columns.types string:string
 #### A masked pattern was here ####
-                      location hdfs://### HDFS PATH ###
                       name default.srcpart
                       partition_columns ds/hr
                       partition_columns.types string:string
+                      serialization.ddl struct srcpart { string key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+#### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     name: default.srcpart
                   name: default.srcpart
-              hdfs://### HDFS PATH ### 
+#### A masked pattern was here ####
                 Partition
                   base file name: hr=12
                   input format: org.apache.hadoop.mapred.TextInputFormat
@@ -132,33 +124,40 @@ STAGE PLANS:
                     ds 2008-04-08
                     hr 12
                   properties:
-                    column.name.delimiter ,
+                    COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true","value":"true"}}
+                    bucket_count -1
                     columns key,value
+                    columns.comments 'default','default'
                     columns.types string:string
 #### A masked pattern was here ####
-                    location hdfs://### HDFS PATH ###
                     name default.srcpart
+                    numFiles 1
+                    numRows 500
                     partition_columns ds/hr
                     partition_columns.types string:string
+                    rawDataSize 5312
+                    serialization.ddl struct srcpart { string key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    totalSize 5812
+#### A masked pattern was here ####
                   serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                 
                     input format: org.apache.hadoop.mapred.TextInputFormat
                     output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                     properties:
-                      bucketing_version 2
-                      column.name.delimiter ,
+                      bucket_count -1
                       columns key,value
                       columns.comments 'default','default'
                       columns.types string:string
 #### A masked pattern was here ####
-                      location hdfs://### HDFS PATH ###
                       name default.srcpart
                       partition_columns ds/hr
                       partition_columns.types string:string
+                      serialization.ddl struct srcpart { string key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+#### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     name: default.srcpart
                   name: default.srcpart
@@ -166,26 +165,24 @@ STAGE PLANS:
               /srcpart/ds=2008-04-08/hr=11 [src]
               /srcpart/ds=2008-04-08/hr=12 [src]
         Reducer 2 
-            Execution mode: vectorized, llap
+            Execution mode: llap
             Needs Tagging: false
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col1 (type: string), VALUE._col2 (type: string)
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 333 Data size: 59274 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 333 Data size: 2664 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
-                  bucketingVersion: 2
                   compressed: false
                   GlobalTableId: 0
-                  directory: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
                   NumFilesPerFileSink: 1
-                  Statistics: Num rows: 333 Data size: 59274 Basic stats: COMPLETE Column stats: COMPLETE
-                  Stats Publishing Key Prefix: hdfs://### HDFS PATH ###
+                  Statistics: Num rows: 333 Data size: 2664 Basic stats: COMPLETE Column stats: COMPLETE
+#### A masked pattern was here ####
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                       properties:
-                        bucketing_version -1
                         columns _col0,_col1
                         columns.types string:string
                         escape.delim \
@@ -217,7 +214,7 @@ PREHOOK: Input: cat
 PREHOOK: Input: default@srcpart
 PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: FROM (
   FROM srcpart src
   SELECT TRANSFORM(src.ds, src.key, src.value)
@@ -231,7 +228,7 @@ POSTHOOK: Input: cat
 POSTHOOK: Input: default@srcpart
 POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 0	val_0
 0	val_0
 0	val_0

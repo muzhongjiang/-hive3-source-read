@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -49,7 +49,6 @@ public class IOContext {
    * supports {@link org.apache.hadoop.hive.ql.metadata.VirtualColumn#ROWID}
    */
   private  RecordIdentifier ri;
-  private boolean isDeletedRecord;
 
   public static enum Comparison {
     GREATER,
@@ -175,14 +174,6 @@ public class IOContext {
 
   public void setRecordIdentifier(RecordIdentifier ri) {
     this.ri = ri;
-  }
-
-  public boolean isDeletedRecord() {
-    return isDeletedRecord;
-  }
-
-  public void setDeletedRecord(boolean deletedRecord) {
-    isDeletedRecord = deletedRecord;
   }
 
   /**

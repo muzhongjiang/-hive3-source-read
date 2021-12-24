@@ -1,4 +1,3 @@
---! qt:dataset:part
 SET hive.metastore.partition.name.whitelist.pattern=[A-Za-z]*;
 -- This pattern matches only letters.
 

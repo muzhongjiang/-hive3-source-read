@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,7 +26,6 @@ import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.io.IOContext;
 import org.apache.hadoop.hive.ql.io.IOContextMap;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.plan.ExprNodeDescUtils;
 import org.apache.hadoop.hive.ql.plan.FilterDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -163,11 +162,5 @@ public class FilterOperator extends Operator<FilterDesc> implements
   @Override
   public boolean supportUnionRemoveOptimization() {
     return true;
-  }
-
-  @Override
-  public void replaceTabAlias(String oldAlias, String newAlias) {
-    super.replaceTabAlias(oldAlias, newAlias);
-    ExprNodeDescUtils.replaceTabAlias(getConf().getPredicate(), oldAlias, newAlias);
   }
 }

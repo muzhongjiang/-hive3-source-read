@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,26 +22,22 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
-import java.nio.charset.StandardCharsets;
-import java.time.ZoneId;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.hadoop.hive.common.classification.InterfaceAudience;
-import org.apache.hadoop.hive.common.classification.InterfaceStability;
-import org.apache.hadoop.hive.common.type.Date;
+import org.apache.hadoop.hive.ql.util.TimestampUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
+import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hadoop.hive.common.type.Timestamp;
-import org.apache.hadoop.hive.common.type.TimestampTZ;
-import org.apache.hadoop.hive.common.type.TimestampTZUtil;
-import org.apache.hadoop.hive.common.type.TimestampUtils;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.io.ByteWritable;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
@@ -49,8 +45,7 @@ import org.apache.hadoop.hive.serde2.io.HiveIntervalDayTimeWritable;
 import org.apache.hadoop.hive.serde2.io.HiveIntervalYearMonthWritable;
 import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampLocalTZWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.lazy.LazyInteger;
 import org.apache.hadoop.hive.serde2.lazy.LazyLong;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -66,7 +61,6 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.hive.common.util.DateParser;
 
 /**
  * ObjectInspectorFactory is the primary way to create new ObjectInspector
@@ -76,12 +70,11 @@ import org.apache.hive.common.util.DateParser;
  * ObjectInspector to return to the caller of SerDe2.getObjectInspector().
  */
 public final class PrimitiveObjectInspectorUtils {
+  private static final Logger LOG = LoggerFactory.getLogger(PrimitiveObjectInspectorUtils.class);
 
   /**
    * TypeEntry stores information about a Hive Primitive TypeInfo.
    */
-  @InterfaceAudience.Public
-  @InterfaceStability.Stable
   public static class PrimitiveTypeEntry implements Writable, Cloneable {
 
     /**
@@ -229,13 +222,10 @@ public final class PrimitiveObjectInspectorUtils {
       Short.class, ShortWritable.class);
   public static final PrimitiveTypeEntry dateTypeEntry = new PrimitiveTypeEntry(
       PrimitiveCategory.DATE, serdeConstants.DATE_TYPE_NAME, null,
-      Date.class, DateWritableV2.class);
+      Date.class, DateWritable.class);
   public static final PrimitiveTypeEntry timestampTypeEntry = new PrimitiveTypeEntry(
       PrimitiveCategory.TIMESTAMP, serdeConstants.TIMESTAMP_TYPE_NAME, null,
-      Timestamp.class, TimestampWritableV2.class);
-  public static final PrimitiveTypeEntry timestampTZTypeEntry = new PrimitiveTypeEntry(
-      PrimitiveCategory.TIMESTAMPLOCALTZ, serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME, null,
-      TimestampTZ.class, TimestampLocalTZWritable.class);
+      Timestamp.class, TimestampWritable.class);
   public static final PrimitiveTypeEntry intervalYearMonthTypeEntry = new PrimitiveTypeEntry(
       PrimitiveCategory.INTERVAL_YEAR_MONTH, serdeConstants.INTERVAL_YEAR_MONTH_TYPE_NAME, null,
       HiveIntervalYearMonth.class, HiveIntervalYearMonthWritable.class);
@@ -271,7 +261,6 @@ public final class PrimitiveObjectInspectorUtils {
     registerType(shortTypeEntry);
     registerType(dateTypeEntry);
     registerType(timestampTypeEntry);
-    registerType(timestampTZTypeEntry);
     registerType(intervalYearMonthTypeEntry);
     registerType(intervalDayTimeTypeEntry);
     registerType(decimalTypeEntry);
@@ -450,10 +439,6 @@ public final class PrimitiveObjectInspectorUtils {
       return ((TimestampObjectInspector) oi1).getPrimitiveWritableObject(o1)
           .equals(((TimestampObjectInspector) oi2).getPrimitiveWritableObject(o2));
     }
-    case TIMESTAMPLOCALTZ: {
-      return ((TimestampLocalTZObjectInspector) oi1).getPrimitiveWritableObject(o1).equals(
-          ((TimestampLocalTZObjectInspector) oi2).getPrimitiveWritableObject(o2));
-    }
     case INTERVAL_YEAR_MONTH: {
       return ((HiveIntervalYearMonthObjectInspector) oi1).getPrimitiveWritableObject(o1)
           .equals(((HiveIntervalYearMonthObjectInspector) oi2).getPrimitiveWritableObject(o2));
@@ -476,6 +461,39 @@ public final class PrimitiveObjectInspectorUtils {
   }
 
   /**
+   * Convert a primitive object to double.
+   */
+  public static double convertPrimitiveToDouble(Object o, PrimitiveObjectInspector oi) {
+    switch (oi.getPrimitiveCategory()) {
+    case BOOLEAN:
+      return ((BooleanObjectInspector) oi).get(o) ? 1 : 0;
+    case BYTE:
+      return ((ByteObjectInspector) oi).get(o);
+    case SHORT:
+      return ((ShortObjectInspector) oi).get(o);
+    case INT:
+      return ((IntObjectInspector) oi).get(o);
+    case LONG:
+      return ((LongObjectInspector) oi).get(o);
+    case FLOAT:
+      return ((FloatObjectInspector) oi).get(o);
+    case DOUBLE:
+      return ((DoubleObjectInspector) oi).get(o);
+    case STRING:
+      return Double.valueOf(((StringObjectInspector) oi).getPrimitiveJavaObject(o));
+    case TIMESTAMP:
+      return ((TimestampObjectInspector) oi).getPrimitiveWritableObject(o)
+          .getDouble();
+    case DECIMAL:
+      // TODO: lossy conversion!
+      return ((HiveDecimalObjectInspector) oi).getPrimitiveJavaObject(o).doubleValue();
+    case DATE:  // unsupported conversion
+    default:
+      throw new NumberFormatException();
+    }
+  }
+
+  /**
    * Compare 2 Primitive Objects with their Object Inspector, conversions
    * allowed. Note that NULL does not equal to NULL according to SQL standard.
    */
@@ -491,7 +509,8 @@ public final class PrimitiveObjectInspectorUtils {
 
     // If not equal, convert all to double and compare
     try {
-      return getDouble(o1, oi1) == getDouble(o2, oi2);
+      return convertPrimitiveToDouble(o1, oi1) == convertPrimitiveToDouble(o2,
+          oi2);
     } catch (NumberFormatException e) {
       return false;
     }
@@ -533,10 +552,10 @@ public final class PrimitiveObjectInspectorUtils {
       StringObjectInspector soi = (StringObjectInspector) oi;
       if (soi.preferWritable()) {
         Text t = soi.getPrimitiveWritableObject(o);
-        result = parseBoolean(t);
+        result = t.getLength() != 0;
       } else {
         String s = soi.getPrimitiveJavaObject(o);
-        result = parseBoolean(s);
+        result = s.length() != 0;
       }
       break;
     case TIMESTAMP:
@@ -553,74 +572,6 @@ public final class PrimitiveObjectInspectorUtils {
           + oi.getTypeName());
     }
     return result;
-  }
-
-
-  enum FalseValues {
-    FALSE("false"), OFF("off"), NO("no"), ZERO("0"), EMPTY("");
-
-    private final byte[] bytes;
-    private String str;
-
-    FalseValues(String s) {
-      str = s;
-      bytes = s.getBytes(StandardCharsets.UTF_8);
-    }
-
-    public boolean accept(byte[] arr, int st) {
-      for (int i = 0; i < bytes.length; i++) {
-        byte b = arr[i + st];
-        if (!(b == bytes[i] || b + 'a' - 'A' == bytes[i])) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    public boolean accept(String s) {
-      return str.equalsIgnoreCase(s);
-    }
-  }
-  /**
-   * Parses a boolean from string
-   *
-   * Accepts "false","off","no","0" and "" as FALSE
-   * All other values are interpreted as true.
-   */
-  public static boolean parseBoolean(byte[] arr, int st, int len) {
-    switch (len) {
-    case 5:
-      return !FalseValues.FALSE.accept(arr, st);
-    case 3:
-      return !FalseValues.OFF.accept(arr, st);
-    case 2:
-      return !FalseValues.NO.accept(arr, st);
-    case 1:
-      return !FalseValues.ZERO.accept(arr, st);
-    case 0:
-      return false;
-    default:
-      return true;
-    }
-  }
-
-  private static final FalseValues[] FALSE_BOOLEANS = FalseValues.values();
-
-  private static boolean parseBoolean(String s) {
-    for (int i = 0; i < FALSE_BOOLEANS.length; i++) {
-      if (FALSE_BOOLEANS[i].accept(s)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private static boolean parseBoolean(Text t) {
-    if(t.getLength()>5) {
-      return true;
-    }
-    String strVal=t.toString();
-    return parseBoolean(strVal);
   }
 
   /**
@@ -805,10 +756,6 @@ public final class PrimitiveObjectInspectorUtils {
       result = ((TimestampObjectInspector) oi).getPrimitiveWritableObject(o)
           .getSeconds();
       break;
-    case TIMESTAMPLOCALTZ:
-      result = ((TimestampLocalTZObjectInspector) oi).getPrimitiveWritableObject(o)
-                .getSeconds();
-      break;
     case DECIMAL:
       {
         HiveDecimal dec = ((HiveDecimalObjectInspector) oi)
@@ -919,7 +866,7 @@ public final class PrimitiveObjectInspectorUtils {
       }
       break;
     case BOOLEAN:
-      result = (((BooleanObjectInspector) oi).get(o)) ? "TRUE" : "FALSE";
+      result = String.valueOf((((BooleanObjectInspector) oi).get(o)));
       break;
     case BYTE:
       result = String.valueOf((((ByteObjectInspector) oi).get(o)));
@@ -957,9 +904,6 @@ public final class PrimitiveObjectInspectorUtils {
     case TIMESTAMP:
       result = ((TimestampObjectInspector) oi).getPrimitiveWritableObject(o).toString();
       break;
-    case TIMESTAMPLOCALTZ:
-      result = ((TimestampLocalTZObjectInspector) oi).getPrimitiveWritableObject(o).toString();
-      break;
     case INTERVAL_YEAR_MONTH:
       result = ((HiveIntervalYearMonthObjectInspector) oi).getPrimitiveWritableObject(o).toString();
       break;
@@ -967,9 +911,8 @@ public final class PrimitiveObjectInspectorUtils {
       result = ((HiveIntervalDayTimeObjectInspector) oi).getPrimitiveWritableObject(o).toString();
       break;
     case DECIMAL:
-      int scale = ((HiveDecimalObjectInspector) oi).scale();
       result = ((HiveDecimalObjectInspector) oi)
-          .getPrimitiveJavaObject(o).toFormatString(scale);
+          .getPrimitiveJavaObject(o).toString();
       break;
     default:
       throw new RuntimeException("Hive 2 Internal error: unknown type: "
@@ -1121,28 +1064,33 @@ public final class PrimitiveObjectInspectorUtils {
     Date result = null;
     switch (oi.getPrimitiveCategory()) {
     case VOID:
+      result = null;
       break;
     case STRING:
       StringObjectInspector soi = (StringObjectInspector) oi;
       String s = soi.getPrimitiveJavaObject(o).trim();
-      if (s.length() == DATE_LENGTH) {
-        result = DateParser.parseDate(s);
-      } else {
+      try {
+        result = Date.valueOf(s);
+      } catch (IllegalArgumentException e) {
         Timestamp ts = getTimestampFromString(s);
         if (ts != null) {
-          result = Date.ofEpochMilli(ts.toEpochMilli());
+          result = new Date(ts.getTime());
+        } else {
+          result = null;
         }
       }
       break;
     case CHAR:
     case VARCHAR: {
       String val = getString(o, oi).trim();
-      if (val.length() == DATE_LENGTH) {
-        result = DateParser.parseDate(val);
-      } else {
+      try {
+        result = Date.valueOf(val);
+      } catch (IllegalArgumentException e) {
         Timestamp ts = getTimestampFromString(val);
         if (ts != null) {
-          result = Date.ofEpochMilli(ts.toEpochMilli());
+          result = new Date(ts.getTime());
+        } else {
+          result = null;
         }
       }
       break;
@@ -1151,16 +1099,8 @@ public final class PrimitiveObjectInspectorUtils {
       result = ((DateObjectInspector) oi).getPrimitiveWritableObject(o).get();
       break;
     case TIMESTAMP:
-      result = DateWritableV2.timeToDate(
+      result = DateWritable.timeToDate(
           ((TimestampObjectInspector) oi).getPrimitiveWritableObject(o).getSeconds());
-      break;
-    case TIMESTAMPLOCALTZ:
-      String tstz = oi.getPrimitiveWritableObject(o).toString();
-      int divSpace = tstz.indexOf(' ');
-      if (divSpace == -1) {
-        return null;
-      }
-      result = Date.valueOf(tstz.substring(0, divSpace));
       break;
     default:
       throw new RuntimeException("Cannot convert to Date from: "
@@ -1187,23 +1127,23 @@ public final class PrimitiveObjectInspectorUtils {
       break;
     case BOOLEAN:
       longValue = ((BooleanObjectInspector) inputOI).get(o) ? 1 : 0;
-      result = TimestampWritableV2.longToTimestamp(longValue, intToTimestampInSeconds);
+      result = TimestampWritable.longToTimestamp(longValue, intToTimestampInSeconds);
       break;
     case BYTE:
       longValue = ((ByteObjectInspector) inputOI).get(o);
-      result = TimestampWritableV2.longToTimestamp(longValue, intToTimestampInSeconds);
+      result = TimestampWritable.longToTimestamp(longValue, intToTimestampInSeconds);
       break;
     case SHORT:
       longValue = ((ShortObjectInspector) inputOI).get(o);
-      result = TimestampWritableV2.longToTimestamp(longValue, intToTimestampInSeconds);
+      result = TimestampWritable.longToTimestamp(longValue, intToTimestampInSeconds);
       break;
     case INT:
       longValue = ((IntObjectInspector) inputOI).get(o);
-      result = TimestampWritableV2.longToTimestamp(longValue, intToTimestampInSeconds);
+      result = TimestampWritable.longToTimestamp(longValue, intToTimestampInSeconds);
       break;
     case LONG:
       longValue = ((LongObjectInspector) inputOI).get(o);
-      result = TimestampWritableV2.longToTimestamp(longValue, intToTimestampInSeconds);
+      result = TimestampWritable.longToTimestamp(longValue, intToTimestampInSeconds);
       break;
     case FLOAT:
       result = TimestampUtils.doubleToTimestamp(((FloatObjectInspector) inputOI).get(o));
@@ -1212,8 +1152,8 @@ public final class PrimitiveObjectInspectorUtils {
       result = TimestampUtils.doubleToTimestamp(((DoubleObjectInspector) inputOI).get(o));
       break;
     case DECIMAL:
-      result = TimestampUtils.decimalToTimestamp(
-          ((HiveDecimalObjectInspector) inputOI).getPrimitiveJavaObject(o));
+      result = TimestampUtils.decimalToTimestamp(((HiveDecimalObjectInspector) inputOI)
+                                                    .getPrimitiveJavaObject(o));
       break;
     case STRING:
       StringObjectInspector soi = (StringObjectInspector) inputOI;
@@ -1225,20 +1165,11 @@ public final class PrimitiveObjectInspectorUtils {
       result = getTimestampFromString(getString(o, inputOI));
       break;
     case DATE:
-      result = Timestamp.ofEpochMilli(
-          ((DateObjectInspector) inputOI).getPrimitiveWritableObject(o).get().toEpochMilli());
+      result = new Timestamp(
+          ((DateObjectInspector) inputOI).getPrimitiveWritableObject(o).get().getTime());
       break;
     case TIMESTAMP:
       result = ((TimestampObjectInspector) inputOI).getPrimitiveWritableObject(o).getTimestamp();
-      break;
-    case TIMESTAMPLOCALTZ:
-      String tstz = inputOI.getPrimitiveWritableObject(o).toString();
-      int index = tstz.indexOf(" ");
-      index = tstz.indexOf(" ", index + 1);
-      if (index == -1) {
-        return null;
-      }
-      result = Timestamp.valueOf(tstz.substring(0, index));
       break;
     default:
       throw new RuntimeException("Hive 2 Internal error: unknown type: "
@@ -1247,83 +1178,26 @@ public final class PrimitiveObjectInspectorUtils {
     return result;
   }
 
-  private final static int TS_LENGTH = "yyyy-mm-dd hh:mm:ss".length();
-  private final static int DATE_LENGTH = "YYYY-MM-DD".length();
-
-  public static Timestamp getTimestampFromString(String s) {
+  static Timestamp getTimestampFromString(String s) {
+    Timestamp result;
     s = s.trim();
-    s = trimNanoTimestamp(s);
 
-    try {
-      return TimestampUtils.stringToTimestamp(s);
-    } catch (IllegalArgumentException e) {
-      return null;
-    }
-  }
-
-  private static String trimNanoTimestamp(String s) {
-    int firstSpace = s.indexOf(' ');
     // Throw away extra if more than 9 decimal places
     int periodIdx = s.indexOf(".");
     if (periodIdx != -1) {
-      int secondSpaceOrPlus = firstSpace < 0 ? -1 : s.indexOf(' ', firstSpace + 1);
-      secondSpaceOrPlus = firstSpace < 0 || secondSpaceOrPlus != -1 ?
-          secondSpaceOrPlus : s.indexOf('+', firstSpace + 1);
-      int maxLength = secondSpaceOrPlus == -1 ? s.length() : secondSpaceOrPlus;
-      if (maxLength - periodIdx > 9) {
-        s = s.substring(0, periodIdx + 10).concat(s.substring(maxLength, s.length()));
+      if (s.length() - periodIdx > 9) {
+        s = s.substring(0, periodIdx + 10);
       }
     }
-    return s;
-  }
-
-  private static boolean isValidTimeStamp(final String s) {
-    if (s.length() == TS_LENGTH ||
-            (s.contains(".") &&
-                    s.substring(0, s.indexOf('.')).length() == TS_LENGTH)) {
-      // Possible timestamp
-      if (s.charAt(DATE_LENGTH) == '-') {
-        return false;
-      }
-      return true;
+    if (s.indexOf(' ') < 0) {
+      s = s.concat(" 00:00:00");
     }
-    return false;
-  }
-
-  public static TimestampTZ getTimestampLocalTZ(Object o, PrimitiveObjectInspector oi,
-          ZoneId timeZone) {
-    if (o == null) {
-      return null;
+    try {
+      result = Timestamp.valueOf(s);
+    } catch (IllegalArgumentException e) {
+      result = null;
     }
-    switch (oi.getPrimitiveCategory()) {
-    case VOID: {
-      return null;
-    }
-    case STRING: {
-      StringObjectInspector soi = (StringObjectInspector) oi;
-      String s = soi.getPrimitiveJavaObject(o).trim();
-      return TimestampTZUtil.parseOrNull(trimNanoTimestamp(s), timeZone);
-    }
-    case CHAR:
-    case VARCHAR: {
-      String s = getString(o, oi).trim();
-      return TimestampTZUtil.parseOrNull(trimNanoTimestamp(s), timeZone);
-    }
-    case DATE: {
-      Date date = ((DateObjectInspector) oi).getPrimitiveWritableObject(o).get();
-      return TimestampTZUtil.convert(date, timeZone);
-    }
-    case TIMESTAMP: {
-      Timestamp ts = ((TimestampObjectInspector) oi).getPrimitiveWritableObject(o).getTimestamp();
-      return TimestampTZUtil.convert(ts, timeZone);
-    }
-    case TIMESTAMPLOCALTZ: {
-      return ((TimestampLocalTZObjectInspector) oi).getPrimitiveWritableObject(o).getTimestampTZ();
-    }
-    default:
-      throw new RuntimeException("Cannot convert to " + serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME +
-          " from: " + oi.getTypeName());
-    }
+    return result;
   }
 
   public static HiveIntervalYearMonth getHiveIntervalYearMonth(Object o, PrimitiveObjectInspector oi) {
@@ -1432,9 +1306,8 @@ public final class PrimitiveObjectInspectorUtils {
         return PrimitiveGrouping.STRING_GROUP;
       case BOOLEAN:
         return PrimitiveGrouping.BOOLEAN_GROUP;
-      case DATE:
       case TIMESTAMP:
-      case TIMESTAMPLOCALTZ:
+      case DATE:
         return PrimitiveGrouping.DATE_GROUP;
       case INTERVAL_YEAR_MONTH:
       case INTERVAL_DAY_TIME:

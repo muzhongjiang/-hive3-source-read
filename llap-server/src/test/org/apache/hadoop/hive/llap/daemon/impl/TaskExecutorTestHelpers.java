@@ -22,9 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.google.common.base.Supplier;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.llap.LlapNodeId;
 import org.apache.hadoop.hive.llap.daemon.FragmentCompletionHandler;
 import org.apache.hadoop.hive.llap.daemon.KilledTaskHandler;
 import org.apache.hadoop.hive.llap.daemon.SchedulerFragmentCompletingListener;
@@ -53,17 +51,10 @@ public class TaskExecutorTestHelpers {
   private static final Logger LOG = LoggerFactory.getLogger(TestTaskExecutorService.class);
 
   public static MockRequest createMockRequest(int fragmentNum, int parallelism, long firstAttemptStartTime,
-    long currentAttemptStartTime, boolean canFinish, long workTime, boolean isGuaranteed) {
-    SubmitWorkRequestProto request = createSubmitWorkRequestProto(
-        fragmentNum, parallelism, firstAttemptStartTime, currentAttemptStartTime, isGuaranteed);
-    return createMockRequest(canFinish, canFinish, workTime, request, isGuaranteed);
-  }
-
-  public static MockRequest createMockRequest(int fragmentNum, int parallelism, long firstAttemptStartTime,
-      long currentAttemptStartTime, boolean canFinish, long workTime, boolean isGuaranteed, int dagId) {
-    SubmitWorkRequestProto request = createSubmitWorkRequestProto(fragmentNum, parallelism, 0,
-        firstAttemptStartTime, currentAttemptStartTime, 1, "MockDag", dagId, isGuaranteed);
-    return createMockRequest(canFinish, canFinish, workTime, request, isGuaranteed);
+    long currentAttemptStartTime, boolean canFinish, long workTime) {
+    SubmitWorkRequestProto
+        request = createSubmitWorkRequestProto(fragmentNum, parallelism, firstAttemptStartTime, currentAttemptStartTime);
+    return createMockRequest(canFinish, canFinish, workTime, request);
   }
 
   public static MockRequest createMockRequest(int fragmentNum, int parallelism,
@@ -71,28 +62,26 @@ public class TaskExecutorTestHelpers {
                                               long firstAttemptStartTime,
                                               long currentAttemptStartTime,
                                               boolean canFinish,
-                                              long workTime,
-                                              boolean isGuaranteed) {
+                                              long workTime) {
     SubmitWorkRequestProto
         request = createSubmitWorkRequestProto(fragmentNum, parallelism, 0,
-        firstAttemptStartTime, currentAttemptStartTime, withinDagPriority, isGuaranteed);
-    return createMockRequest(canFinish, canFinish, workTime, request, isGuaranteed);
+        firstAttemptStartTime, currentAttemptStartTime, withinDagPriority);
+    return createMockRequest(canFinish, canFinish, workTime, request);
   }
 
   private static MockRequest createMockRequest(boolean canFinish, boolean canFinishQueue,
-      long workTime, SubmitWorkRequestProto request, boolean isGuaranteed) {
+      long workTime, SubmitWorkRequestProto request) {
     QueryFragmentInfo queryFragmentInfo = createQueryFragmentInfo(
         request.getWorkSpec().getVertex(), request.getFragmentNumber());
-    return new MockRequest(request, queryFragmentInfo, canFinish, canFinishQueue,
-        workTime, null, isGuaranteed);
+    return new MockRequest(request, queryFragmentInfo, canFinish, canFinishQueue, workTime, null);
   }
 
-  public static TaskExecutorService.TaskWrapper createTaskWrapper(SubmitWorkRequestProto request,
-      boolean canFinish, boolean canFinishQueue, int workTime) {
-    return new TaskExecutorService.TaskWrapper(createMockRequest(
-        canFinish, canFinishQueue, workTime, request, request.getIsGuaranteed()), null);
+  public static TaskExecutorService.TaskWrapper createTaskWrapper(
+      SubmitWorkRequestProto request, boolean canFinish, boolean canFinishQueue, int workTime) {
+    return new TaskExecutorService.TaskWrapper(
+        createMockRequest(canFinish, canFinishQueue, workTime, request), null);
   }
-
+  
   public static TaskExecutorService.TaskWrapper createTaskWrapper(
       SubmitWorkRequestProto request, boolean canFinish, int workTime) {
     return createTaskWrapper(request, canFinish, canFinish, workTime);
@@ -105,67 +94,43 @@ public class TaskExecutorTestHelpers {
 
   public static QueryInfo createQueryInfo() {
     QueryIdentifier queryIdentifier = new QueryIdentifier("fake_app_id_string", 1);
-    LlapNodeId nodeId = LlapNodeId.getInstance("localhost", 0);
     QueryInfo queryInfo =
         new QueryInfo(queryIdentifier, "fake_app_id_string", "fake_dag_id_string", "fake_dag_name",
             "fakeHiveQueryId", 1, "fakeUser",
             new ConcurrentHashMap<String, LlapDaemonProtocolProtos.SourceStateProto>(),
-            new String[0], null, "fakeUser", null, nodeId, null, null, false, null);
+            new String[0], null, "fakeUser", null, null);
     return queryInfo;
   }
 
   public static SubmitWorkRequestProto createSubmitWorkRequestProto(
       int fragmentNumber, int selfAndUpstreamParallelism, long firstAttemptStartTime,
-      long currentAttemptStartTime, boolean isGuaranteed) {
+      long currentAttemptStartTime) {
     return createSubmitWorkRequestProto(fragmentNumber, selfAndUpstreamParallelism, 0, firstAttemptStartTime,
-      currentAttemptStartTime, 1, isGuaranteed);
+      currentAttemptStartTime, 1);
   }
 
   public static SubmitWorkRequestProto createSubmitWorkRequestProto(
       int fragmentNumber, int selfAndUpstreamParallelism, long firstAttemptStartTime,
       long currentAttemptStartTime, String dagName) {
     return createSubmitWorkRequestProto(fragmentNumber, selfAndUpstreamParallelism, 0, firstAttemptStartTime,
-        currentAttemptStartTime, 1, dagName, false);
-  }
-
-  public static SubmitWorkRequestProto createSubmitWorkRequestProto(
-      int fragmentNumber, int selfAndUpstreamParallelism, long firstAttemptStartTime,
-      long currentAttemptStartTime, String dagName, boolean isGuaranteed) {
-    return createSubmitWorkRequestProto(fragmentNumber, selfAndUpstreamParallelism, 0, firstAttemptStartTime,
-        currentAttemptStartTime, 1, dagName, isGuaranteed);
+        currentAttemptStartTime, 1, dagName);
   }
 
   public static SubmitWorkRequestProto createSubmitWorkRequestProto(
       int fragmentNumber, int selfAndUpstreamParallelism,
       int selfAndUpstreamComplete, long firstAttemptStartTime,
       long currentAttemptStartTime, int withinDagPriority) {
-    return createSubmitWorkRequestProto(fragmentNumber, selfAndUpstreamParallelism, selfAndUpstreamComplete, firstAttemptStartTime,
-        currentAttemptStartTime, withinDagPriority, "MockDag", false);
-  }
-
-  public static SubmitWorkRequestProto createSubmitWorkRequestProto(
-      int fragmentNumber, int selfAndUpstreamParallelism,
-      int selfAndUpstreamComplete, long firstAttemptStartTime,
-      long currentAttemptStartTime, int withinDagPriority, boolean isGuaranteed) {
     return createSubmitWorkRequestProto(fragmentNumber, selfAndUpstreamParallelism, 0, firstAttemptStartTime,
-        currentAttemptStartTime, withinDagPriority, "MockDag", isGuaranteed);
-  }
-
-  private static SubmitWorkRequestProto createSubmitWorkRequestProto(
-      int fragmentNumber, int selfAndUpstreamParallelism, int selfAndUpstreamComplete, long firstAttemptStartTime,
-      long currentAttemptStartTime, int withinDagPriority, String mockDag, boolean isGuaranteed) {
-    return createSubmitWorkRequestProto(fragmentNumber, selfAndUpstreamParallelism, selfAndUpstreamComplete, firstAttemptStartTime,
-        currentAttemptStartTime, withinDagPriority, mockDag, 35, isGuaranteed);
+        currentAttemptStartTime, withinDagPriority, "MockDag");
   }
 
   public static SubmitWorkRequestProto createSubmitWorkRequestProto(
       int fragmentNumber, int selfAndUpstreamParallelism,
       int selfAndUpstreamComplete, long firstAttemptStartTime,
-      long currentAttemptStartTime, int withinDagPriority, String dagName, int dagId,
-      boolean isGuaranteed) {
+      long currentAttemptStartTime, int withinDagPriority, String dagName) {
     ApplicationId appId = ApplicationId.newInstance(9999, 72);
-    TezDAGID dag = TezDAGID.getInstance(appId, 1);
-    TezVertexID vId = TezVertexID.getInstance(dag, dagId);
+    TezDAGID dagId = TezDAGID.getInstance(appId, 1);
+    TezVertexID vId = TezVertexID.getInstance(dagId, 35);
     return SubmitWorkRequestProto
         .newBuilder()
         .setAttemptNumber(0)
@@ -181,7 +146,7 @@ public class TaskExecutorTestHelpers {
                     QueryIdentifierProto.newBuilder()
                         .setApplicationIdString(appId.toString())
                         .setAppAttemptNumber(0)
-                        .setDagIndex(dag.getId())
+                        .setDagIndex(dagId.getId())
                         .build())
                 .setVertexIndex(vId.getId())
                 .setVertexName("MockVertex")
@@ -192,7 +157,6 @@ public class TaskExecutorTestHelpers {
         .setAmHost("localhost")
         .setAmPort(12345)
         .setContainerIdString("MockContainer_1")
-        .setIsGuaranteed(isGuaranteed)
         .setFragmentRuntimeInfo(LlapDaemonProtocolProtos
             .FragmentRuntimeInfo
             .newBuilder()
@@ -207,9 +171,7 @@ public class TaskExecutorTestHelpers {
 
   public static class MockRequest extends TaskRunnerCallable {
     private final long workTime;
-    private final boolean canFinish;
-    private boolean canUpdateFinishable = false; // Many old tests depend on this.
-    private boolean canFinishQueue;
+    private final boolean canFinish, canFinishQueue;
 
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
     private final AtomicBoolean isFinished = new AtomicBoolean(false);
@@ -226,20 +188,17 @@ public class TaskExecutorTestHelpers {
 
     public MockRequest(SubmitWorkRequestProto requestProto, QueryFragmentInfo fragmentInfo,
                        boolean canFinish, boolean canFinishQueue, long workTime,
-                       TezEvent initialEvent, boolean isGuaranteed) {
-      super(requestProto, fragmentInfo, Configuration::new, new ExecutionContextImpl("localhost"),
-          null, new Credentials(), 0, mock(AMReporter.class), null, mock(
-          LlapDaemonExecutorMetrics.class), mock(KilledTaskHandler.class), mock(
-          FragmentCompletionHandler.class), new DefaultHadoopShim(), null,
-          requestProto.getWorkSpec().getVertex(), initialEvent, null, mock(
-          SchedulerFragmentCompletingListener.class), mock(SocketFactory.class), isGuaranteed, null);
+                       TezEvent initialEvent) {
+      super(requestProto, fragmentInfo, new Configuration(),
+          new ExecutionContextImpl("localhost"), null, new Credentials(), 0, mock(AMReporter.class), null, mock(
+              LlapDaemonExecutorMetrics.class),
+          mock(KilledTaskHandler.class), mock(
+              FragmentCompletionHandler.class), new DefaultHadoopShim(), null,
+              requestProto.getWorkSpec().getVertex(), initialEvent, null, mock(
+              SchedulerFragmentCompletingListener.class), mock(SocketFactory.class));
       this.workTime = workTime;
       this.canFinish = canFinish;
       this.canFinishQueue = canFinishQueue;
-    }
-
-    public void setCanUpdateFinishable() {
-      this.canUpdateFinishable = true;
     }
 
     @Override
@@ -370,16 +329,6 @@ public class TaskExecutorTestHelpers {
     @Override
     public boolean canFinish() {
       return canFinish;
-    }
-
-    @Override
-    public void updateCanFinishForPriority(boolean value) {
-      super.updateCanFinishForPriority(value);
-      // Note: scheduler will call this based on lack of sources at schedule time and set this
-      //       to true... there's no easy way to work around this. Need better classes
-      if (this.canUpdateFinishable) {
-        this.canFinishQueue = value;
-      }
     }
 
     @Override

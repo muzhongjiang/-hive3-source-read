@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,12 +24,11 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Map;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
-import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.BinaryObjectInspector;
@@ -48,7 +47,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.LongObjectInspect
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.ShortObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.StringObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampLocalTZObjectInspector;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 
@@ -231,8 +229,7 @@ public final class LazyUtils {
       PrimitiveObjectInspector oi, boolean escaped, byte escapeChar,
       boolean[] needsEscape) throws IOException {
 
-    PrimitiveObjectInspector.PrimitiveCategory category = oi.getPrimitiveCategory();
-    switch (category) {
+    switch (oi.getPrimitiveCategory()) {
     case BOOLEAN: {
       boolean b = ((BooleanObjectInspector) oi).get(o);
       if (b) {
@@ -294,7 +291,7 @@ public final class LazyUtils {
       BytesWritable bw = ((BinaryObjectInspector) oi).getPrimitiveWritableObject(o);
       byte[] toEncode = new byte[bw.getLength()];
       System.arraycopy(bw.getBytes(), 0,toEncode, 0, bw.getLength());
-      byte[] toWrite = Base64.getEncoder().withoutPadding().encode(toEncode);
+      byte[] toWrite = Base64.encodeBase64(toEncode);
       out.write(toWrite, 0, toWrite.length);
       break;
     }
@@ -306,11 +303,6 @@ public final class LazyUtils {
     case TIMESTAMP: {
       LazyTimestamp.writeUTF8(out,
           ((TimestampObjectInspector) oi).getPrimitiveWritableObject(o));
-      break;
-    }
-    case TIMESTAMPLOCALTZ: {
-      LazyTimestampLocalTZ.writeUTF8(out, ((TimestampLocalTZObjectInspector) oi).
-          getPrimitiveWritableObject(o));
       break;
     }
     case INTERVAL_YEAR_MONTH: {
@@ -330,7 +322,7 @@ public final class LazyUtils {
       break;
     }
     default: {
-      throw new RuntimeException("Unknown primitive type: " + category);
+      throw new RuntimeException("Hive internal error.");
     }
     }
   }
@@ -391,12 +383,6 @@ public final class LazyUtils {
       case BINARY: {
         BytesWritable bw = ((BinaryObjectInspector) oi).getPrimitiveWritableObject(o);
         out.write(bw.getBytes(), 0, bw.getLength());
-        break;
-      }
-
-      case DECIMAL: {
-        HiveDecimalWritable hdw = ((HiveDecimalObjectInspector) oi).getPrimitiveWritableObject(o);
-        hdw.write(dos);
         break;
       }
 

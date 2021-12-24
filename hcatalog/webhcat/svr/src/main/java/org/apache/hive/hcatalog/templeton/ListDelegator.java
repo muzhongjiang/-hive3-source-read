@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,25 +19,24 @@
 package org.apache.hive.hcatalog.templeton;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.shims.HadoopShims.WebHCatJTShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.mapred.JobStatus;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * List jobs owned by a user.
  */
 public class ListDelegator extends TempletonDelegator {
-  private static final Logger LOG = LoggerFactory.getLogger(ListDelegator.class);
+  private static final Log LOG = LogFactory.getLog(ListDelegator.class);
   private final String JOB_LIST_EXECUTE_THREAD_PREFIX = "JobListExecute";
 
   /**
@@ -105,12 +104,11 @@ public class ListDelegator extends TempletonDelegator {
                                     int numRecords, boolean showDetails)
     throws NotAuthorizedException, BadParam, IOException, InterruptedException {
 
-    UserGroupInformation ugi = null;
+    UserGroupInformation ugi = UgiFactory.getUgi(user);
     WebHCatJTShim tracker = null;
     ArrayList<String> ids = new ArrayList<String>();
 
     try {
-      ugi = UgiFactory.getUgi(user);
       tracker = ShimLoader.getHadoopShims().getWebHCatShim(appConf, ugi);
 
       JobStatus[] jobs = tracker.getAllJobs();
@@ -127,8 +125,6 @@ public class ListDelegator extends TempletonDelegator {
     } finally {
       if (tracker != null)
         tracker.close();
-      if (ugi != null)
-        FileSystem.closeAllForUGI(ugi);
     }
 
     return getJobStatus(ids, user, showall, jobId, numRecords, showDetails);

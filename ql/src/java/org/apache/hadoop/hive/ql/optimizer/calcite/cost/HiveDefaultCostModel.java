@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -55,7 +55,7 @@ public class HiveDefaultCostModel extends HiveCostModel {
   }
 
   @Override
-  public RelOptCost getScanCost(HiveTableScan ts, RelMetadataQuery mq) {
+  public RelOptCost getScanCost(HiveTableScan ts) {
     return HiveCost.FACTORY.makeZeroCost();
   }
 
@@ -85,7 +85,7 @@ public class HiveDefaultCostModel extends HiveCostModel {
 
     @Override
     public RelOptCost getCost(HiveJoin join) {
-      final RelMetadataQuery mq = join.getCluster().getMetadataQuery();
+      RelMetadataQuery mq = RelMetadataQuery.instance();
       double leftRCount = mq.getRowCount(join.getLeft());
       double rightRCount = mq.getRowCount(join.getRight());
       return HiveCost.FACTORY.makeCost(leftRCount + rightRCount, 0.0, 0.0);

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,13 +20,13 @@ package org.apache.hadoop.hive.ql.io;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.JavaUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat.CombineHiveInputSplit;
@@ -53,7 +53,7 @@ public class CombineHiveRecordReader<K extends WritableComparable, V extends Wri
     extends HiveContextAwareRecordReader<K, V> {
   private org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(CombineHiveRecordReader.class);
 
-  private Map<Path, PartitionDesc> pathToPartInfo;
+  private LinkedHashMap<Path, PartitionDesc> pathToPartInfo;
 
   public CombineHiveRecordReader(InputSplit split, Configuration conf,
       Reporter reporter, Integer partition, RecordReader preReader) throws IOException {
@@ -70,22 +70,25 @@ public class CombineHiveRecordReader<K extends WritableComparable, V extends Wri
           + inputFormatClassName);
     }
     InputFormat inputFormat = HiveInputFormat.getInputFormatFromCache(inputFormatClass, jobConf);
-    if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon())) {
-      try {
-        // TODO : refactor this out
-        if (pathToPartInfo == null) {
-          MapWork mrwork = (MapWork) Utilities.getMergeWork(jobConf);
+    try {
+      // TODO: refactor this out
+      if (pathToPartInfo == null) {
+        MapWork mrwork;
+        if (HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+          mrwork = (MapWork) Utilities.getMergeWork(jobConf);
           if (mrwork == null) {
             mrwork = Utilities.getMapWork(jobConf);
           }
-          pathToPartInfo = mrwork.getPathToPartitionInfo();
+        } else {
+          mrwork = Utilities.getMapWork(jobConf);
         }
-
-        PartitionDesc part = extractSinglePartSpec(hsplit);
-        inputFormat = HiveInputFormat.wrapForLlap(inputFormat, jobConf, part);
-      } catch (HiveException e) {
-        throw new IOException(e);
+        pathToPartInfo = mrwork.getPathToPartitionInfo();
       }
+
+      PartitionDesc part = extractSinglePartSpec(hsplit);
+      inputFormat = HiveInputFormat.wrapForLlap(inputFormat, jobConf, part);
+    } catch (HiveException e) {
+      throw new IOException(e);
     }
 
     // create a split for the given partition
@@ -111,7 +114,7 @@ public class CombineHiveRecordReader<K extends WritableComparable, V extends Wri
     PartitionDesc part = null;
     Map<Map<Path,PartitionDesc>, Map<Path,PartitionDesc>> cache = new HashMap<>();
     for (Path path : hsplit.getPaths()) {
-      PartitionDesc otherPart = HiveFileFormatUtils.getFromPathRecursively(
+      PartitionDesc otherPart = HiveFileFormatUtils.getPartitionDescFromPathRecursively(
           pathToPartInfo, path, cache);
       LOG.debug("Found spec for " + path + " " + otherPart + " from " + pathToPartInfo);
       if (part == null) {

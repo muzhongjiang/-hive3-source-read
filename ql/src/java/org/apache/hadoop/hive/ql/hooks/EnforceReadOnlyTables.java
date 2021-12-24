@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,10 +18,9 @@
 
 package org.apache.hadoop.hive.ql.hooks;
 
-import static org.apache.hadoop.hive.metastore.Warehouse.DEFAULT_DATABASE_NAME;
+import static org.apache.hadoop.hive.metastore.MetaStoreUtils.DEFAULT_DATABASE_NAME;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hive.ql.metadata.Table;
@@ -33,6 +32,20 @@ import org.apache.hadoop.security.UserGroupInformation;
  * of read-only tables used by the test framework
  */
 public class EnforceReadOnlyTables implements ExecuteWithHookContext {
+
+  private static final Set<String> READ_ONLY_TABLES = new HashSet<String>();
+
+  static {
+    for (String srcTable : System.getProperty("test.src.tables", "").trim().split(",")) {
+      srcTable = srcTable.trim();
+      if (!srcTable.isEmpty()) {
+        READ_ONLY_TABLES.add(srcTable);
+      }
+    }
+    if (READ_ONLY_TABLES.isEmpty()) {
+      throw new AssertionError("Source tables cannot be empty");
+    }
+  }
 
   @Override
   public void run(HookContext hookContext) throws Exception {
@@ -53,14 +66,12 @@ public class EnforceReadOnlyTables implements ExecuteWithHookContext {
         sess.getConf().getBoolean("hive.test.shutdown.phase", false)) {
       return;
     }
-    List<String> readOnlyTables = Arrays.asList(System.getProperty("test.src.tables").split(","));
-
     for (WriteEntity w: outputs) {
       if ((w.getTyp() == WriteEntity.Type.TABLE) ||
           (w.getTyp() == WriteEntity.Type.PARTITION)) {
         Table t = w.getTable();
         if (DEFAULT_DATABASE_NAME.equalsIgnoreCase(t.getDbName())
-            && readOnlyTables.contains(t.getTableName()) && !isExplain) {
+            && READ_ONLY_TABLES.contains(t.getTableName())  && !isExplain) {
           throw new RuntimeException ("Cannot overwrite read-only table: " + t.getTableName());
         }
       }

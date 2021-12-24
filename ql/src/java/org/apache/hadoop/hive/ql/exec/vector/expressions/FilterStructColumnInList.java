@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -61,7 +61,7 @@ public class FilterStructColumnInList extends FilterStringColumnInList implement
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     final int logicalSize = batch.size;
     if (logicalSize == 0) {
@@ -134,7 +134,18 @@ public class FilterStructColumnInList extends FilterStringColumnInList implement
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+ 
+  }
 
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
+  @Override
+  public int getOutputColumn() {
+    return -1;
   }
 
   @Override
@@ -162,7 +173,7 @@ public class FilterStructColumnInList extends FilterStringColumnInList implement
     structColumnMap = new int[structExpressions.length];
     for (int i = 0; i < structColumnMap.length; i++) {
       VectorExpression ve = structExpressions[i];
-      structColumnMap[i] = ve.getOutputColumnNum();
+      structColumnMap[i] = ve.getOutputColumn();
     }
     this.fieldVectorColumnTypes = fieldVectorColumnTypes;
   }

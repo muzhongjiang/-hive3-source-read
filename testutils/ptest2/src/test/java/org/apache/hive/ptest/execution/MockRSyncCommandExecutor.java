@@ -18,12 +18,10 @@
  */
 package org.apache.hive.ptest.execution;
 
-import java.security.SecureRandom;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -70,8 +68,6 @@ public class MockRSyncCommandExecutor extends RSyncCommandExecutor {
       matchCount.incrementAndGet();
       command.setExitCode(queue.remove());
     }
-    //simulating dummy rsync delay of 17 msec
-    command.setElapsedTimeInMs(17L);
   }
 
   public int getMatchCount() {

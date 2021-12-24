@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,19 +18,13 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import java.util.Arrays;
 import java.util.Calendar;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.util.DateTimeMath;
-import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
-import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hive.common.util.DateUtils;
 
 import com.google.common.base.Preconditions;
@@ -42,29 +36,20 @@ public abstract class VectorUDFTimestampFieldTimestamp extends VectorExpression 
 
   private static final long serialVersionUID = 1L;
 
-  protected final int field;
+  protected int colNum;
+  protected int outputColumn;
+  protected int field;
+  protected transient final Calendar calendar = Calendar.getInstance();
 
-  protected final transient Calendar calendar = DateTimeMath.getProlepticGregorianCalendarUTC();
-
-  public VectorUDFTimestampFieldTimestamp(int field, int colNum, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  public VectorUDFTimestampFieldTimestamp(int field, int colNum, int outputColumn) {
+    this();
+    this.colNum = colNum;
+    this.outputColumn = outputColumn;
     this.field = field;
   }
 
   public VectorUDFTimestampFieldTimestamp() {
     super();
-
-    // Dummy final assignments.
-    field = -1;
-  }
-
-  public void initCalendar() {
-  }
-
-  @Override
-  public void transientInit(Configuration conf) throws HiveException {
-    super.transientInit(conf);
-    initCalendar();
   }
 
   protected long getTimestampField(TimestampColumnVector timestampColVector, int elementNum) {
@@ -73,17 +58,16 @@ public abstract class VectorUDFTimestampFieldTimestamp extends VectorExpression 
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
-    Preconditions.checkState(
-        ((PrimitiveTypeInfo) inputTypeInfos[0]).getPrimitiveCategory() == PrimitiveCategory.TIMESTAMP);
+    Preconditions.checkState(inputTypes[0] == VectorExpression.Type.TIMESTAMP);
 
     if (childExpressions != null) {
         super.evaluateChildren(batch);
       }
 
-    LongColumnVector outV = (LongColumnVector) batch.cols[outputColumnNum];
-    ColumnVector inputColVec = batch.cols[this.inputColumnNum[0]];
+    LongColumnVector outV = (LongColumnVector) batch.cols[outputColumn];
+    ColumnVector inputColVec = batch.cols[this.colNum];
 
     /* every line below this is identical for evaluateLong & evaluateString */
     final int n = inputColVec.isRepeating ? 1 : batch.size;
@@ -95,41 +79,27 @@ public abstract class VectorUDFTimestampFieldTimestamp extends VectorExpression 
       return;
     }
 
-    // We do not need to do a column reset since we are carefully changing the output.
-    outV.isRepeating = false;
+    /* true for all algebraic UDFs with no state */
+    outV.isRepeating = inputColVec.isRepeating;
 
     TimestampColumnVector timestampColVector = (TimestampColumnVector) inputColVec;
 
-    if (inputColVec.isRepeating) {
-      if (inputColVec.noNulls || !inputColVec.isNull[0]) {
-        outV.isNull[0] = false;
-        outV.vector[0] = getTimestampField(timestampColVector, 0);
-      } else {
-        outV.isNull[0] = true;
-        outV.noNulls = false;
-      }
-      outV.isRepeating = true;
-      return;
-    }
-
     if (inputColVec.noNulls) {
+      outV.noNulls = true;
       if (selectedInUse) {
         for(int j=0; j < n; j++) {
           int i = sel[j];
-          outV.isNull[i] = false;
           outV.vector[i] = getTimestampField(timestampColVector, i);
         }
       } else {
-        Arrays.fill(outV.isNull, 0, n, false);
         for(int i = 0; i < n; i++) {
           outV.vector[i] = getTimestampField(timestampColVector, i);
         }
       }
-    } else /* there are nulls in the inputColVector */ {
-
-      // Carefully handle NULLs...
+    } else {
+      // Handle case with nulls. Don't do function if the value is null, to save time,
+      // because calling the function can be expensive.
       outV.noNulls = false;
-
       if (selectedInUse) {
         for(int j=0; j < n; j++) {
           int i = sel[j];
@@ -149,11 +119,41 @@ public abstract class VectorUDFTimestampFieldTimestamp extends VectorExpression 
     }
   }
 
+  @Override
+  public int getOutputColumn() {
+    return this.outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "long";
+  }
+
+  public int getColNum() {
+    return colNum;
+  }
+
+  public void setColNum(int colNum) {
+    this.colNum = colNum;
+  }
+
+  public int getField() {
+    return field;
+  }
+
+  public void setField(int field) {
+    this.field = field;
+  }
+
+  public void setOutputColumn(int outputColumn) {
+    this.outputColumn = outputColumn;
+  }
+
   public String vectorExpressionParameters() {
     if (field == -1) {
-      return getColumnParamString(0, inputColumnNum[0]);
+      return "col " + colNum;
     } else {
-      return getColumnParamString(0, inputColumnNum[0]) + ", field " + DateUtils.getFieldName(field);
+      return "col " + colNum + ", field " + DateUtils.getFieldName(field);
     }
   }
 

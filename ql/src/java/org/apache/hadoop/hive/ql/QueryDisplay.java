@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,21 +17,16 @@
  */
 package org.apache.hadoop.hive.ql;
 
-import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskResult;
 import org.apache.hadoop.hive.ql.plan.api.StageType;
 
-import java.io.IOException;
+import java.io.Serializable;
 import java.util.*;
 
-import org.apache.hadoop.mapred.Counters;
-import org.apache.hadoop.mapred.RunningJob;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.annotate.JsonWriteNullProperties;
 import org.codehaus.jackson.annotate.JsonIgnore;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 /**
  * Some limited query information to save for WebUI.
@@ -45,7 +40,6 @@ public class QueryDisplay {
   private String explainPlan;
   private String errorMessage;
   private String queryId;
-  private long queryStartTime = System.currentTimeMillis();
 
   private final Map<Phase, Map<String, Long>> hmsTimingMap = new HashMap<Phase, Map<String, Long>>();
   private final Map<Phase, Map<String, Long>> perfLogStartMap = new HashMap<Phase, Map<String, Long>>();
@@ -53,18 +47,11 @@ public class QueryDisplay {
 
   private final LinkedHashMap<String, TaskDisplay> tasks = new LinkedHashMap<String, TaskDisplay>();
 
-  public synchronized void updateTaskStatus(Task<?> tTask) {
+  public synchronized <T extends Serializable> void updateTaskStatus(Task<T> tTask) {
     if (!tasks.containsKey(tTask.getId())) {
       tasks.put(tTask.getId(), new TaskDisplay(tTask));
     }
     tasks.get(tTask.getId()).updateStatus(tTask);
-  }
-
-  public synchronized void updateTaskStatistics(MapRedStats mapRedStats,
-      RunningJob rj, String taskId) throws IOException, JSONException {
-    if (tasks.containsKey(taskId)) {
-      tasks.get(taskId).updateMapRedStatsJson(mapRedStats, rj);
-    }
   }
 
   //Inner classes
@@ -73,26 +60,9 @@ public class QueryDisplay {
     EXECUTION,
   }
 
-  public String getFullLogLocation() {
-    return LogUtils.getLogFilePath();
-  }
-
   @JsonWriteNullProperties(false)
   @JsonIgnoreProperties(ignoreUnknown = true)
   public static class TaskDisplay {
-
-    public static final String NUMBER_OF_MAPPERS = "Number of Mappers";
-    public static final String NUMBER_OF_REDUCERS = "Number of Reducers";
-    public static final String COUNTERS = "Counters";
-    public static final String JOB_ID = "Job Id";
-    public static final String JOB_FILE = "Job File";
-    public static final String TRACKING_URL = "Tracking URL";
-    public static final String MAP_PROGRESS = "Map Progress (%)";
-    public static final String REDUCE_PROGRESS = "Reduce Progress (%)";
-    public static final String CLEANUP_PROGRESS = "Cleanup Progress (%)";
-    public static final String SETUP_PROGRESS = "Setup Progress (%)";
-    public static final String COMPLETE = "Complete";
-    public static final String SUCCESSFUL = "Successful";
 
     private Integer returnValue;  //if set, determines that task is complete.
     private String errorMsg;
@@ -107,8 +77,8 @@ public class QueryDisplay {
     private StageType taskType;
     private String name;
     private boolean requireLock;
+    private boolean retryIfFail;
     private String statusMessage;
-    private JSONObject statsJSON;
 
     // required for jackson
     public TaskDisplay() {
@@ -120,6 +90,7 @@ public class QueryDisplay {
       taskType = task.getType();
       name = task.getName();
       requireLock = task.requireLock();
+      retryIfFail = task.ifRetryCmdWhenFail();
     }
     @JsonIgnore
     public synchronized String getStatus() {
@@ -130,57 +101,6 @@ public class QueryDisplay {
       } else {
         return "Failure, ReturnVal " + String.valueOf(returnValue);
       }
-    }
-
-    private void updateMapRedStatsJson(MapRedStats stats, RunningJob rj) throws IOException, JSONException {
-      if (statsJSON == null) {
-        statsJSON = new JSONObject();
-      }
-      if (stats != null) {
-        if (stats.getNumMap() >= 0) {
-          statsJSON.put(NUMBER_OF_MAPPERS, stats.getNumMap());
-        }
-        if (stats.getNumReduce() >= 0) {
-          statsJSON.put(NUMBER_OF_REDUCERS, stats.getNumReduce());
-        }
-        if (stats.getCounters() != null) {
-          statsJSON.put(COUNTERS, getCountersJson(stats.getCounters()));
-        }
-      }
-      if (rj != null) {
-        statsJSON.put(JOB_ID, rj.getID().toString());
-        statsJSON.put(JOB_FILE, rj.getJobFile());
-        statsJSON.put(TRACKING_URL, rj.getTrackingURL());
-        statsJSON.put(MAP_PROGRESS, Math.round(rj.mapProgress() * 100));
-        statsJSON.put(REDUCE_PROGRESS, Math.round(rj.reduceProgress() * 100));
-        statsJSON.put(CLEANUP_PROGRESS, Math.round(rj.cleanupProgress() * 100));
-        statsJSON.put(SETUP_PROGRESS, Math.round(rj.setupProgress() * 100));
-        statsJSON.put(COMPLETE, rj.isComplete());
-        statsJSON.put(SUCCESSFUL, rj.isSuccessful());
-      }
-    }
-
-    public synchronized String getStatsJsonString() {
-      if (statsJSON != null) {
-        return statsJSON.toString();
-      }
-      return null;
-    }
-
-    private JSONObject getCountersJson(Counters ctrs) throws JSONException {
-      JSONObject countersJson = new JSONObject();
-      Iterator<Counters.Group> iterator = ctrs.iterator();
-      while(iterator.hasNext()) {
-        Counters.Group group = iterator.next();
-        Iterator<Counters.Counter> groupIterator = group.iterator();
-        JSONObject groupJson = new JSONObject();
-        while(groupIterator.hasNext()) {
-          Counters.Counter counter = groupIterator.next();
-          groupJson.put(counter.getDisplayName(), counter.getCounter());
-        }
-        countersJson.put(group.getDisplayName(), groupJson);
-      }
-      return countersJson;
     }
 
     public synchronized Long getElapsedTime() {
@@ -225,12 +145,16 @@ public class QueryDisplay {
     public synchronized boolean isRequireLock() {
       return requireLock;
     }
+    @JsonIgnore
+    public synchronized boolean isRetryIfFail() {
+      return retryIfFail;
+    }
 
     public synchronized String getExternalHandle() {
       return externalHandle;
     }
 
-    public void updateStatus(Task<?> tTask) {
+    public synchronized <T extends Serializable> void updateStatus(Task<T> tTask) {
       this.taskState = tTask.getTaskState();
       if (externalHandle == null && tTask.getExternalHandle() != null) {
         this.externalHandle = tTask.getExternalHandle();
@@ -333,7 +257,7 @@ public class QueryDisplay {
    * @param phase phase of query
    * @param perfLogEnds map of PerfLogger call-trace name and end time in miliseconds, during given phase.
    */
-  public synchronized void setPerfLogEnds(Phase phase, Map<String, Long> perfLogEnds) {
+   public synchronized void setPerfLogEnds(Phase phase, Map<String, Long> perfLogEnds) {
     perfLogEndMap.put(phase, perfLogEnds);
   }
 
@@ -373,11 +297,7 @@ public class QueryDisplay {
     this.queryId = queryId;
   }
 
-  private static String returnStringOrUnknown(String s) {
+  private String returnStringOrUnknown(String s) {
     return s == null ? "UNKNOWN" : s;
-  }
-
-  public synchronized long getQueryStartTime() {
-    return queryStartTime;
   }
 }

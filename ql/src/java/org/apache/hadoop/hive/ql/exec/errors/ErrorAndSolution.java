@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,8 +17,6 @@
  */
 
 package org.apache.hadoop.hive.ql.exec.errors;
-
-import java.util.Objects;
 
 /**
  * Immutable class for storing a possible error and a resolution suggestion.
@@ -47,7 +45,8 @@ public class ErrorAndSolution {
       return false;
     }
     ErrorAndSolution e = (ErrorAndSolution)o;
-    return Objects.equals(e.error, error) && Objects.equals(e.solution, solution);
+
+    return e.error == this.error && e.solution == this.solution;
   }
 
   @Override

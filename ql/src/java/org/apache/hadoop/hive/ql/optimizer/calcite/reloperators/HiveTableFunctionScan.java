@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -48,7 +48,7 @@ public class HiveTableFunctionScan extends TableFunctionScan implements HiveRelN
    * @param columnMappings
    *          columnMappings - Column mappings associated with this function
    */
-  private HiveTableFunctionScan(RelOptCluster cluster, RelTraitSet traitSet, List<RelNode> inputs,
+  public HiveTableFunctionScan(RelOptCluster cluster, RelTraitSet traitSet, List<RelNode> inputs,
       RexNode rexCall, Type elementType, RelDataType rowType, Set<RelColumnMapping> columnMappings) {
     super(cluster, traitSet, inputs, rexCall, elementType, rowType, columnMappings);
   }
@@ -56,15 +56,17 @@ public class HiveTableFunctionScan extends TableFunctionScan implements HiveRelN
   public static HiveTableFunctionScan create(RelOptCluster cluster, RelTraitSet traitSet,
       List<RelNode> inputs, RexNode rexCall, Type elementType, RelDataType rowType,
       Set<RelColumnMapping> columnMappings) throws CalciteSemanticException {
-    return new HiveTableFunctionScan(cluster, traitSet,
+    HiveTableFunctionScan hiveTableFunctionScan = new HiveTableFunctionScan(cluster, traitSet,
         inputs, rexCall, elementType, rowType, columnMappings);
+    return hiveTableFunctionScan;
   }
 
   @Override
   public TableFunctionScan copy(RelTraitSet traitSet, List<RelNode> inputs, RexNode rexCall,
       Type elementType, RelDataType rowType, Set<RelColumnMapping> columnMappings) {
-    return new HiveTableFunctionScan(getCluster(), traitSet, inputs, rexCall,
+    HiveTableFunctionScan htfs = new HiveTableFunctionScan(getCluster(), traitSet, inputs, rexCall,
         elementType, rowType, columnMappings);
+    return htfs;
   }
 
   @Override

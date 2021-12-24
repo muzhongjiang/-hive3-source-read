@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,6 @@ package org.apache.hadoop.hive.ql.udf.generic;
 import java.io.Serializable;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Optional;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
@@ -98,7 +97,7 @@ public class GenericUDFBridge extends GenericUDF implements Serializable {
     this.isOperator = isOperator;
     this.udfClassName = udfClassName;
   }
-
+ 
   // For Java serialization only
   public GenericUDFBridge() {
   }
@@ -152,7 +151,7 @@ public class GenericUDFBridge extends GenericUDF implements Serializable {
   public ObjectInspector initialize(ObjectInspector[] arguments) throws UDFArgumentException {
 
     try {
-      udf = getUdfClassInternal().newInstance();
+      udf = (UDF)getUdfClassInternal().newInstance();
     } catch (Exception e) {
       throw new UDFArgumentException(
           "Unable to instantiate UDF implementation class " + udfClassName + ": " + e);
@@ -249,14 +248,5 @@ public class GenericUDFBridge extends GenericUDF implements Serializable {
 
   public interface UdfWhitelistChecker {
     boolean isUdfAllowed(Class<?> clazz);
-  }
-
-  @SuppressWarnings("unchecked")
-  @Override
-  public <T> Optional<T> adapt(Class<T> clazz) {
-    if (clazz.isInstance(udf)) {
-      return Optional.of((T) udf);
-    }
-    return super.adapt(clazz);
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -52,22 +52,20 @@ public class SparkHashTableSinkDesc extends HashTableSinkDesc {
     private final HashTableSinkDesc filterDesc;
     private final VectorSparkHashTableSinkDesc vectorHashTableSinkDesc;
 
-    public SparkHashTableSinkOperatorExplainVectorization(HashTableSinkDesc filterDesc,
-        VectorSparkHashTableSinkDesc vectorSparkHashTableSinkDesc) {
+    public SparkHashTableSinkOperatorExplainVectorization(HashTableSinkDesc filterDesc, VectorDesc vectorDesc) {
       // Native vectorization supported.
-      super(vectorSparkHashTableSinkDesc, true);
+      super(vectorDesc, true);
       this.filterDesc = filterDesc;
-      this.vectorHashTableSinkDesc = vectorSparkHashTableSinkDesc;
+      vectorHashTableSinkDesc = (VectorSparkHashTableSinkDesc) vectorDesc;
     }
   }
 
   @Explain(vectorization = Vectorization.OPERATOR, displayName = "Spark Hash Table Sink Vectorization", explainLevels = { Level.DEFAULT, Level.EXTENDED })
   public SparkHashTableSinkOperatorExplainVectorization getHashTableSinkVectorization() {
-    VectorSparkHashTableSinkDesc vectorHashTableSinkDesc = (VectorSparkHashTableSinkDesc) getVectorDesc();
-    if (vectorHashTableSinkDesc == null) {
+    if (vectorDesc == null) {
       return null;
     }
-    return new SparkHashTableSinkOperatorExplainVectorization(this, vectorHashTableSinkDesc);
+    return new SparkHashTableSinkOperatorExplainVectorization(this, vectorDesc);
   }
 
 }

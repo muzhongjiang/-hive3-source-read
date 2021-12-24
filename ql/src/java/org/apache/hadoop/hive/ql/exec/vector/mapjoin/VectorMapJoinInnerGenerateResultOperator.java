@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,7 +33,6 @@ import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHash
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashMapResult;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
 
 /**
  * This class has methods for generating vectorized join results for inner joins.
@@ -100,34 +99,34 @@ public abstract class VectorMapJoinInnerGenerateResultOperator
     super(ctx);
   }
 
-  public VectorMapJoinInnerGenerateResultOperator(CompilationOpContext ctx, OperatorDesc conf,
-      VectorizationContext vContext, VectorDesc vectorDesc) throws HiveException {
-    super(ctx, conf, vContext, vectorDesc);
+  public VectorMapJoinInnerGenerateResultOperator(CompilationOpContext ctx,
+      VectorizationContext vContext, OperatorDesc conf) throws HiveException {
+    super(ctx, vContext, conf);
   }
 
   /*
    * Setup our inner join specific members.
    */
-  protected void commonSetup() throws HiveException {
-    super.commonSetup();
+  protected void commonSetup(VectorizedRowBatch batch) throws HiveException {
+    super.commonSetup(batch);
 
     // Inner join specific.
     VectorMapJoinHashMap baseHashMap = (VectorMapJoinHashMap) vectorMapJoinHashTable;
 
-    hashMapResults = new VectorMapJoinHashMapResult[VectorizedRowBatch.DEFAULT_SIZE];
+    hashMapResults = new VectorMapJoinHashMapResult[batch.DEFAULT_SIZE];
     for (int i = 0; i < hashMapResults.length; i++) {
       hashMapResults[i] = baseHashMap.createHashMapResult();
     }
 
-    allMatchs = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    allMatchs = new int[batch.DEFAULT_SIZE];
 
-    equalKeySeriesHashMapResultIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    equalKeySeriesAllMatchIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    equalKeySeriesIsSingleValue = new boolean[VectorizedRowBatch.DEFAULT_SIZE];
-    equalKeySeriesDuplicateCounts = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    equalKeySeriesHashMapResultIndices = new int[batch.DEFAULT_SIZE];
+    equalKeySeriesAllMatchIndices = new int[batch.DEFAULT_SIZE];
+    equalKeySeriesIsSingleValue = new boolean[batch.DEFAULT_SIZE];
+    equalKeySeriesDuplicateCounts = new int[batch.DEFAULT_SIZE];
 
-    spills = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    spillHashMapResultIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    spills = new int[batch.DEFAULT_SIZE];
+    spillHashMapResultIndices = new int[batch.DEFAULT_SIZE];
   }
 
   /*
@@ -142,7 +141,7 @@ public abstract class VectorMapJoinInnerGenerateResultOperator
     // For join operators that can generate small table results, reset their
     // (target) scratch columns.
 
-    for (int column : smallTableValueColumnMap) {
+    for (int column : smallTableOutputVectorColumns) {
       ColumnVector smallTableColumn = batch.cols[column];
       smallTableColumn.reset();
     }

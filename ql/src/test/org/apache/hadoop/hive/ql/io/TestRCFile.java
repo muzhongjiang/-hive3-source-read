@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,7 +30,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
-import java.nio.charset.StandardCharsets;
+import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
@@ -48,6 +48,7 @@ import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.columnar.BytesRefArrayWritable;
 import org.apache.hadoop.hive.serde2.columnar.BytesRefWritable;
 import org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe;
@@ -60,7 +61,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.compress.CompressionCodec;
@@ -101,7 +101,7 @@ public class TestRCFile {
   private final BytesRefArrayWritable patialS = new BytesRefArrayWritable();
   private byte[][] bytesArray;
   private BytesRefArrayWritable s;
-  private int numRepeat = 1000;
+
   @Before
   public void setup() throws Exception {
     conf = new Configuration();
@@ -114,36 +114,38 @@ public class TestRCFile {
     serDe = new ColumnarSerDe();
     // Create the SerDe
     tbl = createProperties();
-    serDe.initialize(conf, tbl, null);
+    SerDeUtils.initializeSerDe(serDe, conf, tbl, null);
+    try {
+      bytesArray = new byte[][] {"123".getBytes("UTF-8"),
+          "456".getBytes("UTF-8"), "789".getBytes("UTF-8"),
+          "1000".getBytes("UTF-8"), "5.3".getBytes("UTF-8"),
+          "hive and hadoop".getBytes("UTF-8"), new byte[0],
+          "NULL".getBytes("UTF-8")};
+      s = new BytesRefArrayWritable(bytesArray.length);
+      s.set(0, new BytesRefWritable("123".getBytes("UTF-8")));
+      s.set(1, new BytesRefWritable("456".getBytes("UTF-8")));
+      s.set(2, new BytesRefWritable("789".getBytes("UTF-8")));
+      s.set(3, new BytesRefWritable("1000".getBytes("UTF-8")));
+      s.set(4, new BytesRefWritable("5.3".getBytes("UTF-8")));
+      s.set(5, new BytesRefWritable("hive and hadoop".getBytes("UTF-8")));
+      s.set(6, new BytesRefWritable("NULL".getBytes("UTF-8")));
+      s.set(7, new BytesRefWritable("NULL".getBytes("UTF-8")));
 
-    bytesArray = new byte[][] {"123".getBytes(StandardCharsets.UTF_8),
-        "456".getBytes(StandardCharsets.UTF_8), "789".getBytes(StandardCharsets.UTF_8),
-        "1000".getBytes(StandardCharsets.UTF_8), "5.3".getBytes(StandardCharsets.UTF_8),
-        "hive and hadoop".getBytes(StandardCharsets.UTF_8), new byte[0],
-        "NULL".getBytes(StandardCharsets.UTF_8)};
-    s = new BytesRefArrayWritable(bytesArray.length);
-    s.set(0, new BytesRefWritable("123".getBytes(StandardCharsets.UTF_8)));
-    s.set(1, new BytesRefWritable("456".getBytes(StandardCharsets.UTF_8)));
-    s.set(2, new BytesRefWritable("789".getBytes(StandardCharsets.UTF_8)));
-    s.set(3, new BytesRefWritable("1000".getBytes(StandardCharsets.UTF_8)));
-    s.set(4, new BytesRefWritable("5.3".getBytes(StandardCharsets.UTF_8)));
-    s.set(5, new BytesRefWritable("hive and hadoop".getBytes(StandardCharsets.UTF_8)));
-    s.set(6, new BytesRefWritable("NULL".getBytes(StandardCharsets.UTF_8)));
-    s.set(7, new BytesRefWritable("NULL".getBytes(StandardCharsets.UTF_8)));
+      // partial test init
+      patialS.set(0, new BytesRefWritable("NULL".getBytes("UTF-8")));
+      patialS.set(1, new BytesRefWritable("NULL".getBytes("UTF-8")));
+      patialS.set(2, new BytesRefWritable("789".getBytes("UTF-8")));
+      patialS.set(3, new BytesRefWritable("1000".getBytes("UTF-8")));
+      patialS.set(4, new BytesRefWritable("NULL".getBytes("UTF-8")));
+      // LazyString has no so-called NULL sequence. The value is empty string if not.
+      patialS.set(5, new BytesRefWritable("".getBytes("UTF-8")));
+      patialS.set(6, new BytesRefWritable("NULL".getBytes("UTF-8")));
+      // LazyString has no so-called NULL sequence. The value is empty string if not.
+      patialS.set(7, new BytesRefWritable("".getBytes("UTF-8")));
 
-    // partial test init
-    patialS.set(0, new BytesRefWritable("NULL".getBytes(StandardCharsets.UTF_8)));
-    patialS.set(1, new BytesRefWritable("NULL".getBytes(StandardCharsets.UTF_8)));
-    patialS.set(2, new BytesRefWritable("789".getBytes(StandardCharsets.UTF_8)));
-    patialS.set(3, new BytesRefWritable("1000".getBytes(StandardCharsets.UTF_8)));
-    patialS.set(4, new BytesRefWritable("NULL".getBytes(StandardCharsets.UTF_8)));
-    // LazyString has no so-called NULL sequence. The value is empty string if not.
-    patialS.set(5, new BytesRefWritable("".getBytes(StandardCharsets.UTF_8)));
-    patialS.set(6, new BytesRefWritable("NULL".getBytes(StandardCharsets.UTF_8)));
-    // LazyString has no so-called NULL sequence. The value is empty string if not.
-    patialS.set(7, new BytesRefWritable("".getBytes(StandardCharsets.UTF_8)));
-
-    numRepeat = (int) Math.ceil((double)SequenceFile.SYNC_INTERVAL / (double)bytesArray.length);
+    } catch (UnsupportedEncodingException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @After
@@ -164,14 +166,14 @@ public class TestRCFile {
   public void testSimpleReadAndWrite() throws IOException, SerDeException {
     cleanup();
 
-    byte[][] record_1 = {"123".getBytes(StandardCharsets.UTF_8), "456".getBytes(StandardCharsets.UTF_8),
-        "789".getBytes(StandardCharsets.UTF_8), "1000".getBytes(StandardCharsets.UTF_8),
-        "5.3".getBytes(StandardCharsets.UTF_8), "hive and hadoop".getBytes(StandardCharsets.UTF_8),
-        new byte[0], "NULL".getBytes(StandardCharsets.UTF_8)};
-    byte[][] record_2 = {"100".getBytes(StandardCharsets.UTF_8), "200".getBytes(StandardCharsets.UTF_8),
-        "123".getBytes(StandardCharsets.UTF_8), "1000".getBytes(StandardCharsets.UTF_8),
-        "5.3".getBytes(StandardCharsets.UTF_8), "hive and hadoop".getBytes(StandardCharsets.UTF_8),
-        new byte[0], "NULL".getBytes(StandardCharsets.UTF_8)};
+    byte[][] record_1 = {"123".getBytes("UTF-8"), "456".getBytes("UTF-8"),
+        "789".getBytes("UTF-8"), "1000".getBytes("UTF-8"),
+        "5.3".getBytes("UTF-8"), "hive and hadoop".getBytes("UTF-8"),
+        new byte[0], "NULL".getBytes("UTF-8")};
+    byte[][] record_2 = {"100".getBytes("UTF-8"), "200".getBytes("UTF-8"),
+        "123".getBytes("UTF-8"), "1000".getBytes("UTF-8"),
+        "5.3".getBytes("UTF-8"), "hive and hadoop".getBytes("UTF-8"),
+        new byte[0], "NULL".getBytes("UTF-8")};
     RCFileOutputFormat.setColumnNumber(conf, expectedFieldsData.length);
     RCFile.Writer writer =
       new RCFile.Writer(fs, conf, file, null,
@@ -260,23 +262,23 @@ public class TestRCFile {
                         new DefaultCodec());
 
     byte[][] record_1 = {
-        "123".getBytes(StandardCharsets.UTF_8),
-        "456".getBytes(StandardCharsets.UTF_8),
-        "789".getBytes(StandardCharsets.UTF_8),
-        "1000".getBytes(StandardCharsets.UTF_8),
-        "5.3".getBytes(StandardCharsets.UTF_8),
-        "hive and hadoop".getBytes(StandardCharsets.UTF_8),
+        "123".getBytes("UTF-8"),
+        "456".getBytes("UTF-8"),
+        "789".getBytes("UTF-8"),
+        "1000".getBytes("UTF-8"),
+        "5.3".getBytes("UTF-8"),
+        "hive and hadoop".getBytes("UTF-8"),
         new byte[0],
-        "NULL".getBytes(StandardCharsets.UTF_8) };
+        "NULL".getBytes("UTF-8") };
     byte[][] record_2 = {
-        "100".getBytes(StandardCharsets.UTF_8),
-        "200".getBytes(StandardCharsets.UTF_8),
-        "123".getBytes(StandardCharsets.UTF_8),
-        "1000".getBytes(StandardCharsets.UTF_8),
-        "5.3".getBytes(StandardCharsets.UTF_8),
-        "hive and hadoop".getBytes(StandardCharsets.UTF_8),
+        "100".getBytes("UTF-8"),
+        "200".getBytes("UTF-8"),
+        "123".getBytes("UTF-8"),
+        "1000".getBytes("UTF-8"),
+        "5.3".getBytes("UTF-8"),
+        "hive and hadoop".getBytes("UTF-8"),
         new byte[0],
-        "NULL".getBytes(StandardCharsets.UTF_8)};
+        "NULL".getBytes("UTF-8")};
 
     BytesRefArrayWritable bytes = new BytesRefArrayWritable(record_1.length);
     for (int i = 0; i < record_1.length; i++) {
@@ -345,7 +347,7 @@ public class TestRCFile {
     Random rand = new Random();
     for (int recIdx = 0; recIdx < recCount; recIdx++) {
       for (int i = 0; i < record.length; i++) {
-        record[i] = String.valueOf(rand.nextInt()).getBytes(StandardCharsets.UTF_8);
+        record[i] = new Integer(rand.nextInt()).toString().getBytes("UTF-8");
       }
       for (int i = 0; i < record.length; i++) {
         BytesRefWritable cu = new BytesRefWritable(record[i], 0,
@@ -426,7 +428,7 @@ public class TestRCFile {
     AbstractSerDe serDe = new ColumnarSerDe();
     // Create the SerDe
     Properties tbl = createProperties();
-    serDe.initialize(conf, tbl, null);
+    SerDeUtils.initializeSerDe(serDe, conf, tbl, null);
 
     String usage = "Usage: RCFile " + "[-count N]" + " file";
     if (args.length == 0) {
@@ -460,14 +462,11 @@ public class TestRCFile {
       // test.performanceTest();
 
       test.testSimpleReadAndWrite();
-      byte[][] bytesArray =
-          new byte[][] { "123".getBytes(StandardCharsets.UTF_8),
-              "456".getBytes(StandardCharsets.UTF_8),
-              "789".getBytes(StandardCharsets.UTF_8),
-              "1000".getBytes(StandardCharsets.UTF_8),
-              "5.3".getBytes(StandardCharsets.UTF_8),
-              "hive and hadoop".getBytes(StandardCharsets.UTF_8), new byte[0],
-              "NULL".getBytes(StandardCharsets.UTF_8) };
+      byte[][] bytesArray = new byte[][] {"123".getBytes("UTF-8"),
+          "456".getBytes("UTF-8"), "789".getBytes("UTF-8"),
+          "1000".getBytes("UTF-8"), "5.3".getBytes("UTF-8"),
+          "hive and hadoop".getBytes("UTF-8"), new byte[0],
+          "NULL".getBytes("UTF-8")};
       test.writeTest(fs, count, file, bytesArray);
       test.fullyReadTest(fs, count, file);
       test.partialReadTest(fs, count, file);
@@ -660,24 +659,24 @@ public class TestRCFile {
   }
 
   private void splitBeforeSync() throws IOException {
-    writeThenReadByRecordReader(600, numRepeat, 2, 1, null);
+    writeThenReadByRecordReader(600, 1000, 2, 1, null);
   }
 
   private void splitRightBeforeSync() throws IOException {
-    writeThenReadByRecordReader(500, numRepeat, 2, 17750, null);
+    writeThenReadByRecordReader(500, 1000, 2, 17750, null);
   }
 
   private void splitInMiddleOfSync() throws IOException {
-    writeThenReadByRecordReader(500, numRepeat, 2, 17760, null);
+    writeThenReadByRecordReader(500, 1000, 2, 17760, null);
 
   }
 
   private void splitRightAfterSync() throws IOException {
-    writeThenReadByRecordReader(500, numRepeat, 2, 17770, null);
+    writeThenReadByRecordReader(500, 1000, 2, 17770, null);
   }
 
   private void splitAfterSync() throws IOException {
-    writeThenReadByRecordReader(500, numRepeat, 2, 19950, null);
+    writeThenReadByRecordReader(500, 1000, 2, 19950, null);
   }
 
   private void writeThenReadByRecordReader(int intervalRecordCount,
@@ -712,7 +711,7 @@ public class TestRCFile {
     jonconf.set("mapred.input.dir", testDir.toString());
     HiveConf.setLongVar(jonconf, HiveConf.ConfVars.MAPREDMINSPLITSIZE, minSplitSize);
     InputSplit[] splits = inputFormat.getSplits(jonconf, splitNumber);
-    assertEquals("splits length should be " + splitNumber, splitNumber, splits.length);
+    assertEquals("splits length should be " + splitNumber, splits.length, splitNumber);
     int readCount = 0;
     for (int i = 0; i < splits.length; i++) {
       int previousReadCount = readCount;

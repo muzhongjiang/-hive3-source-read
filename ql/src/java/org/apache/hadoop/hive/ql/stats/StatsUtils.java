@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,20 +22,18 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -48,10 +46,8 @@ import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.Decimal;
-import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.exec.ColumnInfo;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
-import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -60,25 +56,18 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.PartitionIterable;
 import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.parse.ColumnStatsList;
 import org.apache.hadoop.hive.ql.parse.PrunedPartitionList;
-import org.apache.hadoop.hive.ql.parse.SemanticAnalyzer;
+import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.ColStatistics;
 import org.apache.hadoop.hive.ql.plan.ColStatistics.Range;
-import org.apache.hadoop.hive.ql.plan.ExprDynamicParamDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeColumnListDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeFieldDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
-import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.Statistics;
 import org.apache.hadoop.hive.ql.plan.Statistics.State;
-import org.apache.hadoop.hive.ql.stats.BasicStats.Factory;
-import org.apache.hadoop.hive.ql.stats.estimator.StatEstimator;
-import org.apache.hadoop.hive.ql.stats.estimator.StatEstimatorProvider;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFSum;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBridge;
 import org.apache.hadoop.hive.ql.udf.generic.NDV;
@@ -87,7 +76,6 @@ import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.objectinspector.ConstantObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
-import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
 import org.apache.hadoop.hive.serde2.objectinspector.StandardConstantListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StandardConstantMapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StandardConstantStructObjectInspector;
@@ -111,7 +99,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableIntObject
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableLongObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableShortObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableStringObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableTimestampLocalTZObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableTimestampObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
@@ -126,24 +113,13 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.common.math.LongMath;
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Longs;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public class StatsUtils {
 
   private static final Logger LOG = LoggerFactory.getLogger(StatsUtils.class.getName());
 
-  // Range lower limit for date type when not defined (days, heuristic): '1999-01-01'
-  private static final int DATE_RANGE_LOWER_LIMIT = 10593;
-  // Range upper limit for date type when not defined (days, heuristic): '2024-12-31'
-  private static final int DATE_RANGE_UPPER_LIMIT = 20089;
-  // Range lower limit for timestamp type when not defined (seconds, heuristic): '1999-01-01 00:00:00'
-  private static final long TIMESTAMP_RANGE_LOWER_LIMIT = 915148800L;
-  // Range upper limit for timestamp type when not defined (seconds, heuristic): '2024-12-31 23:59:59'
-  private static final long TIMESTAMP_RANGE_UPPER_LIMIT = 1735689599L;
 
   /**
    * Collect table, partition and column level statistics
@@ -158,7 +134,7 @@ public class StatsUtils {
    * @return statistics object
    * @throws HiveException
    */
-  public static Statistics collectStatistics(HiveConf conf, PrunedPartitionList partList, ColumnStatsList colStatsCache,
+  public static Statistics collectStatistics(HiveConf conf, PrunedPartitionList partList,
       Table table, TableScanOperator tableScanOperator) throws HiveException {
 
     // column level statistics are required only for the columns that are needed
@@ -166,294 +142,191 @@ public class StatsUtils {
     List<String> neededColumns = tableScanOperator.getNeededColumns();
     List<String> referencedColumns = tableScanOperator.getReferencedColumns();
 
-    return collectStatistics(conf, partList, table, schema, neededColumns, colStatsCache, referencedColumns);
+    return collectStatistics(conf, partList, table, schema, neededColumns, referencedColumns);
   }
 
   private static Statistics collectStatistics(HiveConf conf, PrunedPartitionList partList,
-      Table table, List<ColumnInfo> schema, List<String> neededColumns, ColumnStatsList colStatsCache,
+      Table table, List<ColumnInfo> schema, List<String> neededColumns,
       List<String> referencedColumns) throws HiveException {
 
     boolean fetchColStats =
         HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_STATS_FETCH_COLUMN_STATS);
-    boolean testMode =
-        HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_IN_TEST);
+    boolean fetchPartStats =
+        HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_STATS_FETCH_PARTITION_STATS);
 
-    return collectStatistics(conf, partList, table, schema, neededColumns, colStatsCache, referencedColumns,
-        fetchColStats, testMode);
+    return collectStatistics(conf, partList, table, schema, neededColumns, referencedColumns,
+        fetchColStats, fetchPartStats);
   }
 
-  /**
-   * Returns number of rows if it exists. Otherwise it estimates number of rows
-   * based on estimated data size for both partition and non-partitioned table
-   * RelOptHiveTable's getRowCount uses this.
-   */
-  public static long getNumRows(HiveConf conf, List<ColumnInfo> schema, Table table, PrunedPartitionList partitionList, AtomicInteger noColsMissingStats) {
+  private static long getDataSize(HiveConf conf, Table table) {
+    long ds = getRawDataSize(table);
+    if (ds <= 0) {
+      ds = getTotalSize(table);
 
-    List<Partish> inputs = new ArrayList<>();
-    if (table.isPartitioned()) {
-      for (Partition part : partitionList.getNotDeniedPartns()) {
-        inputs.add(Partish.buildFor(table, part));
+      // if data size is still 0 then get file size
+      if (ds <= 0) {
+        ds = getFileSizeForTable(conf, table);
       }
-    } else {
-      inputs.add(Partish.buildFor(table));
+      float deserFactor =
+          HiveConf.getFloatVar(conf, HiveConf.ConfVars.HIVE_STATS_DESERIALIZATION_FACTOR);
+      ds = (long) (ds * deserFactor);
     }
 
-    Factory basicStatsFactory = new BasicStats.Factory();
-
-    if (HiveConf.getBoolVar(conf, ConfVars.HIVE_STATS_ESTIMATE_STATS)) {
-      basicStatsFactory.addEnhancer(new BasicStats.DataSizeEstimator(conf));
-      basicStatsFactory.addEnhancer(new BasicStats.RowNumEstimator(estimateRowSizeFromSchema(conf, schema)));
-    }
-
-    List<BasicStats> results = new ArrayList<>();
-    for (Partish pi : inputs) {
-      BasicStats bStats = new BasicStats(pi);
-      long nr = bStats.getNumRows();
-      // FIXME: this point will be lost after the factory; check that it's really a warning....cleanup/etc
-      if (nr <= 0) {
-        // log warning if row count is missing
-        noColsMissingStats.getAndIncrement();
-      }
-    }
-
-    results = basicStatsFactory.buildAll(conf, inputs);
-
-    BasicStats aggregateStat = BasicStats.buildFrom(results);
-
-    aggregateStat.apply(new BasicStats.SetMinRowNumber01());
-
-    return aggregateStat.getNumRows();
+    return ds;
   }
 
-  private static void estimateStatsForMissingCols(List<String> neededColumns, List<ColStatistics> columnStats,
-                                           Table table, HiveConf conf, long nr, List<ColumnInfo> schema) {
-
-    Set<String> neededCols = new HashSet<>(neededColumns);
-    Set<String> colsWithStats = new HashSet<>();
-
-    for (ColStatistics cstats : columnStats) {
-      colsWithStats.add(cstats.getColumnName());
-    }
-
-    List<String> missingColStats = new ArrayList<String>(Sets.difference(neededCols, colsWithStats));
-
-    if(missingColStats.size() > 0) {
-      List<ColStatistics> estimatedColStats = estimateStats(table, schema, missingColStats, conf, nr);
-      for (ColStatistics estColStats : estimatedColStats) {
-        columnStats.add(estColStats);
+  private static long getNumRows(HiveConf conf, List<ColumnInfo> schema, List<String> neededColumns, Table table, long ds) {
+    long nr = getNumRows(table);
+ // number of rows -1 means that statistics from metastore is not reliable
+    // and 0 means statistics gathering is disabled
+    if (nr <= 0) {
+      int avgRowSize = estimateRowSizeFromSchema(conf, schema, neededColumns);
+      if (avgRowSize > 0) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Estimated average row size: " + avgRowSize);
+        }
+        nr = ds / avgRowSize;
       }
     }
+    return nr == 0 ? 1 : nr;
   }
 
   public static Statistics collectStatistics(HiveConf conf, PrunedPartitionList partList,
-      Table table, List<ColumnInfo> schema, List<String> neededColumns, ColumnStatsList colStatsCache,
-      List<String> referencedColumns, boolean needColStats)
+      Table table, List<ColumnInfo> schema, List<String> neededColumns,
+      List<String> referencedColumns, boolean fetchColStats, boolean fetchPartStats)
       throws HiveException {
-    return collectStatistics(conf, partList, table, schema, neededColumns, colStatsCache,
-        referencedColumns, needColStats, false);
-  }
 
-  private static Statistics collectStatistics(HiveConf conf, PrunedPartitionList partList, Table table,
-      List<ColumnInfo> schema, List<String> neededColumns, ColumnStatsList colStatsCache,
-      List<String> referencedColumns, boolean needColStats, boolean failIfCacheMiss) throws HiveException {
+    Statistics stats = new Statistics();
 
-    Statistics stats = null;
-
-    boolean fetchColStats =
-        HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_STATS_FETCH_COLUMN_STATS);
-    boolean estimateStats = HiveConf.getBoolVar(conf, ConfVars.HIVE_STATS_ESTIMATE_STATS);
+    float deserFactor =
+        HiveConf.getFloatVar(conf, HiveConf.ConfVars.HIVE_STATS_DESERIALIZATION_FACTOR);
 
     if (!table.isPartitioned()) {
 
-      Factory basicStatsFactory = new BasicStats.Factory();
-
-      if (estimateStats) {
-        basicStatsFactory.addEnhancer(new BasicStats.DataSizeEstimator(conf));
+      long ds = getDataSize(conf, table);
+      long nr = getNumRows(conf, schema, neededColumns, table, ds);
+      stats.setNumRows(nr);
+      List<ColStatistics> colStats = Lists.newArrayList();
+      if (fetchColStats) {
+        colStats = getTableColumnStats(table, schema, neededColumns);
+        long betterDS = getDataSizeFromColumnStats(nr, colStats);
+        ds = (betterDS < 1 || colStats.isEmpty()) ? ds : betterDS;
       }
-
-      //      long ds = shouldEstimateStats? getDataSize(conf, table): getRawDataSize(table);
-      basicStatsFactory.addEnhancer(new BasicStats.RowNumEstimator(estimateRowSizeFromSchema(conf, schema)));
-      basicStatsFactory.addEnhancer(new BasicStats.SetMinRowNumber01());
-
-      BasicStats basicStats = basicStatsFactory.build(Partish.buildFor(table));
-
-      //      long nr = getNumRows(conf, schema, neededColumns, table, ds);
-      long ds = basicStats.getDataSize();
-      long nr = basicStats.getNumRows();
-      long fs = basicStats.getTotalFileSize();
-      List<ColStatistics> colStats = Collections.emptyList();
-
-      long numErasureCodedFiles = getErasureCodedFiles(table);
-
-      if (needColStats) {
-        colStats = getTableColumnStats(table, schema, neededColumns, colStatsCache, fetchColStats);
-        if (estimateStats) {
-          estimateStatsForMissingCols(neededColumns, colStats, table, conf, nr, schema);
-        }
-        // we should have stats for all columns (estimated or actual)
-        if (neededColumns.size() == colStats.size()) {
-          long betterDS = getDataSizeFromColumnStats(nr, colStats);
-          ds = (betterDS < 1 || colStats.isEmpty()) ? ds : betterDS;
-        }
-      }
-
-      stats = new Statistics(nr, ds, fs, numErasureCodedFiles);
+       stats.setDataSize(ds);
       // infer if any column can be primary key based on column statistics
       inferAndSetPrimaryKey(stats.getNumRows(), colStats);
 
       stats.setColumnStatsState(deriveStatType(colStats, neededColumns));
       stats.addToColumnStats(colStats);
     } else if (partList != null) {
-
       // For partitioned tables, get the size of all the partitions after pruning
       // the partitions that are not required
+      long nr = 0;
+      long ds = 0;
 
-      Factory basicStatsFactory = new Factory();
-      if (estimateStats) {
-        // FIXME: misses parallel
-        basicStatsFactory.addEnhancer(new BasicStats.DataSizeEstimator(conf));
+      List<Long> rowCounts = Lists.newArrayList();
+      List<Long> dataSizes = Lists.newArrayList();
+
+      if (fetchPartStats) {
+        rowCounts = getBasicStatForPartitions(
+            table, partList.getNotDeniedPartns(), StatsSetupConst.ROW_COUNT);
+        dataSizes =  getBasicStatForPartitions(
+            table, partList.getNotDeniedPartns(), StatsSetupConst.RAW_DATA_SIZE);
+
+        nr = getSumIgnoreNegatives(rowCounts);
+        ds = getSumIgnoreNegatives(dataSizes);
+        if (ds <= 0) {
+          dataSizes = getBasicStatForPartitions(
+              table, partList.getNotDeniedPartns(), StatsSetupConst.TOTAL_SIZE);
+          ds = getSumIgnoreNegatives(dataSizes);
+        }
       }
 
-      basicStatsFactory.addEnhancer(new BasicStats.RowNumEstimator(estimateRowSizeFromSchema(conf, schema)));
-
-      List<BasicStats> partStats = new ArrayList<>();
-
-      for (Partition p : partList.getNotDeniedPartns()) {
-        BasicStats basicStats = basicStatsFactory.build(Partish.buildFor(table, p));
-        partStats.add(basicStats);
+      // if data size still could not be determined, then fall back to filesytem to get file
+      // sizes
+      if (ds <= 0) {
+        dataSizes = getFileSizeForPartitions(conf, partList.getNotDeniedPartns());
       }
-      BasicStats bbs = BasicStats.buildFrom(partStats);
+      ds = getSumIgnoreNegatives(dataSizes);
+      ds = (long) (ds * deserFactor);
 
-      long nr = bbs.getNumRows();
-      long ds = bbs.getDataSize();
-      long fs = bbs.getTotalFileSize();
+      int avgRowSize = estimateRowSizeFromSchema(conf, schema, neededColumns);
+      if (avgRowSize > 0) {
+        setUnknownRcDsToAverage(rowCounts, dataSizes, avgRowSize);
+        nr = getSumIgnoreNegatives(rowCounts);
+        ds = getSumIgnoreNegatives(dataSizes);
 
-      List<Long> erasureCodedFiles = getBasicStatForPartitions(table, partList.getNotDeniedPartns(),
-          StatsSetupConst.NUM_ERASURE_CODED_FILES);
-      long numErasureCodedFiles = getSumIgnoreNegatives(erasureCodedFiles);
-
+        // number of rows -1 means that statistics from metastore is not reliable
+        if (nr <= 0) {
+          nr = ds / avgRowSize;
+        }
+      }
       if (nr == 0) {
         nr = 1;
       }
-      stats = new Statistics(nr, ds, fs, numErasureCodedFiles);
-      stats.setBasicStatsState(bbs.getState());
-      if (nr > 0) {
-        // FIXME: this promotion process should be removed later
-        if (State.PARTIAL.morePreciseThan(bbs.getState())) {
-          stats.setBasicStatsState(State.PARTIAL);
-        }
+      stats.addToNumRows(nr);
+      stats.addToDataSize(ds);
+
+      // if at least a partition does not contain row count then mark basic stats state as PARTIAL
+      if (containsNonPositives(rowCounts) &&
+          stats.getBasicStatsState().equals(State.COMPLETE)) {
+        stats.setBasicStatsState(State.PARTIAL);
       }
-
-      if (needColStats) {
-        List<String> partitionCols = getPartitionColumns(schema, neededColumns, referencedColumns);
-
-        // We will retrieve stats from the metastore only for columns that are not cached
-        List<ColStatistics> columnStats = new ArrayList<>();
-        List<String> neededColsToRetrieve = extractColumnStates(table, neededColumns, colStatsCache, columnStats);
-        List<String> partitionColsToRetrieve = extractColumnStates(table, partitionCols, colStatsCache, columnStats);
-
-        // List of partitions
-        List<String> partNames = new ArrayList<>(partList.getNotDeniedPartns().size());
+      if (fetchColStats) {
+        List<String> partNames = new ArrayList<String>(partList.getNotDeniedPartns().size());
         for (Partition part : partList.getNotDeniedPartns()) {
           partNames.add(part.getName());
         }
-
+        neededColumns = processNeededColumns(schema, neededColumns);
         AggrStats aggrStats = null;
         // We check the sizes of neededColumns and partNames here. If either
         // size is 0, aggrStats is null after several retries. Thus, we can
         // skip the step to connect to the metastore.
-        if (fetchColStats && !neededColsToRetrieve.isEmpty() && !partNames.isEmpty()) {
+        if (neededColumns.size() > 0 && partNames.size() > 0) {
           aggrStats = Hive.get().getAggrColStatsFor(table.getDbName(), table.getTableName(),
-              neededColsToRetrieve, partNames, false);
+              neededColumns, partNames);
         }
-
-        boolean statsRetrieved = aggrStats != null &&
-            aggrStats.getColStats() != null && aggrStats.getColStatsSize() != 0;
-        if (neededColumns.isEmpty() || (!neededColsToRetrieve.isEmpty() && !statsRetrieved)) {
-          estimateStatsForMissingCols(neededColsToRetrieve, columnStats, table, conf, nr, schema);
+        if (null == aggrStats || null == aggrStats.getColStats()
+            || aggrStats.getColStatsSize() == 0) {
           // There are some partitions with no state (or we didn't fetch any state).
           // Update the stats with empty list to reflect that in the
           // state/initialize structures.
+          List<ColStatistics> emptyStats = Lists.newArrayList();
 
           // add partition column stats
-          addPartitionColumnStats(conf, partitionColsToRetrieve, schema, table, partList, columnStats);
-
-          // FIXME: this add seems suspicious...10 lines below the value returned by this method used as betterDS
-          stats.addToDataSize(getDataSizeFromColumnStats(nr, columnStats));
-          stats.updateColumnStatsState(deriveStatType(columnStats, referencedColumns));
-
-          stats.addToColumnStats(columnStats);
+          addParitionColumnStats(conf, neededColumns, referencedColumns, schema, table, partList,
+              emptyStats);
+          stats.addToColumnStats(emptyStats);
+          stats.addToDataSize(getDataSizeFromColumnStats(nr, emptyStats));
+          stats.updateColumnStatsState(deriveStatType(emptyStats, referencedColumns));
         } else {
-          if (statsRetrieved) {
-            columnStats.addAll(convertColStats(aggrStats.getColStats(), table.getTableName()));
-          }
-          int colStatsAvailable = neededColumns.size() + partitionCols.size() - partitionColsToRetrieve.size();
-          if (columnStats.size() != colStatsAvailable) {
-            LOG.debug("Column stats requested for : {} columns. Able to retrieve for {} columns",
-                    columnStats.size(), colStatsAvailable);
+          List<ColumnStatisticsObj> colStats = aggrStats.getColStats();
+          if (colStats.size() != neededColumns.size()) {
+            LOG.debug("Column stats requested for : " + neededColumns.size() + " columns. Able to" +
+                " retrieve for " + colStats.size() + " columns");
           }
 
-          addPartitionColumnStats(conf, partitionColsToRetrieve, schema, table, partList, columnStats);
+          List<ColStatistics> columnStats = convertColStats(colStats, table.getTableName());
+
+          addParitionColumnStats(conf, neededColumns, referencedColumns, schema, table, partList,
+              columnStats);
           long betterDS = getDataSizeFromColumnStats(nr, columnStats);
           stats.setDataSize((betterDS < 1 || columnStats.isEmpty()) ? ds : betterDS);
           // infer if any column can be primary key based on column statistics
           inferAndSetPrimaryKey(stats.getNumRows(), columnStats);
 
           stats.addToColumnStats(columnStats);
-
-          // Infer column stats state
-          stats.setColumnStatsState(deriveStatType(columnStats, referencedColumns));
-          if (neededColumns.size() != neededColsToRetrieve.size() ||
-              partitionCols.size() != partitionColsToRetrieve.size()) {
-            // Include state for cached columns
-            stats.updateColumnStatsState(colStatsCache.getState());
+          State colState = deriveStatType(columnStats, referencedColumns);
+          if (aggrStats.getPartsFound() != partNames.size() && colState != State.NONE) {
+            LOG.debug("Column stats requested for : " + partNames.size() + " partitions. "
+                + "Able to retrieve for " + aggrStats.getPartsFound() + " partitions");
+            colState = State.PARTIAL;
           }
-          // Change if we could not retrieve for all partitions
-          if (aggrStats != null && aggrStats.getPartsFound() != partNames.size() && stats.getColumnStatsState() != State.NONE) {
-            stats.updateColumnStatsState(State.PARTIAL);
-            LOG.debug("Column stats requested for : {} partitions. Able to retrieve for {} partitions",
-                    partNames.size(), aggrStats.getPartsFound());
-          }
-        }
-
-        if (partStats.isEmpty()) {
-          // all partitions are filtered by partition pruning
-          stats.setBasicStatsState(State.COMPLETE);
-        }
-
-        // This block exists for debugging purposes: we want to check whether
-        // the col stats cache is working properly and we are retrieving the
-        // stats from metastore only once.
-        if (colStatsCache != null && failIfCacheMiss &&
-            stats.getColumnStatsState().equals(State.COMPLETE) &&
-            (!neededColsToRetrieve.isEmpty() || !partitionColsToRetrieve.isEmpty())) {
-          throw new HiveException("Cache has been loaded in logical planning phase for all columns; "
-              + "however, stats for column some columns could not be retrieved from it "
-              + "(see messages above)");
+          stats.setColumnStatsState(colState);
         }
       }
     }
     return stats;
-  }
-
-  private static List<String> extractColumnStates(Table table, List<String> columns,
-      ColumnStatsList colStatsCache, List<ColStatistics> columnStats) {
-    if (colStatsCache == null) {
-      return columns;
-    }
-    List<String> neededColsToRetrieve = new ArrayList<>(columns.size());
-    for (String colName : columns) {
-      ColStatistics colStats = colStatsCache.getColStats().get(colName);
-      if (colStats == null) {
-        neededColsToRetrieve.add(colName);
-        LOG.debug("Stats for column {} in table {} could not be retrieved from cache", colName,
-            table.getCompleteName());
-      } else {
-        columnStats.add(colStats);
-        LOG.debug("Stats for column {} in table {} retrieved from cache", colName, table.getCompleteName());
-      }
-    }
-    return neededColsToRetrieve;
   }
 
 
@@ -541,25 +414,13 @@ public class StatsUtils {
     return false;
   }
 
-  private static void addPartitionColumnStats(HiveConf conf, List<String> partitionCols,
-      List<ColumnInfo> schema, Table table, PrunedPartitionList partList, List<ColStatistics> colStats)
-          throws HiveException {
-    for (String col : partitionCols) {
-      for (ColumnInfo ci : schema) {
-        // conditions for being partition column
-        if (col.equals(ci.getInternalName())) {
-          colStats.add(getColStatsForPartCol(ci, new PartitionIterable(partList.getPartitions()), conf));
-        }
-      }
-    }
-  }
+  private static void addParitionColumnStats(HiveConf conf, List<String> neededColumns,
+      List<String> referencedColumns, List<ColumnInfo> schema, Table table,
+      PrunedPartitionList partList, List<ColStatistics> colStats)
+      throws HiveException {
 
-  private static List<String> getPartitionColumns(List<ColumnInfo> schema,
-      List<String> neededColumns,
-      List<String> referencedColumns) {
     // extra columns is difference between referenced columns vs needed
     // columns. The difference could be partition columns.
-    List<String> partitionCols = new ArrayList<>(referencedColumns.size());
     List<String> extraCols = Lists.newArrayList(referencedColumns);
     if (referencedColumns.size() > neededColumns.size()) {
       extraCols.removeAll(neededColumns);
@@ -568,12 +429,11 @@ public class StatsUtils {
           // conditions for being partition column
           if (col.equals(ci.getInternalName()) && ci.getIsVirtualCol() &&
               !ci.isHiddenVirtualCol()) {
-            partitionCols.add(col);
+            colStats.add(getColStatsForPartCol(ci, new PartitionIterable(partList.getPartitions()), conf));
           }
         }
       }
     }
-    return partitionCols;
   }
 
   public static ColStatistics getColStatsForPartCol(ColumnInfo ci,PartitionIterable partList, HiveConf conf) {
@@ -660,41 +520,49 @@ public class StatsUtils {
     return range;
   }
 
-  private static long getAvgColSize(final ColumnInfo columnInfo, HiveConf conf) {
-    ObjectInspector oi = columnInfo.getObjectInspector();
-    String colTypeLowerCase = columnInfo.getTypeName().toLowerCase();
-    if (colTypeLowerCase.equals(serdeConstants.STRING_TYPE_NAME)
-        || colTypeLowerCase.equals(serdeConstants.BINARY_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.VARCHAR_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.CHAR_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.LIST_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.MAP_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.STRUCT_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.UNION_TYPE_NAME)) {
-      return getAvgColLenOf(conf, oi, colTypeLowerCase);
-    } else {
-      return getAvgColLenOfFixedLengthTypes(colTypeLowerCase);
+  private static void setUnknownRcDsToAverage(
+      List<Long> rowCounts, List<Long> dataSizes, int avgRowSize) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Estimated average row size: " + avgRowSize);
+    }
+    for (int i = 0; i < rowCounts.size(); i++) {
+      long rc = rowCounts.get(i);
+      long s = dataSizes.get(i);
+      if (rc <= 0 && s > 0) {
+        rc = s / avgRowSize;
+        rowCounts.set(i, rc);
+      }
+
+      if (s <= 0 && rc > 0) {
+        s = safeMult(rc, avgRowSize);
+        dataSizes.set(i, s);
+      }
     }
   }
 
-  public static long estimateRowSizeFromSchema(HiveConf conf, List<ColumnInfo> schema) {
-    long avgRowSize = 0;
-    for (ColumnInfo ci : schema) {
-      avgRowSize += getAvgColSize(ci, conf);
-    }
-    return avgRowSize;
-  }
-
-  public static long estimateRowSizeFromSchema(HiveConf conf, List<ColumnInfo> schema,
+  public static int estimateRowSizeFromSchema(HiveConf conf, List<ColumnInfo> schema,
       List<String> neededColumns) {
-    long avgRowSize = 0;
+    int avgRowSize = 0;
     for (String neededCol : neededColumns) {
       ColumnInfo ci = getColumnInfoForColumn(neededCol, schema);
       if (ci == null) {
         // No need to collect statistics of index columns
         continue;
       }
-      avgRowSize += getAvgColSize(ci, conf);
+      ObjectInspector oi = ci.getObjectInspector();
+      String colTypeLowerCase = ci.getTypeName().toLowerCase();
+      if (colTypeLowerCase.equals(serdeConstants.STRING_TYPE_NAME)
+          || colTypeLowerCase.equals(serdeConstants.BINARY_TYPE_NAME)
+          || colTypeLowerCase.startsWith(serdeConstants.VARCHAR_TYPE_NAME)
+          || colTypeLowerCase.startsWith(serdeConstants.CHAR_TYPE_NAME)
+          || colTypeLowerCase.startsWith(serdeConstants.LIST_TYPE_NAME)
+          || colTypeLowerCase.startsWith(serdeConstants.MAP_TYPE_NAME)
+          || colTypeLowerCase.startsWith(serdeConstants.STRUCT_TYPE_NAME)
+          || colTypeLowerCase.startsWith(serdeConstants.UNION_TYPE_NAME)) {
+        avgRowSize += getAvgColLenOf(conf, oi, colTypeLowerCase);
+      } else {
+        avgRowSize += getAvgColLenOfFixedLengthTypes(colTypeLowerCase);
+      }
     }
     return avgRowSize;
   }
@@ -736,7 +604,6 @@ public class StatsUtils {
    *          - partition list
    * @return sizes of partitions
    */
-  @Deprecated
   public static List<Long> getFileSizeForPartitions(final HiveConf conf, List<Partition> parts) {
     LOG.info("Number of partitions : " + parts.size());
     ArrayList<Future<Long>> futures = new ArrayList<>();
@@ -777,7 +644,7 @@ public class StatsUtils {
     return sizes;
   }
 
-  public static boolean containsNonPositives(List<Long> vals) {
+  private static boolean containsNonPositives(List<Long> vals) {
     for (Long val : vals) {
       if (val <= 0L) {
         return true;
@@ -787,7 +654,7 @@ public class StatsUtils {
   }
 
   /**
-   * Get sum of all values in the list that are &gt;0
+   * Get sum of all values in the list that are >0
    * @param vals
    *          - list of values
    * @return sum
@@ -808,13 +675,10 @@ public class StatsUtils {
         hasNull = (colStats == null) || (colStats.size() < neededColumns.size());
     if (colStats != null) {
       for (ColStatistics cs : colStats) {
-        // either colstats is null or is estimated
-        boolean isNull = (cs == null) ? true: (cs.isEstimated());
+        boolean isNull = cs == null;
         hasStats |= !isNull;
         hasNull |= isNull;
-        if (hasNull && hasStats) {
-          break;
-        }
+        if (hasNull && hasStats) break;
       }
     }
     State result = (hasStats
@@ -881,14 +745,6 @@ public class StatsUtils {
       cs.setNumNulls(csd.getBinaryStats().getNumNulls());
     } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMP_TYPE_NAME)) {
       cs.setAvgColLen(JavaDataModel.get().lengthOfTimestamp());
-      cs.setNumNulls(csd.getTimestampStats().getNumNulls());
-      Long lowVal = (csd.getTimestampStats().getLowValue() != null) ? csd.getTimestampStats().getLowValue()
-          .getSecondsSinceEpoch() : null;
-      Long highVal = (csd.getTimestampStats().getHighValue() != null) ? csd.getTimestampStats().getHighValue()
-          .getSecondsSinceEpoch() : null;
-      cs.setRange(lowVal, highVal);
-    } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().lengthOfTimestamp());
     } else if (colTypeLowerCase.startsWith(serdeConstants.DECIMAL_TYPE_NAME)) {
       cs.setAvgColLen(JavaDataModel.get().lengthOfDecimal());
       cs.setCountDistint(csd.getDecimalStats().getNumDVs());
@@ -922,80 +778,6 @@ public class StatsUtils {
     return cs;
   }
 
-  private static ColStatistics estimateColStats(long numRows, String colName, HiveConf conf,
-      List<ColumnInfo> schema) {
-    ColumnInfo cinfo = getColumnInfoForColumn(colName, schema);
-    ColStatistics cs = new ColStatistics(colName, cinfo.getTypeName());
-    cs.setIsEstimated(true);
-
-    String colTypeLowerCase = cinfo.getTypeName().toLowerCase();
-
-    float ndvPercent = Math.min(100L, HiveConf.getFloatVar(conf, ConfVars.HIVE_STATS_NDV_ESTIMATE_PERC));
-    float nullPercent = Math.min(100L, HiveConf.getFloatVar(conf, ConfVars.HIVE_STATS_NUM_NULLS_ESTIMATE_PERC));
-
-    cs.setCountDistint(Math.max(1, (long)(numRows * ndvPercent/100.00)));
-    cs.setNumNulls(Math.min(numRows, (long)(numRows * nullPercent/100.00)));
-
-    if (colTypeLowerCase.equals(serdeConstants.TINYINT_TYPE_NAME)){
-      cs.setAvgColLen(JavaDataModel.get().primitive1());
-      cs.setRange(-128,127);
-    }
-    else if(colTypeLowerCase.equals(serdeConstants.SMALLINT_TYPE_NAME)){
-      cs.setAvgColLen(JavaDataModel.get().primitive1());
-      cs.setRange(-32768, 32767);
-    } else if(colTypeLowerCase.equals(serdeConstants.INT_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().primitive1());
-      cs.setRange(Long.MIN_VALUE, Long.MAX_VALUE);
-    } else if (colTypeLowerCase.equals(serdeConstants.BIGINT_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().primitive2());
-      cs.setRange(Integer.MIN_VALUE, Integer.MAX_VALUE);
-    } else if (colTypeLowerCase.equals(serdeConstants.FLOAT_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().primitive1());
-      cs.setRange(Float.MIN_VALUE, Float.MAX_VALUE);
-    } else if (colTypeLowerCase.equals(serdeConstants.DOUBLE_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().primitive2());
-      cs.setRange(Double.MIN_VALUE, Double.MAX_VALUE);
-    } else if (colTypeLowerCase.equals(serdeConstants.STRING_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.BINARY_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.CHAR_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.VARCHAR_TYPE_NAME)) {
-      cs.setAvgColLen(getAvgColLenOf(conf,cinfo.getObjectInspector(), cinfo.getTypeName()));
-    } else if (colTypeLowerCase.equals(serdeConstants.BOOLEAN_TYPE_NAME)) {
-        cs.setCountDistint(2);
-        cs.setNumTrues(Math.max(1, numRows/2));
-        cs.setNumFalses(Math.max(1, numRows/2));
-        cs.setAvgColLen(JavaDataModel.get().primitive1());
-    } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMP_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().lengthOfTimestamp());
-      // epoch, seconds since epoch
-      cs.setRange(TIMESTAMP_RANGE_LOWER_LIMIT, TIMESTAMP_RANGE_UPPER_LIMIT);
-    } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().lengthOfTimestamp());
-    } else if (colTypeLowerCase.startsWith(serdeConstants.DECIMAL_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().lengthOfDecimal());
-      cs.setRange(Float.MIN_VALUE, Float.MAX_VALUE);
-    } else if (colTypeLowerCase.equals(serdeConstants.DATE_TYPE_NAME)) {
-      cs.setAvgColLen(JavaDataModel.get().lengthOfDate());
-      // epoch, days since epoch
-      cs.setRange(DATE_RANGE_LOWER_LIMIT, DATE_RANGE_UPPER_LIMIT);
-    } else {
-      cs.setAvgColLen(getSizeOfComplexTypes(conf, cinfo.getObjectInspector()));
-    }
-    return cs;
-  }
-
-  private static List<ColStatistics> estimateStats(Table table, List<ColumnInfo> schema,
-      List<String> neededColumns, HiveConf conf, long nr) {
-
-    List<ColStatistics> stats = new ArrayList<ColStatistics>(neededColumns.size());
-
-    for (int i = 0; i < neededColumns.size(); i++) {
-      ColStatistics cs = estimateColStats(nr, neededColumns.get(i), conf, schema);
-      stats.add(cs);
-    }
-    return stats;
-  }
-
   /**
    * Get table level column statistics from metastore for needed columns
    * @param table
@@ -1007,62 +789,29 @@ public class StatsUtils {
    * @return column statistics
    */
   public static List<ColStatistics> getTableColumnStats(
-      Table table, List<ColumnInfo> schema, List<String> neededColumns,
-      ColumnStatsList colStatsCache, boolean fetchColStats) {
-    List<ColStatistics> stats = new ArrayList<>();
+      Table table, List<ColumnInfo> schema, List<String> neededColumns) {
     if (table.isMaterializedTable()) {
       LOG.debug("Materialized table does not contain table statistics");
-      return stats;
+      return null;
     }
-    // We will retrieve stats from the metastore only for columns that are not cached
-    List<String> colStatsToRetrieve;
-    if (colStatsCache != null) {
-      colStatsToRetrieve = new ArrayList<>(neededColumns.size());
-      for (String colName : neededColumns) {
-        if (!colStatsCache.getColStats().containsKey(colName)) {
-          colStatsToRetrieve.add(colName);
-        }
-      }
-    } else {
-      colStatsToRetrieve = neededColumns;
-    }
-    // Retrieve stats from metastore
     String dbName = table.getDbName();
     String tabName = table.getTableName();
-    if (SemanticAnalyzer.DUMMY_DATABASE.equals(dbName) &&
-        SemanticAnalyzer.DUMMY_TABLE.equals(tabName)) {
-      // insert into values gets written into insert from select dummy_table
-      // This table is dummy and has no stats
-      return stats;
-    }
-    if (fetchColStats && !colStatsToRetrieve.isEmpty()) {
-      try {
-        List<ColumnStatisticsObj> colStat = Hive.get().getTableColumnStatistics(
-            dbName, tabName, colStatsToRetrieve, false);
-        stats = convertColStats(colStat, tabName);
-      } catch (HiveException e) {
-        LOG.error("Failed to retrieve table statistics: ", e);
-      }
-    }
-    // Merge stats from cache with metastore cache
-    if (colStatsCache != null) {
-      for(String col:neededColumns) {
-        ColStatistics cs = colStatsCache.getColStats().get(col);
-        if (cs != null) {
-          stats.add(cs);
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Stats for column " + cs.getColumnName() +
-                " in table " + table.getCompleteName() + " retrieved from cache");
-          }
-        }
-      }
+    List<String> neededColsInTable = processNeededColumns(schema, neededColumns);
+    List<ColStatistics> stats = null;
+    try {
+      List<ColumnStatisticsObj> colStat = Hive.get().getTableColumnStatistics(
+          dbName, tabName, neededColsInTable);
+      stats = convertColStats(colStat, tabName);
+    } catch (HiveException e) {
+      LOG.error("Failed to retrieve table statistics: ", e);
+      stats = null;
     }
     return stats;
   }
 
   private static List<ColStatistics> convertColStats(List<ColumnStatisticsObj> colStats, String tabName) {
-    if (colStats == null) {
-      return Collections.emptyList();
+    if (colStats==null) {
+      return new ArrayList<ColStatistics>();
     }
     List<ColStatistics> stats = new ArrayList<ColStatistics>(colStats.size());
     for (ColumnStatisticsObj statObj : colStats) {
@@ -1072,6 +821,22 @@ public class StatsUtils {
       }
     }
     return stats;
+  }
+  private static List<String> processNeededColumns(List<ColumnInfo> schema,
+      List<String> neededColumns) {
+    // Remove hidden virtual columns, as well as needed columns that are not
+    // part of the table. TODO: the latter case should not really happen...
+    List<String> neededColsInTable = null;
+    int limit = neededColumns.size();
+    for (int i = 0; i < limit; ++i) {
+      if (neededColsInTable == null) {
+        neededColsInTable = Lists.newArrayList(neededColumns);
+      }
+      neededColsInTable.remove(i--);
+      --limit;
+    }
+    return (neededColsInTable == null || neededColsInTable.size() == 0) ? neededColumns
+        : neededColsInTable;
   }
 
   /**
@@ -1156,6 +921,10 @@ public class StatsUtils {
 
   /**
    * Get the size of complex data types
+   * @param conf
+   *          - hive conf
+   * @param oi
+   *          - object inspector
    * @return raw data size
    */
   public static long getSizeOfComplexTypes(HiveConf conf, ObjectInspector oi) {
@@ -1184,18 +953,12 @@ public class StatsUtils {
 
         // constant list projection of known length
         StandardConstantListObjectInspector scloi = (StandardConstantListObjectInspector) oi;
-        List<?> value = scloi.getWritableConstantValue();
-        if (null == value) {
-          length = 0;
-        } else {
-          length = value.size();
-        }
+        length = scloi.getWritableConstantValue().size();
 
         // check if list elements are primitive or Objects
         ObjectInspector leoi = scloi.getListElementObjectInspector();
         if (leoi.getCategory().equals(ObjectInspector.Category.PRIMITIVE)) {
-          int maxVarLen = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_STATS_MAX_VARIABLE_LENGTH);
-          result += getSizeOfPrimitiveTypeArraysFromType(leoi.getTypeName(), length, maxVarLen);
+          result += getSizeOfPrimitiveTypeArraysFromType(leoi.getTypeName(), length);
         } else {
           result += JavaDataModel.get().lengthForObjectArrayOfSize(length);
         }
@@ -1260,89 +1023,69 @@ public class StatsUtils {
   }
 
   /**
-   * Get size of fixed length primitives.
-   *
-   * @param colType column type
+   * Get size of fixed length primitives
+   * @param colType
+   *          - column type
    * @return raw data size
-   * @throws NullPointerException if colType is {@code null}
    */
-  public static long getAvgColLenOfFixedLengthTypes(final String colType) {
-    String colTypeLowerCase = Objects.requireNonNull(colType).toLowerCase();
-    if (colTypeLowerCase.startsWith(serdeConstants.DECIMAL_TYPE_NAME)) {
-      return JavaDataModel.get().lengthOfDecimal();
-    }
-    switch (colTypeLowerCase) {
-    case serdeConstants.TINYINT_TYPE_NAME:
-    case serdeConstants.SMALLINT_TYPE_NAME:
-    case serdeConstants.INT_TYPE_NAME:
-    case serdeConstants.VOID_TYPE_NAME:
-    case serdeConstants.BOOLEAN_TYPE_NAME:
-    case serdeConstants.FLOAT_TYPE_NAME:
+  public static long getAvgColLenOfFixedLengthTypes(String colType) {
+    String colTypeLowerCase = colType.toLowerCase();
+    if (colTypeLowerCase.equals(serdeConstants.TINYINT_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.SMALLINT_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.INT_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.VOID_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.BOOLEAN_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.FLOAT_TYPE_NAME)) {
       return JavaDataModel.get().primitive1();
-    case serdeConstants.DOUBLE_TYPE_NAME:
-    case serdeConstants.BIGINT_TYPE_NAME:
-    case serdeConstants.INTERVAL_YEAR_MONTH_TYPE_NAME:
-    case "long":
+    } else if (colTypeLowerCase.equals(serdeConstants.DOUBLE_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.BIGINT_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.INTERVAL_YEAR_MONTH_TYPE_NAME)
+        || colTypeLowerCase.equals("long")) {
       return JavaDataModel.get().primitive2();
-    case serdeConstants.TIMESTAMP_TYPE_NAME:
-    case serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME:
+    } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMP_TYPE_NAME)) {
       return JavaDataModel.get().lengthOfTimestamp();
-    case serdeConstants.DATE_TYPE_NAME:
+    } else if (colTypeLowerCase.equals(serdeConstants.DATE_TYPE_NAME)) {
       return JavaDataModel.get().lengthOfDate();
-    case serdeConstants.INTERVAL_DAY_TIME_TYPE_NAME:
+    } else if (colTypeLowerCase.startsWith(serdeConstants.DECIMAL_TYPE_NAME)) {
+      return JavaDataModel.get().lengthOfDecimal();
+    } else if (colTypeLowerCase.equals(serdeConstants.INTERVAL_DAY_TIME_TYPE_NAME)) {
       return JavaDataModel.JAVA32_META;
-    default:
-      // TODO: support complex types
-      // for complex type we simply return 0
-      return 0;
+    } else {
+      throw new IllegalArgumentException("Size requested for unknown type: " + colType);
     }
   }
 
   /**
-   * Get the size of arrays of primitive types.
-   *
-   * @param colType The column type
-   * @param length The length of the column type
-   * @param maxLength The maximum length of the field
+   * Get the size of arrays of primitive types
+   * @param colType
+   *          - column type
+   * @param length
+   *          - array length
    * @return raw data size
-   * @throws NullPointerException if colType is {@code null}
    */
-  public static long getSizeOfPrimitiveTypeArraysFromType(final String colType, final int length, final int maxLength) {
-    String colTypeLowerCase = Objects.requireNonNull(colType).toLowerCase();
-    if (colTypeLowerCase.startsWith(serdeConstants.VARCHAR_TYPE_NAME)
-        || colTypeLowerCase.startsWith(serdeConstants.CHAR_TYPE_NAME)) {
-      int charTypeLen = JavaDataModel.get().lengthForStringOfLength(maxLength);
-      return JavaDataModel.get().lengthForPrimitiveArrayOfSize(charTypeLen, length);
-    }
-    switch (colTypeLowerCase) {
-    case serdeConstants.TINYINT_TYPE_NAME:
-    case serdeConstants.SMALLINT_TYPE_NAME:
-    case serdeConstants.INT_TYPE_NAME:
-    case serdeConstants.FLOAT_TYPE_NAME:
+  public static long getSizeOfPrimitiveTypeArraysFromType(String colType, int length) {
+    String colTypeLowerCase = colType.toLowerCase();
+    if (colTypeLowerCase.equals(serdeConstants.TINYINT_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.SMALLINT_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.INT_TYPE_NAME)
+        || colTypeLowerCase.equals(serdeConstants.FLOAT_TYPE_NAME)) {
       return JavaDataModel.get().lengthForIntArrayOfSize(length);
-    case serdeConstants.DOUBLE_TYPE_NAME:
+    } else if (colTypeLowerCase.equals(serdeConstants.DOUBLE_TYPE_NAME)) {
       return JavaDataModel.get().lengthForDoubleArrayOfSize(length);
-    case serdeConstants.BIGINT_TYPE_NAME:
-    case "long":
+    } else if (colTypeLowerCase.equals(serdeConstants.BIGINT_TYPE_NAME)
+        || colTypeLowerCase.equals("long")) {
       return JavaDataModel.get().lengthForLongArrayOfSize(length);
-    case serdeConstants.BINARY_TYPE_NAME:
+    } else if (colTypeLowerCase.equals(serdeConstants.BINARY_TYPE_NAME)) {
       return JavaDataModel.get().lengthForByteArrayOfSize(length);
-    case serdeConstants.BOOLEAN_TYPE_NAME:
+    } else if (colTypeLowerCase.equals(serdeConstants.BOOLEAN_TYPE_NAME)) {
       return JavaDataModel.get().lengthForBooleanArrayOfSize(length);
-    case serdeConstants.TIMESTAMP_TYPE_NAME:
-    case serdeConstants.DATETIME_TYPE_NAME:
-    case serdeConstants.INTERVAL_YEAR_MONTH_TYPE_NAME:
-    case serdeConstants.INTERVAL_DAY_TIME_TYPE_NAME:
-    case serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME:
+    } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMP_TYPE_NAME)) {
       return JavaDataModel.get().lengthForTimestampArrayOfSize(length);
-    case serdeConstants.DATE_TYPE_NAME:
+    } else if (colTypeLowerCase.equals(serdeConstants.DATE_TYPE_NAME)) {
       return JavaDataModel.get().lengthForDateArrayOfSize(length);
-    case serdeConstants.DECIMAL_TYPE_NAME:
+    } else if (colTypeLowerCase.startsWith(serdeConstants.DECIMAL_TYPE_NAME)) {
       return JavaDataModel.get().lengthForDecimalArrayOfSize(length);
-    case serdeConstants.STRING_TYPE_NAME:
-      int stringTypeLen = JavaDataModel.get().lengthForStringOfLength(maxLength);
-      return JavaDataModel.get().lengthForPrimitiveArrayOfSize(stringTypeLen, length);
-    default:
+    } else {
       return 0;
     }
   }
@@ -1355,9 +1098,6 @@ public class StatsUtils {
    */
   public static long getSizeOfMap(StandardConstantMapObjectInspector scmoi) {
     Map<?, ?> map = scmoi.getWritableConstantValue();
-    if (null == map) {
-      return 0L;
-    }
     ObjectInspector koi = scmoi.getMapKeyObjectInspector();
     ObjectInspector voi = scmoi.getMapValueObjectInspector();
     long result = 0;
@@ -1401,11 +1141,11 @@ public class StatsUtils {
     if (oi instanceof WritableStringObjectInspector) {
       WritableStringObjectInspector woi = (WritableStringObjectInspector) oi;
       return JavaDataModel.get().lengthForStringOfLength(
-        value == null ? 0 : woi.getPrimitiveWritableObject(value).getLength());
+          woi.getPrimitiveWritableObject(value).getLength());
     } else if (oi instanceof WritableBinaryObjectInspector) {
       WritableBinaryObjectInspector woi = (WritableBinaryObjectInspector) oi;
       return JavaDataModel.get().lengthForByteArrayOfSize(
-        value == null ? 0 : woi.getPrimitiveWritableObject(value).getLength());
+          woi.getPrimitiveWritableObject(value).getLength());
     } else if (oi instanceof WritableBooleanObjectInspector) {
       return JavaDataModel.get().primitive1();
     } else if (oi instanceof WritableByteObjectInspector) {
@@ -1424,8 +1164,7 @@ public class StatsUtils {
       return JavaDataModel.get().primitive2();
     } else if (oi instanceof WritableShortObjectInspector) {
       return JavaDataModel.get().primitive1();
-    } else if (oi instanceof WritableTimestampObjectInspector ||
-        oi instanceof WritableTimestampLocalTZObjectInspector) {
+    } else if (oi instanceof WritableTimestampObjectInspector) {
       return JavaDataModel.get().lengthOfTimestamp();
     }
 
@@ -1499,7 +1238,11 @@ public class StatsUtils {
 
     for (ColStatistics parentColStat : parentStats.getColumnStats()) {
       ColStatistics colStat;
-      colStat = parentColStat.clone();
+      try {
+        colStat = parentColStat.clone();
+      } catch (CloneNotSupportedException e) {
+        colStat = null;
+      }
       if (colStat != null) {
         cs.add(colStat);
       }
@@ -1543,7 +1286,11 @@ public class StatsUtils {
         ColStatistics colStats = parentStats.getColumnStatisticsFromColName(colName);
         if (colStats != null) {
           /* If statistics for the column already exist use it. */
+          try {
             return colStats.clone();
+          } catch (CloneNotSupportedException e) {
+            return null;
+          }
         }
 
         // virtual columns
@@ -1554,12 +1301,27 @@ public class StatsUtils {
         // clone the column stats and return
         ColStatistics result = parentStats.getColumnStatisticsFromColName(colName);
         if (result != null) {
+          try {
             return result.clone();
+          } catch (CloneNotSupportedException e) {
+            return null;
+          }
         }
         return null;
       }
     } else if (end instanceof ExprNodeConstantDesc) {
-      return buildColStatForConstant(conf, numRows, (ExprNodeConstantDesc) end);
+
+      // constant projection
+      ExprNodeConstantDesc encd = (ExprNodeConstantDesc) end;
+
+      colName = encd.getName();
+      colType = encd.getTypeString();
+      if (encd.getValue() == null) {
+        // null projection
+        numNulls = numRows;
+      } else {
+        countDistincts = 1;
+      }
     } else if (end instanceof ExprNodeGenericFuncDesc) {
       ExprNodeGenericFuncDesc engfd = (ExprNodeGenericFuncDesc) end;
       colName = engfd.getName();
@@ -1571,7 +1333,12 @@ public class StatsUtils {
         ColStatistics stats = parentStats.getColumnStatisticsFromColName(engfd.getCols().get(0));
         if (stats != null) {
           ColStatistics newStats;
-          newStats = stats.clone();
+          try {
+            newStats = stats.clone();
+          } catch (CloneNotSupportedException e) {
+            LOG.warn("error cloning stats, this should not happen");
+            return null;
+          }
           newStats.setColumnName(colName);
           colType = colType.toLowerCase();
           newStats.setColumnType(colType);
@@ -1580,30 +1347,6 @@ public class StatsUtils {
         }
       }
 
-      if (conf.getBoolVar(ConfVars.HIVE_STATS_ESTIMATORS_ENABLE)) {
-        Optional<StatEstimatorProvider> sep = engfd.getGenericUDF().adapt(StatEstimatorProvider.class);
-        if (sep.isPresent()) {
-          StatEstimator se = sep.get().getStatEstimator();
-          List<ColStatistics> csList = new ArrayList<ColStatistics>();
-          for (ExprNodeDesc child : engfd.getChildren()) {
-            ColStatistics cs = getColStatisticsFromExpression(conf, parentStats, child);
-            if (cs == null) {
-              break;
-            }
-            csList.add(cs);
-          }
-          if (csList.size() == engfd.getChildren().size()) {
-            Optional<ColStatistics> res = se.estimate(csList);
-            if (res.isPresent()) {
-              ColStatistics newStats = res.get();
-              colType = colType.toLowerCase();
-              newStats.setColumnType(colType);
-              newStats.setColumnName(colName);
-              return newStats;
-            }
-          }
-        }
-      }
       // fallback to default
       countDistincts = getNDVFor(engfd, numRows, parentStats);
     } else if (end instanceof ExprNodeColumnListDesc) {
@@ -1620,12 +1363,6 @@ public class StatsUtils {
       colName = enfd.getFieldName();
       colType = enfd.getTypeString();
       countDistincts = numRows;
-    } else if (end instanceof ExprDynamicParamDesc) {
-      //skip collecting stats for parameters
-      // ideally we should estimate and create colstats object, because otherwise it could lead to
-      // planning as if stats are missing. But since colstats require column name and type it is not
-      // possible to create colstats object
-      return null;
     } else {
       throw new IllegalArgumentException("not supported expr type " + end.getClass());
     }
@@ -1638,56 +1375,6 @@ public class StatsUtils {
     colStats.setNumNulls(numNulls);
 
     return colStats;
-  }
-
-  private static ColStatistics buildColStatForConstant(HiveConf conf, long numRows, ExprNodeConstantDesc encd) {
-
-    long numNulls = 0;
-    long countDistincts = 0;
-    if (encd.getValue() == null) {
-      // null projection
-      numNulls = numRows;
-    } else {
-      countDistincts = 1;
-    }
-    String colType = encd.getTypeString();
-    colType = colType.toLowerCase();
-    ObjectInspector oi = encd.getWritableObjectInspector();
-    double avgColSize = getAvgColLenOf(conf, oi, colType);
-    ColStatistics colStats = new ColStatistics(encd.getName(), colType);
-    colStats.setAvgColLen(avgColSize);
-    colStats.setCountDistint(countDistincts);
-    colStats.setNumNulls(numNulls);
-
-    Optional<Number> value = getConstValue(encd);
-    if (value.isPresent()) {
-      colStats.setRange(value.get(), value.get());
-    }
-    return colStats;
-  }
-
-  private static Optional<Number> getConstValue(ExprNodeConstantDesc encd) {
-    if (encd.getValue() == null) {
-      return Optional.empty();
-    }
-    String constant = encd.getValue().toString();
-    PrimitiveCategory category = GenericUDAFSum.getReturnType(encd.getTypeInfo());
-    if (category == null) {
-      return Optional.empty();
-    }
-    switch (category) {
-    case INT:
-    case BYTE:
-    case SHORT:
-    case LONG:
-      return Optional.ofNullable(Longs.tryParse(constant));
-    case FLOAT:
-    case DOUBLE:
-    case DECIMAL:
-      return Optional.ofNullable(Doubles.tryParse(constant));
-    default:
-      return Optional.empty();
-    }
   }
 
   private static boolean isWideningCast(ExprNodeGenericFuncDesc engfd) {
@@ -1717,7 +1404,7 @@ public class StatsUtils {
   private static long getNDVFor(ExprNodeGenericFuncDesc engfd, long numRows, Statistics parentStats) {
 
     GenericUDF udf = engfd.getGenericUDF();
-    if (!FunctionRegistry.isDeterministic(udf) && !FunctionRegistry.isRuntimeConstant(udf)){
+    if (!FunctionRegistry.isDeterministic(udf)){
       return numRows;
     }
     List<Long> ndvs = Lists.newArrayList();
@@ -1736,13 +1423,12 @@ public class StatsUtils {
     }
     long countDistincts = ndvs.isEmpty() ? numRows : addWithExpDecay(ndvs);
     return Collections.min(Lists.newArrayList(countDistincts, udfNDV, numRows));
-  }
+    }
 
   /**
    * Get number of rows of a give table
    * @return number of rows
    */
-  @Deprecated
   public static long getNumRows(Table table) {
     return getBasicStatForTable(table, StatsSetupConst.ROW_COUNT);
   }
@@ -1764,14 +1450,6 @@ public class StatsUtils {
   }
 
   /**
-   * Get number of Erasure Coded files for a table
-   * @return count of EC files
-   */
-  public static long getErasureCodedFiles(Table table) {
-    return getBasicStatForTable(table, StatsSetupConst.NUM_ERASURE_CODED_FILES);
-  }
-
-  /**
    * Get basic stats of table
    * @param table
    *          - table
@@ -1779,16 +1457,15 @@ public class StatsUtils {
    *          - type of stats
    * @return value of stats
    */
-  @Deprecated
   public static long getBasicStatForTable(Table table, String statType) {
     Map<String, String> params = table.getParameters();
-    long result = -1;
+    long result = 0;
 
     if (params != null) {
       try {
         result = Long.parseLong(params.get(statType));
       } catch (NumberFormatException e) {
-        result = -1;
+        result = 0;
       }
     }
     return result;
@@ -1866,8 +1543,7 @@ public class StatsUtils {
         } else if (colTypeLowerCase.equals(serdeConstants.BINARY_TYPE_NAME)) {
           int acl = (int) Math.round(cs.getAvgColLen());
           sizeOf = JavaDataModel.get().lengthForByteArrayOfSize(acl);
-        } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMP_TYPE_NAME) ||
-            colTypeLowerCase.equals(serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME)) {
+        } else if (colTypeLowerCase.equals(serdeConstants.TIMESTAMP_TYPE_NAME)) {
           sizeOf = JavaDataModel.get().lengthOfTimestamp();
         } else if (colTypeLowerCase.startsWith(serdeConstants.DECIMAL_TYPE_NAME)) {
           sizeOf = JavaDataModel.get().lengthOfDecimal();
@@ -1883,12 +1559,10 @@ public class StatsUtils {
     return result;
   }
 
-  @Deprecated
   public static String getFullyQualifiedTableName(String dbName, String tabName) {
     return getFullyQualifiedName(dbName, tabName);
   }
 
-  @Deprecated
   private static String getFullyQualifiedName(String... names) {
     List<String> nonNullAndEmptyNames = Lists.newArrayList();
     for (String name : names) {
@@ -1900,7 +1574,7 @@ public class StatsUtils {
   }
 
   /**
-   * Get qualified column name from output key column names.
+   * Get qualified column name from output key column names
    * @param keyExprs
    *          - output key names
    * @return list of qualified names
@@ -1960,12 +1634,58 @@ public class StatsUtils {
     }
   }
 
-  public static List<Long> safeMult(List<Long> l, float b) {
-    List<Long> ret = new ArrayList<>();
-    for (Long a : l) {
-      ret.add(safeMult(a, b));
+  public static int getNumBitVectorsForNDVEstimation(HiveConf conf) throws SemanticException {
+    int numBitVectors;
+    float percentageError = HiveConf.getFloatVar(conf, HiveConf.ConfVars.HIVE_STATS_NDV_ERROR);
+
+    if (percentageError < 0.0) {
+      throw new SemanticException("hive.stats.ndv.error can't be negative");
+    } else if (percentageError <= 2.4) {
+      numBitVectors = 1024;
+      LOG.info("Lowest error achievable is 2.4% but error requested is " + percentageError + "%");
+      LOG.info("Choosing 1024 bit vectors..");
+    } else if (percentageError <= 3.4 ) {
+      numBitVectors = 1024;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 1024 bit vectors..");
+    } else if (percentageError <= 4.8) {
+      numBitVectors = 512;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 512 bit vectors..");
+     } else if (percentageError <= 6.8) {
+      numBitVectors = 256;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 256 bit vectors..");
+    } else if (percentageError <= 9.7) {
+      numBitVectors = 128;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 128 bit vectors..");
+    } else if (percentageError <= 13.8) {
+      numBitVectors = 64;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 64 bit vectors..");
+    } else if (percentageError <= 19.6) {
+      numBitVectors = 32;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 32 bit vectors..");
+    } else if (percentageError <= 28.2) {
+      numBitVectors = 16;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 16 bit vectors..");
+    } else if (percentageError <= 40.9) {
+      numBitVectors = 8;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 8 bit vectors..");
+    } else if (percentageError <= 61.0) {
+      numBitVectors = 4;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 4 bit vectors..");
+    } else {
+      numBitVectors = 2;
+      LOG.info("Error requested is " + percentageError + "%");
+      LOG.info("Choosing 2 bit vectors..");
     }
-    return ret;
+    return numBitVectors;
   }
 
   public static boolean hasDiscreteRange(ColStatistics colStat) {
@@ -1996,166 +1716,17 @@ public class StatsUtils {
       long min2 = range2.minValue.longValue();
       long max2 = range2.maxValue.longValue();
 
-      if (max1 < min2 || max2 < min1) {
+      if (   (min1 < min2 && max1 < max2)
+          || (min1 > min2 && max1 > max2)) {
         // No overlap between the two ranges
         return null;
       } else {
         // There is an overlap of ranges - create combined range.
         return new ColStatistics.Range(
             Math.min(min1, min2),
-            Math.max(max1, max2));
+            Math.max(max1,  max2));
       }
     }
     return null;
-  }
-
-  /**
-   * Are the basic stats for the table up-to-date for query planning.
-   * Can run additional checks compared to the version in StatsSetupConst.
-   */
-  public static boolean areBasicStatsUptoDateForQueryAnswering(Table table, Map<String, String> params) {
-    // HIVE-19332: external tables should not be considered to have up-to-date stats.
-    if (MetaStoreUtils.isExternalTable(table.getTTable())) {
-      return false;
-    }
-    return StatsSetupConst.areBasicStatsUptoDate(params);
-  }
-
-  /**
-   * Are the column stats for the table up-to-date for query planning.
-   * Can run additional checks compared to the version in StatsSetupConst.
-   */
-  public static boolean areColumnStatsUptoDateForQueryAnswering(Table table, Map<String, String> params, String colName) {
-    // HIVE-19332: external tables should not be considered to have up-to-date stats.
-    if (MetaStoreUtils.isExternalTable(table.getTTable())) {
-      return false;
-    }
-    return StatsSetupConst.areColumnStatsUptoDate(params, colName);
-  }
-
-  /**
-   * Update the basic statistics of the statistics object based on the row number
-   * @param stats
-   *          - statistics to be updated
-   * @param newNumRows
-   *          - new number of rows
-   * @param useColStats
-   *          - use column statistics to compute data size
-   */
-  public static void updateStats(Statistics stats, long newNumRows,
-      boolean useColStats, Operator<? extends OperatorDesc> op) {
-    updateStats(stats, newNumRows, useColStats, op, Collections.EMPTY_SET);
-  }
-
-  public static void updateStats(Statistics stats, long newNumRows,
-      boolean useColStats, Operator<? extends OperatorDesc> op,
-      Set<String> affectedColumns) {
-
-    if (newNumRows < 0) {
-      LOG.debug("STATS-" + op.toString() + ": Overflow in number of rows. "
-          + newNumRows + " rows will be set to Long.MAX_VALUE");
-      newNumRows = StatsUtils.getMaxIfOverflow(newNumRows);
-    }
-    if (newNumRows == 0) {
-      LOG.debug("STATS-" + op.toString() + ": Equals 0 in number of rows. "
-          + newNumRows + " rows will be set to 1");
-      newNumRows = 1;
-    }
-
-    long oldRowCount = stats.getNumRows();
-    double ratio = (double) newNumRows / (double) oldRowCount;
-    stats.setNumRows(newNumRows);
-
-    if (useColStats) {
-      List<ColStatistics> colStats = stats.getColumnStats();
-      for (ColStatistics cs : colStats) {
-        long oldDV = cs.getCountDistint();
-        if (affectedColumns.contains(cs.getColumnName())) {
-          long newDV = oldDV;
-
-          // if ratio is greater than 1, then number of rows increases. This can happen
-          // when some operators like GROUPBY duplicates the input rows in which case
-          // number of distincts should not change. Update the distinct count only when
-          // the output number of rows is less than input number of rows.
-          if (ratio <= 1.0) {
-            newDV = (long) Math.ceil(ratio * oldDV);
-          }
-          cs.setCountDistint(newDV);
-          cs.setFilterColumn();
-          oldDV = newDV;
-        }
-        if (oldDV > newNumRows) {
-          cs.setCountDistint(newNumRows);
-        }
-        long newNumNulls = Math.round(ratio * cs.getNumNulls());
-        cs.setNumNulls(newNumNulls > newNumRows ? newNumRows: newNumNulls);
-      }
-      stats.setColumnStats(colStats);
-      long newDataSize = StatsUtils.getDataSizeFromColumnStats(newNumRows, colStats);
-      stats.setDataSize(StatsUtils.getMaxIfOverflow(newDataSize));
-    } else {
-      long newDataSize = (long) (ratio * stats.getDataSize());
-      stats.setDataSize(StatsUtils.getMaxIfOverflow(newDataSize));
-    }
-  }
-
-  public static void scaleColStatistics(List<ColStatistics> colStats, double factor) {
-    for (ColStatistics cs : colStats) {
-      cs.setNumFalses(StatsUtils.safeMult(cs.getNumFalses(), factor));
-      cs.setNumTrues(StatsUtils.safeMult(cs.getNumTrues(), factor));
-      cs.setNumNulls(StatsUtils.safeMult(cs.getNumNulls(), factor));
-      if (factor < 1.0) {
-        final double newNDV = Math.ceil(cs.getCountDistint() * factor);
-        cs.setCountDistint(newNDV > Long.MAX_VALUE ? Long.MAX_VALUE : (long) newNDV);
-      }
-    }
-  }
-
-  public static long computeNDVGroupingColumns(List<ColStatistics> colStats, Statistics parentStats,
-      boolean expDecay) {
-    List<Long> ndvValues =
-        extractNDVGroupingColumns(colStats, parentStats);
-    if (ndvValues == null) {
-      return 0L;
-    }
-    if (ndvValues.isEmpty()) {
-      // No grouping columns, one row
-      return 1L;
-    }
-    if (expDecay) {
-      return addWithExpDecay(ndvValues);
-    } else {
-      return ndvValues.stream().reduce(1L, StatsUtils::safeMult);
-    }
-  }
-
-  private static List<Long> extractNDVGroupingColumns(List<ColStatistics> colStats, Statistics parentStats) {
-    List<Long> ndvValues = new ArrayList<>(colStats.size());
-
-    // compute product of distinct values of grouping columns
-    for (ColStatistics cs : colStats) {
-      if (cs != null) {
-        long ndv = cs.getCountDistint();
-        if (cs.getNumNulls() > 0) {
-          ndv = StatsUtils.safeAdd(ndv, 1);
-        }
-        ndvValues.add(ndv);
-      } else {
-        if (parentStats.getColumnStatsState().equals(Statistics.State.COMPLETE)) {
-          // the column must be an aggregate column inserted by GBY. We
-          // don't have to account for this column when computing product
-          // of NDVs
-          continue;
-        } else {
-          // partial column statistics on grouping attributes case.
-          // if column statistics on grouping attribute is missing, then
-          // assume worst case.
-          ndvValues = null;
-        }
-        break;
-      }
-    }
-
-    return ndvValues;
   }
 }

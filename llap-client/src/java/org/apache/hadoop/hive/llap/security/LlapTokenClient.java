@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,10 +33,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.llap.impl.LlapManagementProtocolClientImpl;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.GetTokenRequestProto;
 import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstanceSet;
+import org.apache.hadoop.hive.llap.registry.ServiceInstance;
+import org.apache.hadoop.hive.llap.registry.ServiceInstanceSet;
 import org.apache.hadoop.hive.llap.security.LlapTokenIdentifier;
-import org.apache.hadoop.hive.registry.ServiceInstanceSet;
 import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.io.retry.RetryPolicy;
@@ -56,10 +55,10 @@ public class LlapTokenClient {
   private final SocketFactory socketFactory;
   private final RetryPolicy retryPolicy;
   private final Configuration conf;
-  private ServiceInstanceSet<LlapServiceInstance> activeInstances;
-  private Collection<LlapServiceInstance> lastKnownInstances;
+  private ServiceInstanceSet activeInstances;
+  private Collection<ServiceInstance> lastKnownInstances;
   private LlapManagementProtocolClientImpl client;
-  private LlapServiceInstance clientInstance;
+  private ServiceInstance clientInstance;
 
   public LlapTokenClient(Configuration conf) {
     this.conf = conf;
@@ -72,7 +71,7 @@ public class LlapTokenClient {
 
   public Token<LlapTokenIdentifier> getDelegationToken(String appId) throws IOException {
     if (!UserGroupInformation.isSecurityEnabled()) return null;
-    Iterator<LlapServiceInstance> llaps = null;
+    Iterator<ServiceInstance> llaps = null;
     if (clientInstance == null) {
       assert client == null;
       llaps = getLlapServices(false).iterator();
@@ -129,7 +128,7 @@ public class LlapTokenClient {
   }
 
   /** Synchronized - LLAP registry and instance set are not thread safe. */
-  private synchronized List<LlapServiceInstance> getLlapServices(
+  private synchronized List<ServiceInstance> getLlapServices(
       boolean doForceRefresh) throws IOException {
     if (!doForceRefresh && lastKnownInstances != null) {
       return new ArrayList<>(lastKnownInstances);
@@ -138,12 +137,12 @@ public class LlapTokenClient {
       registry.start();
       activeInstances = registry.getInstances();
     }
-    Collection<LlapServiceInstance> daemons = activeInstances.getAll();
+    Collection<ServiceInstance> daemons = activeInstances.getAll();
     if (daemons == null || daemons.isEmpty()) {
       throw new RuntimeException("No LLAPs found");
     }
     lastKnownInstances = daemons;
-    return new ArrayList<LlapServiceInstance>(lastKnownInstances);
+    return new ArrayList<ServiceInstance>(lastKnownInstances);
   }
 
 }

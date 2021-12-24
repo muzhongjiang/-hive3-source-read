@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,10 +29,9 @@ import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.common.CopyOnFirstWriteProperties;
 import org.apache.hadoop.hive.common.StringInternUtils;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
-import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
@@ -40,12 +39,14 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Deserializer;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.hive.common.util.ReflectionUtil;
+import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
+
 
 /**
  * PartitionDesc.
@@ -54,7 +55,13 @@ import org.apache.hadoop.hive.ql.plan.Explain.Level;
 @Explain(displayName = "Partition", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED })
 public class PartitionDesc implements Serializable, Cloneable {
 
-  private static final Interner<Class<?>> CLASS_INTERNER = Interners.newWeakInterner();
+  static {
+    STRING_INTERNER = Interners.newWeakInterner();
+    CLASS_INTERNER = Interners.newWeakInterner();
+  }
+
+  private static final Interner<String> STRING_INTERNER;
+  private static final Interner<Class<?>> CLASS_INTERNER;
 
   private TableDesc tableDesc;
   private LinkedHashMap<String, String> partSpec;
@@ -67,7 +74,7 @@ public class PartitionDesc implements Serializable, Cloneable {
   private VectorPartitionDesc vectorPartitionDesc;
 
   public void setBaseFileName(String baseFileName) {
-    this.baseFileName = StringInternUtils.internIfNotNull(baseFileName);
+    this.baseFileName = baseFileName.intern();
   }
 
   public PartitionDesc() {
@@ -78,12 +85,12 @@ public class PartitionDesc implements Serializable, Cloneable {
     setPartSpec(partSpec);
   }
 
-  public PartitionDesc(final Partition part, final TableDesc tableDesc) throws HiveException {
-    PartitionDescConstructorHelper(part, tableDesc, true);
+  public PartitionDesc(final Partition part) throws HiveException {
+    PartitionDescConstructorHelper(part, getTableDesc(part.getTable()), true);
     if (Utilities.isInputFileFormatSelfDescribing(this)) {
       // if IF is self describing no need to send column info per partition, since its not used anyway.
       Table tbl = part.getTable();
-      setProperties(MetaStoreUtils.getSchemaWithoutCols(part.getTPartition().getSd(),
+      setProperties(MetaStoreUtils.getSchemaWithoutCols(part.getTPartition().getSd(), part.getTPartition().getSd(),
           part.getParameters(), tbl.getDbName(), tbl.getTableName(), tbl.getPartitionKeys()));
     } else {
       setProperties(part.getMetadataFromPartitionSchema());
@@ -114,11 +121,7 @@ public class PartitionDesc implements Serializable, Cloneable {
 
   private void PartitionDescConstructorHelper(final Partition part,final TableDesc tblDesc, boolean setInputFileFormat)
     throws HiveException {
-
-    PlanUtils.configureInputJobPropertiesForStorageHandler(tblDesc);
-
     this.tableDesc = tblDesc;
-
     setPartSpec(part.getSpec());
     if (setInputFileFormat) {
       setInputFileFormatClass(part.getInputFormatClass());
@@ -171,10 +174,10 @@ public class PartitionDesc implements Serializable, Cloneable {
   public Deserializer getDeserializer(Configuration conf) throws Exception {
     Properties schema = getProperties();
     String clazzName = getDeserializerClassName();
-    AbstractSerDe serDe = ReflectionUtil.newInstance(conf.getClassByName(clazzName)
-        .asSubclass(AbstractSerDe.class), conf);
-    serDe.initialize(conf, getTableDesc().getProperties(), schema);
-    return serDe;
+    Deserializer deserializer = ReflectionUtil.newInstance(conf.getClassByName(clazzName)
+        .asSubclass(Deserializer.class), conf);
+    SerDeUtils.initializeSerDe(deserializer, conf, getTableDesc().getProperties(), schema);
+    return deserializer;
   }
 
   public void setInputFileFormatClass(
@@ -213,21 +216,18 @@ public class PartitionDesc implements Serializable, Cloneable {
 
   @Explain(displayName = "properties", explainLevels = { Level.EXTENDED })
   public Map getPropertiesExplain() {
-    return PlanUtils.getPropertiesExplain(getProperties());
+    return HiveStringUtils.getPropertiesExplain(getProperties());
   }
 
   public void setProperties(final Properties properties) {
-    properties.remove("columns.comments");
-    if (properties instanceof CopyOnFirstWriteProperties) {
-      this.properties = properties;
-    } else {
-      internProperties(properties);
-      this.properties = new CopyOnFirstWriteProperties(properties);
-    }
+    internProperties(properties);
+    this.properties = properties;
   }
 
-  public static TableDesc getTableDesc(Table table) {
-    return Utilities.getTableDesc(table);
+  private static TableDesc getTableDesc(Table table) {
+    TableDesc tableDesc = Utilities.getTableDesc(table);
+    internProperties(tableDesc.getProperties());
+    return tableDesc;
   }
 
   private static void internProperties(Properties properties) {
@@ -235,7 +235,8 @@ public class PartitionDesc implements Serializable, Cloneable {
       String key = (String) keys.nextElement();
       String oldValue = properties.getProperty(key);
       if (oldValue != null) {
-        properties.setProperty(key, oldValue.intern());
+        String value = STRING_INTERNER.intern(oldValue);
+        properties.setProperty(key, value);
       }
     }
   }
@@ -279,7 +280,13 @@ public class PartitionDesc implements Serializable, Cloneable {
     ret.inputFileFormatClass = inputFileFormatClass;
     ret.outputFileFormatClass = outputFileFormatClass;
     if (properties != null) {
-      ret.setProperties((Properties) properties.clone());
+      Properties newProp = new Properties();
+      Enumeration<Object> keysProp = properties.keys();
+      while (keysProp.hasMoreElements()) {
+        Object key = keysProp.nextElement();
+        newProp.put(key, properties.get(key));
+      }
+      ret.setProperties(newProp);
     }
     ret.tableDesc = (TableDesc) tableDesc.clone();
     // The partition spec is not present
@@ -368,6 +375,7 @@ public class PartitionDesc implements Serializable, Cloneable {
    *          URI to the partition file
    */
   public void deriveBaseFileName(Path path) {
+    PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc);
 
     if (path == null) {
       return;
@@ -385,14 +393,5 @@ public class PartitionDesc implements Serializable, Cloneable {
 
   public VectorPartitionDesc getVectorPartitionDesc() {
     return vectorPartitionDesc;
-  }
-
-  @Override
-  public String toString() {
-    return "PartitionDesc [tableDesc=" + tableDesc + ", partSpec=" + partSpec
-        + ", inputFileFormatClass=" + inputFileFormatClass
-        + ", outputFileFormatClass=" + outputFileFormatClass + ", properties="
-        + properties + ", baseFileName=" + baseFileName
-        + ", vectorPartitionDesc=" + vectorPartitionDesc + "]";
   }
 }

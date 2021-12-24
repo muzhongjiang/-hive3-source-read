@@ -5,19 +5,19 @@ create database foo;
 
 use foo;
 
-create table T1_n40(key string, val string) partitioned by (ds string) stored as textfile;
+create table T1(key string, val string) partitioned by (ds string) stored as textfile;
 
-alter table T1_n40 add partition (ds='today');
+alter table T1 add partition (ds='today');
 
-create view V1_n3 as select key from T1_n40;
+create view V1 as select key from T1;
 
 show tables;
 
-describe T1_n40;
+describe T1;
 
-drop view V1_n3;
+drop view V1;
 
-drop table T1_n40;
+drop table T1;
 
 show databases;
 

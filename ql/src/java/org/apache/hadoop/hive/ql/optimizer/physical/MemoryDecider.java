@@ -17,31 +17,39 @@
  */
 package org.apache.hadoop.hive.ql.optimizer.physical;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Iterator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.Stack;
 import java.util.TreeSet;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
+import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
+import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.StatsTask;
 import org.apache.hadoop.hive.ql.exec.Task;
+import org.apache.hadoop.hive.ql.exec.tez.DagUtils;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.lib.TaskGraphWalker;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -50,9 +58,9 @@ import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
+import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
+import org.apache.hadoop.hive.ql.plan.TezEdgeProperty.EdgeType;
 import org.apache.hadoop.hive.ql.plan.TezWork;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * MemoryDecider is a simple physical optimizer that adjusts the memory layout of tez tasks.
@@ -64,7 +72,7 @@ public class MemoryDecider implements PhysicalPlanResolver {
 
   protected static transient final Logger LOG = LoggerFactory.getLogger(MemoryDecider.class);
 
-  public class MemoryCalculator implements SemanticDispatcher {
+  public class MemoryCalculator implements Dispatcher {
 
     private final long totalAvailableMemory; // how much to we have
     private final long minimumHashTableSize; // minimum size of ht completely in memory
@@ -83,7 +91,7 @@ public class MemoryDecider implements PhysicalPlanResolver {
     @Override
     public Object dispatch(Node nd, Stack<Node> stack, Object... nodeOutputs)
       throws SemanticException {
-      Task<?> currTask = (Task<?>) nd;
+      Task<? extends Serializable> currTask = (Task<? extends Serializable>) nd;
       if (currTask instanceof StatsTask) {
         currTask = ((StatsTask) currTask).getWork().getSourceTask();
       }
@@ -125,12 +133,12 @@ public class MemoryDecider implements PhysicalPlanResolver {
 
     private void evaluateOperators(BaseWork w, PhysicalContext pctx) throws SemanticException {
       // lets take a look at the operator memory requirements.
-      SemanticDispatcher disp = null;
+      Dispatcher disp = null;
       final Set<MapJoinOperator> mapJoins = new LinkedHashSet<MapJoinOperator>();
 
-      LinkedHashMap<SemanticRule, SemanticNodeProcessor> rules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+      Map<Rule, NodeProcessor> rules = new HashMap<Rule, NodeProcessor>();
       rules.put(new RuleRegExp("Map join memory estimator",
-              MapJoinOperator.getOperatorName() + "%"), new SemanticNodeProcessor() {
+              MapJoinOperator.getOperatorName() + "%"), new NodeProcessor() {
           @Override
           public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
               Object... nodeOutputs) {
@@ -140,7 +148,7 @@ public class MemoryDecider implements PhysicalPlanResolver {
         });
       disp = new DefaultRuleDispatcher(null, rules, null);
 
-      SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+      GraphWalker ogw = new DefaultGraphWalker(disp);
 
       ArrayList<Node> topNodes = new ArrayList<Node>();
       topNodes.addAll(w.getAllRootOperators());
@@ -166,7 +174,6 @@ public class MemoryDecider implements PhysicalPlanResolver {
         }
 
         Comparator<MapJoinOperator> comp = new Comparator<MapJoinOperator>() {
-            @Override
             public int compare(MapJoinOperator mj1, MapJoinOperator mj2) {
               if (mj1 == null || mj2 == null) {
                 throw new NullPointerException();
@@ -197,7 +204,9 @@ public class MemoryDecider implements PhysicalPlanResolver {
           }
 
           if (size < remainingSize) {
-            LOG.info("Setting " + size + " bytes needed for " + mj + " (in-mem)");
+            if (LOG.isInfoEnabled()) {
+              LOG.info("Setting " + size + " bytes needed for " + mj + " (in-mem)");
+            }
 
             mj.getConf().setMemoryNeeded(size);
             remainingSize -= size;
@@ -224,17 +233,23 @@ public class MemoryDecider implements PhysicalPlanResolver {
 
         for (MapJoinOperator mj : sortedMapJoins) {
           long size = (long)(weight * sizes.get(mj));
-          LOG.info("Setting " + size + " bytes needed for " + mj + " (spills)");
+          if (LOG.isInfoEnabled()) {
+            LOG.info("Setting " + size + " bytes needed for " + mj + " (spills)");
+          }
 
           mj.getConf().setMemoryNeeded(size);
         }
       } catch (HiveException e) {
         // if we have issues with stats, just scale linearily
         long size = totalAvailableMemory / mapJoins.size();
-        LOG.info("Scaling mapjoin memory w/o stats");
+        if (LOG.isInfoEnabled()) {
+          LOG.info("Scaling mapjoin memory w/o stats");
+        }
 
         for (MapJoinOperator mj : mapJoins) {
-          LOG.info("Setting " + size + " bytes needed for " + mj + " (fallback)");
+          if (LOG.isInfoEnabled()) {
+            LOG.info("Setting " + size + " bytes needed for " + mj + " (fallback)");
+          }
           mj.getConf().setMemoryNeeded(size);
         }
       }
@@ -259,7 +274,7 @@ public class MemoryDecider implements PhysicalPlanResolver {
       return size;
     }
 
-    public class DefaultRule implements SemanticNodeProcessor {
+    public class DefaultRule implements NodeProcessor {
 
       @Override
       public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -275,7 +290,7 @@ public class MemoryDecider implements PhysicalPlanResolver {
     pctx.getConf();
 
     // create dispatcher and graph walker
-    SemanticDispatcher disp = new MemoryCalculator(pctx);
+    Dispatcher disp = new MemoryCalculator(pctx);
     TaskGraphWalker ogw = new TaskGraphWalker(disp);
 
     // get all the tasks nodes from root task

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,10 +18,8 @@
 package org.apache.hadoop.hive.llap.cache;
 
 import java.util.List;
-import java.util.function.Predicate;
 
 import org.apache.hadoop.hive.common.io.Allocator;
-import org.apache.hadoop.hive.common.io.CacheTag;
 import org.apache.hadoop.hive.common.io.DataCache.BooleanRef;
 import org.apache.hadoop.hive.common.io.DataCache.DiskRangeListFactory;
 import org.apache.hadoop.hive.common.io.DiskRange;
@@ -40,14 +38,14 @@ public class SimpleBufferManager implements BufferUsageManager, LowLevelCache {
     this.metrics = metrics;
   }
 
-  private boolean lockBuffer(LlapAllocatorBuffer buffer) {
+  private boolean lockBuffer(LlapDataBuffer buffer) {
     int rc = buffer.incRef();
     if (rc <= 0) return false;
     metrics.incrCacheNumLockedBuffers();
     return true;
   }
 
-  private void unlockBuffer(LlapAllocatorBuffer buffer) {
+  private void unlockBuffer(LlapDataBuffer buffer) {
     if (buffer.decRef() == 0) {
       if (LlapIoImpl.CACHE_LOGGER.isTraceEnabled()) {
         LlapIoImpl.CACHE_LOGGER.trace("Deallocating {} that was not cached", buffer);
@@ -59,19 +57,19 @@ public class SimpleBufferManager implements BufferUsageManager, LowLevelCache {
 
   @Override
   public void decRefBuffer(MemoryBuffer buffer) {
-    unlockBuffer((LlapAllocatorBuffer)buffer);
+    unlockBuffer((LlapDataBuffer)buffer);
   }
 
   @Override
   public void decRefBuffers(List<MemoryBuffer> cacheBuffers) {
     for (MemoryBuffer b : cacheBuffers) {
-      unlockBuffer((LlapAllocatorBuffer)b);
+      unlockBuffer((LlapDataBuffer)b);
     }
   }
 
   @Override
   public boolean incRefBuffer(MemoryBuffer buffer) {
-    return lockBuffer((LlapAllocatorBuffer)buffer);
+    return lockBuffer((LlapDataBuffer)buffer);
   }
 
   @Override
@@ -86,10 +84,11 @@ public class SimpleBufferManager implements BufferUsageManager, LowLevelCache {
   }
 
   @Override
-  public long[] putFileData(Object fileKey, DiskRange[] ranges, MemoryBuffer[] chunks,
-      long baseOffset, Priority priority, LowLevelCacheCounters qfCounters, CacheTag tag) {
+  public long[] putFileData(Object fileKey, DiskRange[] ranges,
+      MemoryBuffer[] chunks, long baseOffset, Priority priority,
+      LowLevelCacheCounters qfCounters) {
     for (int i = 0; i < chunks.length; ++i) {
-      LlapAllocatorBuffer buffer = (LlapAllocatorBuffer)chunks[i];
+      LlapDataBuffer buffer = (LlapDataBuffer)chunks[i];
       if (LlapIoImpl.LOCKING_LOGGER.isTraceEnabled()) {
         LlapIoImpl.LOCKING_LOGGER.trace("Locking {} at put time (no cache)", buffer);
       }
@@ -101,11 +100,6 @@ public class SimpleBufferManager implements BufferUsageManager, LowLevelCache {
 
   @Override
   public void notifyEvicted(MemoryBuffer buffer) {
-    throw new UnsupportedOperationException("Buffer manager doesn't have cache");
-  }
-
-  @Override
-  public long markBuffersForProactiveEviction(Predicate<CacheTag> predicate, boolean isInstantDeallocation) {
     throw new UnsupportedOperationException("Buffer manager doesn't have cache");
   }
 }

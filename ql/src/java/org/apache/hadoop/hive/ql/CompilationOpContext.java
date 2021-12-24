@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,11 +18,7 @@
 
 package org.apache.hadoop.hive.ql;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import org.apache.hadoop.hive.ql.parse.ColumnStatsList;
 
 /**
  * A subset of compilation context that is passed to operators to get rid of some globals.
@@ -33,15 +29,8 @@ import org.apache.hadoop.hive.ql.parse.ColumnStatsList;
  */
 public class CompilationOpContext {
   private final AtomicInteger opSeqId = new AtomicInteger(0);
-  private final Map<String, ColumnStatsList> colStatsCache =
-      new HashMap<>();
 
   public int nextOperatorId() {
     return opSeqId.getAndIncrement();
   }
-
-  public Map<String, ColumnStatsList> getColStatsCache() {
-    return colStatsCache;
-  }
-
 }

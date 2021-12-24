@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,14 +25,12 @@ import org.apache.hadoop.hive.cli.control.CliConfigs;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.Ignore;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-@Ignore("This test will be enabled after accumulo is upgraded to 2.X version")
 public class TestAccumuloCliDriver {
 
   static CliAdapter adapter = new CliConfigs.AccumuloCliConfig().getCliAdapter();

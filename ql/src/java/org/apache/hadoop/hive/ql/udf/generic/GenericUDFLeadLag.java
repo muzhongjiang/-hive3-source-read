@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -146,9 +146,7 @@ public abstract class GenericUDFLeadLag extends GenericUDF {
 
   @Override
   public String getDisplayString(String[] children) {
-    if (children.length != 2) {
-      return _getFnName() + "(...)";
-    }
+    assert (children.length == 2);
     return getStandardDisplayString(_getFnName(), children);
   }
 

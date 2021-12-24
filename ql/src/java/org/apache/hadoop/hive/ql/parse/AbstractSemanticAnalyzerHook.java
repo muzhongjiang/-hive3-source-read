@@ -32,6 +32,6 @@ HiveSemanticAnalyzerHook {
   }
 
   public void postAnalyze(HiveSemanticAnalyzerHookContext context,
-      List<Task<?>> rootTasks) throws SemanticException {
+      List<Task<? extends Serializable>> rootTasks) throws SemanticException {
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -119,7 +119,7 @@ public class HiveProjectFilterPullUpConstantsRule extends RelOptRule {
         case IS_NULL:
           conditions.put(conjCall.operands.get(0).toString(),
                   relBuilder.getRexBuilder().makeNullLiteral(
-                          conjCall.operands.get(0).getType()));
+                          conjCall.operands.get(0).getType().getSqlTypeName()));
       }
     }
 

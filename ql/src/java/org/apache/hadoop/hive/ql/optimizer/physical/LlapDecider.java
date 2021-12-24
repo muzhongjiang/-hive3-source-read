@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,7 +24,9 @@ import static org.apache.hadoop.hive.ql.optimizer.physical.LlapDecider.LlapMode.
 import static org.apache.hadoop.hive.ql.optimizer.physical.LlapDecider.LlapMode.map;
 import static org.apache.hadoop.hive.ql.optimizer.physical.LlapDecider.LlapMode.none;
 
+import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.EnumSet;
@@ -49,15 +51,16 @@ import org.apache.hadoop.hive.ql.exec.SelectOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedInputFormatInterface;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.lib.TaskGraphWalker;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -103,22 +106,14 @@ public class LlapDecider implements PhysicalPlanResolver {
   }
 
   private LlapMode mode;
-  private final LlapClusterStateForCompile clusterState;
 
-  public LlapDecider(LlapClusterStateForCompile clusterState) {
-    this.clusterState = clusterState;
-  }
-
-
-  class LlapDecisionDispatcher implements SemanticDispatcher {
+  class LlapDecisionDispatcher implements Dispatcher {
     private final HiveConf conf;
     private final boolean doSkipUdfCheck;
     private final boolean arePermanentFnsAllowed;
     private final boolean shouldUber;
-    private final float minReducersPerExec;
-    private final int executorsPerNode;
     private List<MapJoinOperator> mapJoinOpList;
-    private final Map<SemanticRule, SemanticNodeProcessor> rules;
+    private final Map<Rule, NodeProcessor> rules;
 
     public LlapDecisionDispatcher(PhysicalContext pctx, LlapMode mode) {
       conf = pctx.getConf();
@@ -126,9 +121,6 @@ public class LlapDecider implements PhysicalPlanResolver {
       arePermanentFnsAllowed = HiveConf.getBoolVar(conf, ConfVars.LLAP_ALLOW_PERMANENT_FNS);
       // Don't user uber in "all" mode - everything can go into LLAP, which is better than uber.
       shouldUber = HiveConf.getBoolVar(conf, ConfVars.LLAP_AUTO_ALLOW_UBER) && (mode != all);
-      minReducersPerExec = HiveConf.getFloatVar(
-          conf, ConfVars.TEZ_LLAP_MIN_REDUCER_PER_EXECUTOR);
-      executorsPerNode = HiveConf.getIntVar(conf, ConfVars.LLAP_DAEMON_NUM_EXECUTORS);
       mapJoinOpList = new ArrayList<MapJoinOperator>();
       rules = getRules();
     }
@@ -137,7 +129,7 @@ public class LlapDecider implements PhysicalPlanResolver {
     public Object dispatch(Node nd, Stack<Node> stack, Object... nodeOutputs)
       throws SemanticException {
       @SuppressWarnings("unchecked")
-      Task<?> currTask = (Task<?>) nd;
+      Task<? extends Serializable> currTask = (Task<? extends Serializable>) nd;
       if (currTask instanceof TezTask) {
         TezWork work = ((TezTask) currTask).getWork();
         for (BaseWork w: work.getAllWork()) {
@@ -147,60 +139,20 @@ public class LlapDecider implements PhysicalPlanResolver {
       return null;
     }
 
-    private void handleWork(TezWork tezWork, BaseWork work) throws SemanticException {
+    private void handleWork(TezWork tezWork, BaseWork work)
+      throws SemanticException {
       boolean workCanBeDoneInLlap = evaluateWork(tezWork, work);
       LOG.debug(
           "Work " + work + " " + (workCanBeDoneInLlap ? "can" : "cannot") + " be done in LLAP");
       if (workCanBeDoneInLlap) {
         for (MapJoinOperator graceMapJoinOp : mapJoinOpList) {
-          LOG.debug("Disabling hybrid grace hash join in case of LLAP "
-              + "and non-dynamic partition hash join.");
+          LOG.debug(
+              "Disabling hybrid grace hash join in case of LLAP and non-dynamic partition hash join.");
           graceMapJoinOp.getConf().setHybridHashJoin(false);
         }
-        adjustAutoParallelism(work);
-        
         convertWork(tezWork, work);
       }
       mapJoinOpList.clear();
-    }
-
-    private void adjustAutoParallelism(BaseWork work) {
-      if (minReducersPerExec <= 0 || !(work instanceof ReduceWork)) return;
-      ReduceWork reduceWork = (ReduceWork)work;
-      if (reduceWork.isAutoReduceParallelism() == false && reduceWork.isUniformDistribution() == false) {
-        return; // Not based on ARP and cannot assume uniform distribution, bail.
-      }
-      clusterState.initClusterInfo();
-      final int targetCount;
-      final int executorCount;
-      final int maxReducers = conf.getIntVar(HiveConf.ConfVars.MAXREDUCERS);
-      if (!clusterState.hasClusterInfo()) {
-        LOG.warn("Cannot determine LLAP cluster information");
-        executorCount = executorsPerNode; // assume 1 node
-      } else {
-        executorCount =
-            clusterState.getKnownExecutorCount() + executorsPerNode
-                * clusterState.getNodeCountWithUnknownExecutors();
-      }
-      targetCount = Math.min(maxReducers, (int) Math.ceil(minReducersPerExec * executorCount));
-      // We only increase the targets here, but we stay below maxReducers
-      if (reduceWork.isAutoReduceParallelism()) {
-        // Do not exceed the configured max reducers.
-        int newMin = Math.min(maxReducers, Math.max(reduceWork.getMinReduceTasks(), targetCount));
-        if (newMin < reduceWork.getMaxReduceTasks()) {
-          reduceWork.setMinReduceTasks(newMin);
-          reduceWork.getEdgePropRef().setAutoReduce(conf, true, newMin,
-              reduceWork.getMaxReduceTasks(), conf.getLongVar(HiveConf.ConfVars.BYTESPERREDUCER));
-        } else {
-          reduceWork.setAutoReduceParallelism(false);
-          reduceWork.setNumReduceTasks(newMin);
-          // TODO: is this correct? based on the same logic as HIVE-14200
-          reduceWork.getEdgePropRef().setAutoReduce(null, false, 0, 0, 0);
-        }
-      } else {
-        // UNIFORM || AUTOPARALLEL (maxed out)
-        reduceWork.setNumReduceTasks(Math.max(reduceWork.getNumReduceTasks(), targetCount));
-      }
     }
 
 
@@ -314,7 +266,7 @@ public class LlapDecider implements PhysicalPlanResolver {
       exprs.add(expr);
       while (!exprs.isEmpty()) {
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Checking '{}'",expr.getExprString());
+          LOG.debug(String.format("Checking '%s'",expr.getExprString()));
         }
 
         ExprNodeDesc cur = exprs.removeFirst();
@@ -344,7 +296,7 @@ public class LlapDecider implements PhysicalPlanResolver {
 
     private boolean checkAggregator(AggregationDesc agg) throws SemanticException {
       if (LOG.isDebugEnabled()) {
-        LOG.debug("Checking '{}'", agg.getExprString());
+        LOG.debug(String.format("Checking '%s'", agg.getExprString()));
       }
 
       boolean result = checkExpressions(agg.getParameters());
@@ -375,64 +327,71 @@ public class LlapDecider implements PhysicalPlanResolver {
       return true;
     }
 
-    private Map<SemanticRule, SemanticNodeProcessor> getRules() {
-      Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    private Map<Rule, NodeProcessor> getRules() {
+      Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
       opRules.put(new RuleRegExp("No scripts", ScriptOperator.getOperatorName() + "%"),
-          new SemanticNodeProcessor() {
+          new NodeProcessor() {
           @Override
           public Object process(Node n, Stack<Node> s, NodeProcessorCtx c,
               Object... os) {
             LOG.debug("Cannot run operator [" + n + "] in llap mode.");
-              return Boolean.FALSE;
+            return new Boolean(false);
           }
         });
-      opRules.put(new RuleRegExp("No user code in fil", FilterOperator.getOperatorName() + "%"), new SemanticNodeProcessor() {
-        @Override
-        public Object process(Node n, Stack<Node> s, NodeProcessorCtx c, Object... os) {
-          ExprNodeDesc expr = ((FilterOperator) n).getConf().getPredicate();
-          boolean retval = checkExpression(expr);
-          if (!retval) {
-            LOG.info("Cannot run filter operator [" + n + "] in llap mode");
-          }
-          return Boolean.valueOf(retval);
-        }
-      });
-      opRules.put(new RuleRegExp("No user code in gby", GroupByOperator.getOperatorName() + "%"), new SemanticNodeProcessor() {
-        @Override
-        public Object process(Node n, Stack<Node> s, NodeProcessorCtx c, Object... os) {
-          @SuppressWarnings("unchecked")
-          List<AggregationDesc> aggs = ((Operator<GroupByDesc>) n).getConf().getAggregators();
-          boolean retval = checkAggregators(aggs);
-          if (!retval) {
-            LOG.info("Cannot run group by operator [" + n + "] in llap mode");
-          }
-          return Boolean.valueOf(retval);
-        }
-      });
-      opRules.put(new RuleRegExp("No user code in select", SelectOperator.getOperatorName() + "%"),
-          new SemanticNodeProcessor() {
-            @Override
-            public Object process(Node n, Stack<Node> s, NodeProcessorCtx c, Object... os) {
-              @SuppressWarnings({"unchecked"})
-              List<ExprNodeDesc> exprs = ((Operator<SelectDesc>) n).getConf().getColList();
-              boolean retval = checkExpressions(exprs);
-              if (!retval) {
-                LOG.info("Cannot run select operator [" + n + "] in llap mode");
-              }
-              return Boolean.valueOf(retval);
+      opRules.put(new RuleRegExp("No user code in fil", FilterOperator.getOperatorName() + "%"),
+          new NodeProcessor() {
+          @Override
+          public Object process(Node n, Stack<Node> s, NodeProcessorCtx c,
+              Object... os) {
+            ExprNodeDesc expr = ((FilterOperator)n).getConf().getPredicate();
+            Boolean retval = new Boolean(checkExpression(expr));
+            if (!retval) {
+              LOG.info("Cannot run filter operator [" + n + "] in llap mode");
             }
-          });
+            return new Boolean(retval);
+          }
+        });
+      opRules.put(new RuleRegExp("No user code in gby", GroupByOperator.getOperatorName() + "%"),
+          new NodeProcessor() {
+          @Override
+          public Object process(Node n, Stack<Node> s, NodeProcessorCtx c,
+              Object... os) {
+            @SuppressWarnings("unchecked")
+            List<AggregationDesc> aggs = ((Operator<GroupByDesc>) n).getConf().getAggregators();
+            Boolean retval = new Boolean(checkAggregators(aggs));
+            if (!retval) {
+              LOG.info("Cannot run group by operator [" + n + "] in llap mode");
+            }
+            return new Boolean(retval);
+          }
+        });
+      opRules.put(new RuleRegExp("No user code in select", SelectOperator.getOperatorName() + "%"),
+          new NodeProcessor() {
+          @Override
+          public Object process(Node n, Stack<Node> s, NodeProcessorCtx c,
+              Object... os) {
+            @SuppressWarnings({ "unchecked" })
+            List<ExprNodeDesc> exprs = ((Operator<SelectDesc>) n).getConf().getColList();
+            Boolean retval = new Boolean(checkExpressions(exprs));
+            if (!retval) {
+              LOG.info("Cannot run select operator [" + n + "] in llap mode");
+            }
+            return new Boolean(retval);
+          }
+        });
 
       if (!conf.getBoolVar(HiveConf.ConfVars.LLAP_ENABLE_GRACE_JOIN_IN_LLAP)) {
-        opRules.put(new RuleRegExp("Disable grace hash join if LLAP mode and not dynamic partition hash join",
-            MapJoinOperator.getOperatorName() + "%"), new SemanticNodeProcessor() {
+        opRules.put(
+            new RuleRegExp("Disable grace hash join if LLAP mode and not dynamic partition hash join",
+                MapJoinOperator.getOperatorName() + "%"), new NodeProcessor() {
               @Override
               public Object process(Node n, Stack<Node> s, NodeProcessorCtx c, Object... os) {
                 MapJoinOperator mapJoinOp = (MapJoinOperator) n;
-                if (mapJoinOp.getConf().isHybridHashJoin() && !(mapJoinOp.getConf().isDynamicPartitionHashJoin())) {
+                if (mapJoinOp.getConf().isHybridHashJoin()
+                    && !(mapJoinOp.getConf().isDynamicPartitionHashJoin())) {
                   mapJoinOpList.add((MapJoinOperator) n);
                 }
-                return Boolean.TRUE;
+                return new Boolean(true);
               }
             });
       }
@@ -443,8 +402,8 @@ public class LlapDecider implements PhysicalPlanResolver {
     private boolean evaluateOperators(BaseWork work) throws SemanticException {
       // lets take a look at the operators. we're checking for user
       // code in those. we will not run that in llap.
-      SemanticDispatcher disp = new DefaultRuleDispatcher(null, rules, null);
-      SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+      Dispatcher disp = new DefaultRuleDispatcher(null, rules, null);
+      GraphWalker ogw = new DefaultGraphWalker(disp);
 
       ArrayList<Node> topNodes = new ArrayList<Node>();
       topNodes.addAll(work.getAllRootOperators());
@@ -474,11 +433,9 @@ public class LlapDecider implements PhysicalPlanResolver {
 
     private boolean checkInputsVectorized(MapWork mapWork) {
       boolean mayWrap = HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_NONVECTOR_WRAPPER_ENABLED);
-      Collection<Class<?>> excludedInputFormats = Utilities.getClassNamesFromConfig(conf, ConfVars.HIVE_VECTORIZATION_VECTORIZED_INPUT_FILE_FORMAT_EXCLUDES);
       for (PartitionDesc pd : mapWork.getPathToPartitionInfo().values()) {
-        if ((Utilities.isInputFileFormatVectorized(pd) && !excludedInputFormats
-            .contains(pd.getInputFileFormatClass())) || (mayWrap && HiveInputFormat
-            .canWrapForLlap(pd.getInputFileFormatClass(), true))) {
+        if (Utilities.isInputFileFormatVectorized(pd) || (mayWrap
+            && HiveInputFormat.canWrapForLlap(pd.getInputFileFormatClass(), true))) {
           continue;
         }
         LOG.info("Input format: " + pd.getInputFileFormatClassName()
@@ -539,7 +496,7 @@ public class LlapDecider implements PhysicalPlanResolver {
     }
 
     // create dispatcher and graph walker
-    SemanticDispatcher disp = new LlapDecisionDispatcher(pctx, mode);
+    Dispatcher disp = new LlapDecisionDispatcher(pctx, mode);
     TaskGraphWalker ogw = new TaskGraphWalker(disp);
 
     // get all the tasks nodes from root task

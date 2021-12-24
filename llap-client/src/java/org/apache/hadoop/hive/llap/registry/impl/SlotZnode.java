@@ -1,21 +1,21 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+  /**
+   * Licensed to the Apache Software Foundation (ASF) under one
+   * or more contributor license agreements.  See the NOTICE file
+   * distributed with this work for additional information
+   * regarding copyright ownership.  The ASF licenses this file
+   * to you under the Apache License, Version 2.0 (the
+   * "License"); you may not use this file except in compliance
+   * with the License.  You may obtain a copy of the License at
+   *
+   *   http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing,
+   * software distributed under the License is distributed on an
+   * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   * KIND, either express or implied.  See the License for the
+   * specific language governing permissions and limitations
+   * under the License.
+   */
 package org.apache.hadoop.hive.llap.registry.impl;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -256,7 +256,9 @@ public class SlotZnode implements Closeable {
   private void processCreateResult(CuratorFramework client, CuratorEvent event) throws Exception {
     boolean doesExist = event.getResultCode() == KeeperException.Code.NODEEXISTS.intValue();
     if (!doesExist && event.getResultCode() != KeeperException.Code.OK.intValue()) {
-      LOG.info("Trying to reacquire due to create error: " + event);
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Trying to reacquire due to create error: " + event);
+      }
       startCreateCurrentNode(); // TODO: a pattern from Curator. Better error handling?
       return;
     }
@@ -299,7 +301,10 @@ public class SlotZnode implements Closeable {
     if (Arrays.equals(actual, data)) {
       handleCreatedNode(path);
     } else {
-      LOG.info("Data at {} is from a different node: {} (we are {})", path, new String(actual, CHARSET), dataStr);
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Data at {} is from a different node: {} (we are {})",
+            path, new String(actual, CHARSET), dataStr);
+      }
       nodePath.getAndSet(null);
       chooseSlotToTake(); // Try another slot.
       startCreateCurrentNode();

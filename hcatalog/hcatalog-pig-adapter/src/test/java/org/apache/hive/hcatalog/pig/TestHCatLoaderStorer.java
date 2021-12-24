@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,6 +22,7 @@ package org.apache.hive.hcatalog.pig;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hive.hcatalog.HcatTestUtils;
 import org.apache.hive.hcatalog.mapreduce.HCatBaseTest;
+import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
 import org.apache.pig.backend.executionengine.ExecJob;
 import org.apache.pig.data.DataType;
@@ -65,8 +66,8 @@ public class TestHCatLoaderStorer extends HCatBaseTest {
       " row format delimited fields terminated by '\t' stored as textfile location '" +
       dataDir.toURI().getPath() + "'", driver);
     AbstractHCatLoaderTest.dropTable(tblName2, driver);
-    AbstractHCatLoaderTest.createTableDefaultDB(tblName2, "my_small_int smallint, " +
-            "my_tiny_int " + "tinyint", null, driver, "textfile");
+    AbstractHCatLoaderTest.createTable(tblName2, "my_small_int smallint, my_tiny_int tinyint", null, driver,
+      "textfile");
 
     LOG.debug("File=" + INPUT_FILE_NAME);
     TestHCatStorer.dumpFile(INPUT_FILE_NAME);
@@ -119,14 +120,14 @@ public class TestHCatLoaderStorer extends HCatBaseTest {
     });
 
     // Create a table with smallint/tinyint columns, load data, and query from Hive.
-    driver.run("drop table if exists " + readTblName);
-    driver.run("create external table " + readTblName +
-        " (my_small_int smallint, my_tiny_int tinyint)" +
-        " row format delimited fields terminated by '\t' stored as textfile");
-    driver.run("load data local inpath '" +
-        dataDir.getPath().replaceAll("\\\\", "/") + "' into table " + readTblName);
+    Assert.assertEquals(0, driver.run("drop table if exists " + readTblName).getResponseCode());
+    Assert.assertEquals(0, driver.run("create external table " + readTblName +
+      " (my_small_int smallint, my_tiny_int tinyint)" +
+      " row format delimited fields terminated by '\t' stored as textfile").getResponseCode());
+    Assert.assertEquals(0, driver.run("load data local inpath '" +
+      dataDir.getPath().replaceAll("\\\\", "/") + "' into table " + readTblName).getResponseCode());
 
-    PigServer server = HCatBaseTest.createPigServer(false);
+    PigServer server = new PigServer(ExecType.LOCAL);
     server.registerQuery(
       "data = load '" + readTblName + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
 
@@ -141,18 +142,18 @@ public class TestHCatLoaderStorer extends HCatBaseTest {
     // Ensure Pig can read data correctly.
     Iterator<Tuple> it = server.openIterator("data");
     Tuple t = it.next();
-    Assert.assertEquals(Integer.valueOf(Short.MIN_VALUE), t.get(0));
-    Assert.assertEquals(Integer.valueOf(Byte.MIN_VALUE), t.get(1));
+    Assert.assertEquals(new Integer(Short.MIN_VALUE), t.get(0));
+    Assert.assertEquals(new Integer(Byte.MIN_VALUE), t.get(1));
     t = it.next();
-    Assert.assertEquals(Integer.valueOf(Short.MAX_VALUE), t.get(0));
-    Assert.assertEquals(Integer.valueOf(Byte.MAX_VALUE), t.get(1));
+    Assert.assertEquals(new Integer(Short.MAX_VALUE), t.get(0));
+    Assert.assertEquals(new Integer(Byte.MAX_VALUE), t.get(1));
     Assert.assertFalse(it.hasNext());
 
     // Ensure Pig can write correctly to smallint/tinyint columns. This means values within the
     // bounds of the column type are written, and values outside throw an exception.
-    driver.run("drop table if exists " + writeTblName);
-    driver.run("create table " + writeTblName +
-        " (my_small_int smallint, my_tiny_int tinyint) stored as rcfile");
+    Assert.assertEquals(0, driver.run("drop table if exists " + writeTblName).getResponseCode());
+    Assert.assertEquals(0, driver.run("create table " + writeTblName +
+      " (my_small_int smallint, my_tiny_int tinyint) stored as rcfile").getResponseCode());
 
     // Values within the column type bounds.
     HcatTestUtils.createTestDataFile(writeDataFile.getAbsolutePath(), new String[]{
@@ -181,10 +182,11 @@ public class TestHCatLoaderStorer extends HCatBaseTest {
 
   private void smallTinyIntBoundsCheckHelper(String data, ExecJob.JOB_STATUS expectedStatus)
     throws Exception {
-    driver.run("drop table if exists test_tbl");
-    driver.run("create table test_tbl (my_small_int smallint, my_tiny_int tinyint) stored as rcfile");
+    Assert.assertEquals(0, driver.run("drop table if exists test_tbl").getResponseCode());
+    Assert.assertEquals(0, driver.run("create table test_tbl" +
+      " (my_small_int smallint, my_tiny_int tinyint) stored as rcfile").getResponseCode());
 
-    PigServer server = HCatBaseTest.createPigServer(false);
+    PigServer server = new PigServer(ExecType.LOCAL);
     server.setBatchOn();
     server.registerQuery("data = load '" + data +
       "' using PigStorage('\t') as (my_small_int:int, my_tiny_int:int);");

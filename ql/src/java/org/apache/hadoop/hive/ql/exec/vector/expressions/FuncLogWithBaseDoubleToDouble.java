@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,21 +21,19 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 
 
-public class FuncLogWithBaseDoubleToDouble extends MathFuncDoubleToDouble {
+public class FuncLogWithBaseDoubleToDouble extends MathFuncDoubleToDouble
+    implements ISetDoubleArg {
   private static final long serialVersionUID = 1L;
 
-  private final double base;
+  private double base;
 
-  public FuncLogWithBaseDoubleToDouble(double scalarVal, int colNum, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  public FuncLogWithBaseDoubleToDouble(double scalarVal, int colNum, int outputColumn) {
+    super(colNum, outputColumn);
     this.base = scalarVal;
   }
 
   public FuncLogWithBaseDoubleToDouble() {
     super();
-
-    // Dummy final assignments.
-    base = 0;
   }
 
   @Override
@@ -45,6 +43,16 @@ public class FuncLogWithBaseDoubleToDouble extends MathFuncDoubleToDouble {
 
   public double getBase() {
     return base;
+  }
+
+  public void setBase(double base) {
+    this.base = base;
+  }
+
+  // used to set the second argument to function (a constant base)
+  @Override
+  public void setArg(double d) {
+    this.base = d;
   }
 
   @Override

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,6 +21,7 @@ package org.apache.hive.hcatalog.templeton;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -35,11 +36,6 @@ import org.slf4j.LoggerFactory;
 
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
 
 /*
  * Base class for mocking job operations with concurrent requests.
@@ -92,8 +88,8 @@ public class ConcurrentJobRequestsTestBase {
     StatusDelegator delegator = new StatusDelegator(appConfig);
     final StatusDelegator mockDelegator = Mockito.spy(delegator);
 
-    doAnswer(answer).when(mockDelegator).getJobStatus(any(String.class),
-                             any(String.class));
+    Mockito.doAnswer(answer).when(mockDelegator).getJobStatus(Mockito.any(String.class),
+                             Mockito.any(String.class));
 
     JobRunnable statusJobRunnable = new JobRunnable() {
       @Override
@@ -120,9 +116,9 @@ public class ConcurrentJobRequestsTestBase {
     ListDelegator delegator = new ListDelegator(config);
     final ListDelegator mockDelegator = Mockito.spy(delegator);
 
-    doAnswer(answer).when(mockDelegator).listJobs(any(String.class),
-                             any(boolean.class), any(String.class),
-                             any(int.class), any(boolean.class));
+    Mockito.doAnswer(answer).when(mockDelegator).listJobs(Mockito.any(String.class),
+                             Mockito.any(boolean.class), Mockito.any(String.class),
+                             Mockito.any(int.class), Mockito.any(boolean.class));
 
     JobRunnable listJobRunnable = new JobRunnable() {
       @Override
@@ -153,19 +149,18 @@ public class ConcurrentJobRequestsTestBase {
 
     TempletonControllerJob mockCtrl = Mockito.mock(TempletonControllerJob.class);
 
-    doReturn(jobIdResponse).when(mockCtrl).getSubmittedId();
+    Mockito.doReturn(jobIdResponse).when(mockCtrl).getSubmittedId();
 
-    doReturn(mockCtrl).when(mockDelegator).getTempletonController();
+    Mockito.doReturn(mockCtrl).when(mockDelegator).getTempletonController();
 
-    doAnswer(responseAnswer).when(mockDelegator).runTempletonControllerJob(
-              any(TempletonControllerJob.class), any(List.class));
+    Mockito.doAnswer(responseAnswer).when(mockDelegator).runTempletonControllerJob(
+              Mockito.any(TempletonControllerJob.class), Mockito.any(List.class));
 
-    doAnswer(timeoutResponseAnswer).when(mockDelegator).killJob(
-              any(String.class), any(String.class));
+    Mockito.doAnswer(timeoutResponseAnswer).when(mockDelegator).killJob(
+              Mockito.any(String.class), Mockito.any(String.class));
 
-    // UserArgs Map can be null - thus use any()
-    doNothing().when(mockDelegator).registerJob(any(String.class),
-           any(String.class), any(String.class), any());
+    Mockito.doNothing().when(mockDelegator).registerJob(Mockito.any(String.class),
+           Mockito.any(String.class), Mockito.any(String.class), Mockito.any(Map.class));
 
     JobRunnable submitJobRunnable = new JobRunnable() {
       @Override

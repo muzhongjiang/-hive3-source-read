@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,17 +17,19 @@
  */
 package org.apache.hadoop.hive.ql.udf.generic;
 
-import org.apache.hadoop.hive.common.type.Date;
-import org.apache.hadoop.hive.common.type.Timestamp;
+import java.sql.Date;
+import java.sql.Timestamp;
+
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorUDFDateLong;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorUDFDateString;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorUDFDateTimestamp;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
@@ -47,15 +49,16 @@ import org.apache.hive.common.util.DateParser;
     extended = "Example:\n "
         + "  > SELECT _FUNC_('2009-07-30 04:17:52') FROM src LIMIT 1;\n"
         + "  '2009-07-30'")
-@VectorizedExpressions({VectorUDFDateString.class, VectorUDFDateTimestamp.class})
+@VectorizedExpressions({VectorUDFDateString.class, VectorUDFDateLong.class, VectorUDFDateTimestamp.class})
 public class GenericUDFDate extends GenericUDF {
   private transient TimestampConverter timestampConverter;
   private transient Converter textConverter;
   private transient Converter dateWritableConverter;
   private transient PrimitiveCategory inputType;
   private transient PrimitiveObjectInspector argumentOI;
-  private transient final DateWritableV2 output = new DateWritableV2();
-  private transient final Date date = new Date();
+  private transient DateParser dateParser = new DateParser();
+  private transient final DateWritable output = new DateWritable();
+  private transient final Date date = new Date(0);
 
   @Override
   public ObjectInspector initialize(ObjectInspector[] arguments) throws UDFArgumentException {
@@ -84,7 +87,6 @@ public class GenericUDFDate extends GenericUDF {
       timestampConverter = new TimestampConverter(argumentOI,
         PrimitiveObjectInspectorFactory.writableTimestampObjectInspector);
       break;
-    case TIMESTAMPLOCALTZ:
     case DATE:
       dateWritableConverter = ObjectInspectorConverters.getConverter(argumentOI,
           PrimitiveObjectInspectorFactory.writableDateObjectInspector);
@@ -107,20 +109,19 @@ public class GenericUDFDate extends GenericUDF {
       throw new UDFArgumentException("TO_DATE() received non-null object of VOID type");
     case STRING:
       String dateString = textConverter.convert(arguments[0].get()).toString();
-      if (DateParser.parseDate(dateString, date)) {
+      if (dateParser.parseDate(dateString, date)) {
         output.set(date);
       } else {
         return null;
       }
       break;
     case TIMESTAMP:
-      Timestamp ts = ((TimestampWritableV2) timestampConverter.convert(arguments[0].get()))
+      Timestamp ts = ((TimestampWritable) timestampConverter.convert(arguments[0].get()))
           .getTimestamp();
-      output.set(DateWritableV2.millisToDays(ts.toEpochMilli()));
+      output.set(DateWritable.millisToDays(ts.getTime()));
       break;
-    case TIMESTAMPLOCALTZ:
     case DATE:
-      DateWritableV2 dw = (DateWritableV2) dateWritableConverter.convert(arguments[0].get());
+      DateWritable dw = (DateWritable) dateWritableConverter.convert(arguments[0].get());
       output.set(dw);
       break;
     default:

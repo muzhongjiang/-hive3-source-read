@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,15 +24,12 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggreg
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriter;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriterFactory;
 import org.apache.hadoop.hive.ql.exec.vector.VectorAggregationBufferRow;
-import org.apache.hadoop.hive.ql.exec.vector.VectorAggregationDesc;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.IntervalDayTimeColumnVector;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.AggregationDesc;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.Mode;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 
 /**
@@ -62,7 +59,7 @@ public class <ClassName> extends VectorAggregateExpression {
         value = new HiveIntervalDayTime();
       }
 
-      public void minmaxValue(IntervalDayTimeColumnVector colVector, int index) {
+      public void checkValue(IntervalDayTimeColumnVector colVector, int index) {
         if (isNull) {
           isNull = false;
           colVector.intervalDayTimeUpdate(this.value, index);
@@ -83,17 +80,28 @@ public class <ClassName> extends VectorAggregateExpression {
       }
     }
 
-  // This constructor is used to momentarily create the object so match can be called.
-  public <ClassName>() {
-    super();
-  }
+    private VectorExpression inputExpression;
 
-  public <ClassName>(VectorAggregationDesc vecAggrDesc) {
-    super(vecAggrDesc);
-    init();
-  }
+    @Override
+    public VectorExpression inputExpression() {
+      return inputExpression;
+    }
 
-    private void init() {
+    private transient VectorExpressionWriter resultWriter;
+
+    public <ClassName>(VectorExpression inputExpression) {
+      this();
+      this.inputExpression = inputExpression;
+    }
+
+    public <ClassName>() {
+      super();
+    }
+
+    @Override
+    public void init(AggregationDesc desc) throws HiveException {
+      resultWriter = VectorExpressionWriterFactory.genVectorExpressionWritable(
+          desc.getParameters().get(0));
     }
 
     private Aggregation getCurrentAggregationBuffer(
@@ -119,9 +127,8 @@ public class <ClassName> extends VectorAggregateExpression {
 
       inputExpression.evaluate(batch);
 
-      IntervalDayTimeColumnVector inputColVector =
-          (IntervalDayTimeColumnVector) batch.cols[
-              this.inputExpression.getOutputColumnNum()];
+      IntervalDayTimeColumnVector inputColVector = (IntervalDayTimeColumnVector)batch.
+        cols[this.inputExpression.getOutputColumn()];
 
       if (inputColVector.noNulls) {
         if (inputColVector.isRepeating) {
@@ -141,9 +148,15 @@ public class <ClassName> extends VectorAggregateExpression {
         }
       } else {
         if (inputColVector.isRepeating) {
-          iterateHasNullsRepeatingWithAggregationSelection(
-            aggregationBufferSets, aggregrateIndex,
-            inputColVector, batchSize, inputColVector.isNull);
+          if (batch.selectedInUse) {
+            iterateHasNullsRepeatingSelectionWithAggregationSelection(
+              aggregationBufferSets, aggregrateIndex,
+              inputColVector, batchSize, batch.selected, inputColVector.isNull);
+          } else {
+            iterateHasNullsRepeatingWithAggregationSelection(
+              aggregationBufferSets, aggregrateIndex,
+              inputColVector, batchSize, inputColVector.isNull);
+          }
         } else {
           if (batch.selectedInUse) {
             iterateHasNullsSelectionWithAggregationSelection(
@@ -170,7 +183,7 @@ public class <ClassName> extends VectorAggregateExpression {
           aggregrateIndex,
           i);
         // Repeating use index 0.
-        myagg.minmaxValue(inputColVector, 0);
+        myagg.checkValue(inputColVector, 0);
       }
     }
 
@@ -186,7 +199,7 @@ public class <ClassName> extends VectorAggregateExpression {
           aggregationBufferSets,
           aggregrateIndex,
           i);
-        myagg.minmaxValue(inputColVector, selection[i]);
+        myagg.checkValue(inputColVector, selection[i]);
       }
     }
 
@@ -200,8 +213,29 @@ public class <ClassName> extends VectorAggregateExpression {
           aggregationBufferSets,
           aggregrateIndex,
           i);
-        myagg.minmaxValue(inputColVector, i);
+        myagg.checkValue(inputColVector, i);
       }
+    }
+
+    private void iterateHasNullsRepeatingSelectionWithAggregationSelection(
+      VectorAggregationBufferRow[] aggregationBufferSets,
+      int aggregrateIndex,
+      IntervalDayTimeColumnVector inputColVector,
+      int batchSize,
+      int[] selection,
+      boolean[] isNull) {
+
+      for (int i=0; i < batchSize; ++i) {
+        if (!isNull[selection[i]]) {
+          Aggregation myagg = getCurrentAggregationBuffer(
+            aggregationBufferSets,
+            aggregrateIndex,
+            i);
+          // Repeating use index 0.
+          myagg.checkValue(inputColVector, 0);
+        }
+      }
+
     }
 
     private void iterateHasNullsRepeatingWithAggregationSelection(
@@ -211,17 +245,15 @@ public class <ClassName> extends VectorAggregateExpression {
       int batchSize,
       boolean[] isNull) {
 
-      if (isNull[0]) {
-        return;
-      }
-
       for (int i=0; i < batchSize; ++i) {
-        Aggregation myagg = getCurrentAggregationBuffer(
-          aggregationBufferSets,
-          aggregrateIndex,
-          i);
-        // Repeating use index 0.
-        myagg.minmaxValue(inputColVector, 0);
+        if (!isNull[i]) {
+          Aggregation myagg = getCurrentAggregationBuffer(
+            aggregationBufferSets,
+            aggregrateIndex,
+            i);
+          // Repeating use index 0.
+          myagg.checkValue(inputColVector, 0);
+        }
       }
     }
 
@@ -240,7 +272,7 @@ public class <ClassName> extends VectorAggregateExpression {
             aggregationBufferSets,
             aggregrateIndex,
             j);
-          myagg.minmaxValue(inputColVector, i);
+          myagg.checkValue(inputColVector, i);
         }
       }
    }
@@ -258,7 +290,7 @@ public class <ClassName> extends VectorAggregateExpression {
             aggregationBufferSets,
             aggregrateIndex,
             i);
-          myagg.minmaxValue(inputColVector, i);
+          myagg.checkValue(inputColVector, i);
         }
       }
    }
@@ -269,9 +301,8 @@ public class <ClassName> extends VectorAggregateExpression {
 
         inputExpression.evaluate(batch);
 
-        IntervalDayTimeColumnVector inputColVector =
-            (IntervalDayTimeColumnVector) batch.cols[
-                this.inputExpression.getOutputColumnNum()];
+        IntervalDayTimeColumnVector inputColVector = (IntervalDayTimeColumnVector)batch.
+            cols[this.inputExpression.getOutputColumn()];
 
         int batchSize = batch.size;
 
@@ -282,8 +313,10 @@ public class <ClassName> extends VectorAggregateExpression {
         Aggregation myagg = (Aggregation)agg;
 
         if (inputColVector.isRepeating) {
-          if (inputColVector.noNulls || !inputColVector.isNull[0]) {
-            myagg.minmaxValue(inputColVector, 0);
+          if (inputColVector.noNulls &&
+            (myagg.isNull || (inputColVector.compareTo(myagg.value, 0) <OperatorSymbol> 0))) {
+            myagg.isNull = false;
+            inputColVector.intervalDayTimeUpdate(myagg.value, 0);
           }
           return;
         }
@@ -314,7 +347,13 @@ public class <ClassName> extends VectorAggregateExpression {
       for (int j=0; j< batchSize; ++j) {
         int i = selected[j];
         if (!isNull[i]) {
-          myagg.minmaxValue(inputColVector, i);
+          if (myagg.isNull) {
+            myagg.isNull = false;
+            inputColVector.intervalDayTimeUpdate(myagg.value, i);
+          }
+          else if (inputColVector.compareTo(myagg.value, i) <OperatorSymbol> 0) {
+            inputColVector.intervalDayTimeUpdate(myagg.value, i);
+          }
         }
       }
     }
@@ -325,9 +364,16 @@ public class <ClassName> extends VectorAggregateExpression {
         int batchSize,
         int[] selected) {
 
+      if (myagg.isNull) {
+        inputColVector.intervalDayTimeUpdate(myagg.value, selected[0]);
+        myagg.isNull = false;
+      }
+
       for (int i=0; i< batchSize; ++i) {
         int sel = selected[i];
-        myagg.minmaxValue(inputColVector, sel);
+        if (inputColVector.compareTo(myagg.value, sel) <OperatorSymbol> 0) {
+          inputColVector.intervalDayTimeUpdate(myagg.value, sel);
+        }
       }
     }
 
@@ -339,7 +385,13 @@ public class <ClassName> extends VectorAggregateExpression {
 
       for(int i=0;i<batchSize;++i) {
         if (!isNull[i]) {
-          myagg.minmaxValue(inputColVector, i);
+          if (myagg.isNull) {
+            inputColVector.intervalDayTimeUpdate(myagg.value, i);
+            myagg.isNull = false;
+          }
+          else if (inputColVector.compareTo(myagg.value, i) <OperatorSymbol> 0) {
+            inputColVector.intervalDayTimeUpdate(myagg.value, i);
+          }
         }
       }
     }
@@ -348,9 +400,15 @@ public class <ClassName> extends VectorAggregateExpression {
         Aggregation myagg,
         IntervalDayTimeColumnVector inputColVector,
         int batchSize) {
+      if (myagg.isNull) {
+        inputColVector.intervalDayTimeUpdate(myagg.value, 0);
+        myagg.isNull = false;
+      }
 
       for (int i=0;i<batchSize;++i) {
-        myagg.minmaxValue(inputColVector, i);
+        if (inputColVector.compareTo(myagg.value, i) <OperatorSymbol> 0) {
+          inputColVector.intervalDayTimeUpdate(myagg.value, i);
+        }
       }
     }
 
@@ -366,7 +424,24 @@ public class <ClassName> extends VectorAggregateExpression {
     }
 
     @Override
-    public long getAggregationBufferFixedSize() {
+    public Object evaluateOutput(
+        AggregationBuffer agg) throws HiveException {
+    Aggregation myagg = (Aggregation) agg;
+      if (myagg.isNull) {
+        return null;
+      }
+      else {
+        return resultWriter.writeValue(myagg.value);
+      }
+    }
+
+    @Override
+    public ObjectInspector getOutputObjectInspector() {
+      return resultWriter.getObjectInspector();
+    }
+
+    @Override
+    public int getAggregationBufferFixedSize() {
     JavaDataModel model = JavaDataModel.get();
     return JavaDataModel.alignUp(
       model.object() +
@@ -374,34 +449,12 @@ public class <ClassName> extends VectorAggregateExpression {
       model.memoryAlign());
   }
 
-  @Override
-  public boolean matches(String name, ColumnVector.Type inputColVectorType,
-      ColumnVector.Type outputColVectorType, Mode mode) {
-
-    /*
-     * Min/max input and output is INTERVAL_DAY_TIME.
-     *
-     * Any mode (PARTIAL1, PARTIAL2, FINAL, COMPLETE).
-     */
-    return
-        name.equals("<DescriptionName>") &&
-        inputColVectorType == ColumnVector.Type.INTERVAL_DAY_TIME &&
-        outputColVectorType == ColumnVector.Type.INTERVAL_DAY_TIME;
+  public VectorExpression getInputExpression() {
+    return inputExpression;
   }
 
-  @Override
-  public void assignRowColumn(VectorizedRowBatch batch, int batchIndex, int columnNum,
-      AggregationBuffer agg) throws HiveException {
-
-    IntervalDayTimeColumnVector outputColVector = (IntervalDayTimeColumnVector) batch.cols[columnNum];
-    Aggregation myagg = (Aggregation) agg;
-    if (myagg.isNull) {
-      outputColVector.noNulls = false;
-      outputColVector.isNull[batchIndex] = true;
-      return;
-    }
-    outputColVector.isNull[batchIndex] = false;
-    outputColVector.set(batchIndex, myagg.value);
+  public void setInputExpression(VectorExpression inputExpression) {
+    this.inputExpression = inputExpression;
   }
 }
 

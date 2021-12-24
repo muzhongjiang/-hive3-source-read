@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,7 +28,6 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.SingleRel;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.core.Exchange;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
@@ -47,13 +46,9 @@ import org.apache.hadoop.hive.ql.optimizer.calcite.CalciteSemanticException;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveCalciteUtil;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelFactories;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveAggregate;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveAntiJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSortExchange;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSortLimit;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSemiJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableScan;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.jdbc.HiveJdbcConverter;
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveRelColumnsAlignment;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.slf4j.Logger;
@@ -73,7 +68,7 @@ public class PlanModifierForASTConv {
       LOG.debug("Original plan for PlanModifier\n " + RelOptUtil.toString(newTopNode));
     }
 
-    if (!(newTopNode instanceof Project) && !(newTopNode instanceof Sort) && !(newTopNode instanceof Exchange)) {
+    if (!(newTopNode instanceof Project) && !(newTopNode instanceof Sort)) {
       newTopNode = introduceDerivedTable(newTopNode);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Plan after top-level introduceDerivedTable\n "
@@ -121,10 +116,6 @@ public class PlanModifierForASTConv {
       DruidQuery dq = (DruidQuery) rel;
       return ((HiveTableScan) dq.getTableScan()).getTableAlias();
     }
-    if (rel instanceof HiveJdbcConverter) {
-      HiveJdbcConverter conv = (HiveJdbcConverter) rel;
-      return conv.getTableScan().getHiveTableScan().getTableAlias();
-    }
     if (rel instanceof Project) {
       return null;
     }
@@ -164,9 +155,7 @@ public class PlanModifierForASTConv {
         }
       }
     } else if (rel instanceof SingleRel) {
-      if (rel instanceof HiveJdbcConverter) {
-        introduceDerivedTable(rel, parent);
-      } else if (rel instanceof Filter) {
+      if (rel instanceof Filter) {
         if (!validFilterParent(rel, parent)) {
           introduceDerivedTable(rel, parent);
         }
@@ -176,10 +165,6 @@ public class PlanModifierForASTConv {
         }
         if (!validSortChild((HiveSortLimit) rel)) {
           introduceDerivedTable(((HiveSortLimit) rel).getInput(), rel);
-        }
-      } else if (rel instanceof HiveSortExchange) {
-        if (!validExchangeChild((HiveSortExchange) rel)) {
-          introduceDerivedTable(((HiveSortExchange) rel).getInput(), rel);
         }
       } else if (rel instanceof HiveAggregate) {
         RelNode newParent = parent;
@@ -288,13 +273,10 @@ public class PlanModifierForASTConv {
       // But we only need the additional project if the left child
       // is another join too; if it is not, ASTConverter will swap
       // the join inputs, leaving the join operator on the left.
-      // we also do it if parent is HiveSemiJoin or HiveAntiJoin since
-      // ASTConverter won't swap inputs then.
       // This will help triggering multijoin recognition methods that
       // are embedded in SemanticAnalyzer.
       if (((Join) parent).getRight() == joinNode &&
-            (((Join) parent).getLeft() instanceof Join || parent instanceof HiveSemiJoin
-                  || parent instanceof HiveAntiJoin) ) {
+            (((Join) parent).getLeft() instanceof Join) ) {
         validParent = false;
       }
     } else if (parent instanceof SetOp) {
@@ -364,10 +346,6 @@ public class PlanModifierForASTConv {
     }
 
     return validChild;
-  }
-
-  private static boolean validExchangeChild(HiveSortExchange sortNode) {
-    return sortNode.getInput() instanceof Project;
   }
 
   private static boolean validSetopParent(RelNode setop, RelNode parent) {

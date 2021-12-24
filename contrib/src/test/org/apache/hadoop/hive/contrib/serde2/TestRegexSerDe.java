@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,23 +19,22 @@ package org.apache.hadoop.hive.contrib.serde2;
 
 import java.util.Properties;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption;
 import org.apache.hadoop.io.Text;
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
 /**
  * TestRegexSerDe.
  *
  */
-public class TestRegexSerDe {
+public class TestRegexSerDe extends TestCase {
 
   private AbstractSerDe createSerDe(String fieldNames, String fieldTypes,
       String inputRegex, String outputFormatString) throws Throwable {
@@ -46,14 +45,13 @@ public class TestRegexSerDe {
     schema.setProperty("output.format.string", outputFormatString);
 
     RegexSerDe serde = new RegexSerDe();
-    serde.initialize(new Configuration(), schema, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), schema, null);
     return serde;
   }
 
   /**
    * Test the LazySimpleSerDe class.
    */
-  @Test
   public void testRegexSerDe() throws Throwable {
     try {
       // Create the SerDe

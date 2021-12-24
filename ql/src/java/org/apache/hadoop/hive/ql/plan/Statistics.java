@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -36,54 +36,27 @@ import com.google.common.collect.Maps;
 public class Statistics implements Serializable {
 
   public enum State {
-    NONE, PARTIAL, COMPLETE;
-
-    public boolean morePreciseThan(State other) {
-      return ordinal() >= other.ordinal();
-    }
-
-    public State merge(State otherState) {
-      if (this == otherState) {
-        return this;
-      }
-      return PARTIAL;
-    }
+    COMPLETE, PARTIAL, NONE
   }
 
   private long numRows;
   private long runTimeNumRows;
-  // dataSize represents raw data size (estimated in-memory size based on row schema) after decompression and decoding.
   private long dataSize;
-  // totalFileSize represents on-disk size.
-  private long totalFileSize;
-  private long numErasureCodedFiles;
   private State basicStatsState;
   private Map<String, ColStatistics> columnStats;
   private State columnStatsState;
-  private boolean runtimeStats;
 
   public Statistics() {
-    this(0, 0, 0, 0);
+    this(0, 0, -1);
   }
 
-  public Statistics(long nr, long ds, long fs, long numEcFiles) {
-    numRows = nr;
-    dataSize = ds;
-    totalFileSize = fs;
-    numErasureCodedFiles = numEcFiles;
-    runTimeNumRows = -1;
-    columnStats = null;
-    columnStatsState = State.NONE;
-
-    updateBasicStatsState();
-  }
-
-  public void setTotalFileSize(final long totalFileSize) {
-    this.totalFileSize = totalFileSize;
-  }
-
-  public long getTotalFileSize() {
-    return totalFileSize;
+  public Statistics(long nr, long ds, long rnr) {
+    this.setNumRows(nr);
+    this.setDataSize(ds);
+    this.setRunTimeNumRows(rnr);
+    this.basicStatsState = State.NONE;
+    this.columnStats = null;
+    this.columnStatsState = State.NONE;
   }
 
   public long getNumRows() {
@@ -92,9 +65,7 @@ public class Statistics implements Serializable {
 
   public void setNumRows(long numRows) {
     this.numRows = numRows;
-    if (dataSize == 0) {
-      updateBasicStatsState();
-    }
+    updateBasicStatsState();
   }
 
   public long getDataSize() {
@@ -103,9 +74,7 @@ public class Statistics implements Serializable {
 
   public void setDataSize(long dataSize) {
     this.dataSize = dataSize;
-    if (dataSize == 0) {
-      updateBasicStatsState();
-    }
+    updateBasicStatsState();
   }
 
   private void updateBasicStatsState() {
@@ -123,10 +92,7 @@ public class Statistics implements Serializable {
   }
 
   public void setBasicStatsState(State basicStatsState) {
-    updateBasicStatsState();
-    if (this.basicStatsState.morePreciseThan(basicStatsState)) {
-      this.basicStatsState = basicStatsState;
-    }
+    this.basicStatsState = basicStatsState;
   }
 
   public State getColumnStatsState() {
@@ -141,9 +107,6 @@ public class Statistics implements Serializable {
   @Explain(displayName = "Statistics")
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    if (runtimeStats) {
-      sb.append("(RUNTIME) ");
-    }
     sb.append("Num rows: ");
     sb.append(numRows);
     if (runTimeNumRows >= 0) {
@@ -151,10 +114,6 @@ public class Statistics implements Serializable {
     }
     sb.append(" Data size: ");
     sb.append(dataSize);
-    if (numErasureCodedFiles > 0) {
-      sb.append(" Erasure files: ");
-      sb.append(numErasureCodedFiles);
-    }
     sb.append(" Basic stats: ");
     sb.append(basicStatsState);
     sb.append(" Column stats: ");
@@ -165,9 +124,6 @@ public class Statistics implements Serializable {
   @Explain(displayName = "Statistics", explainLevels = { Level.USER })
   public String toUserLevelExplainString() {
     StringBuilder sb = new StringBuilder();
-    if (runtimeStats) {
-      sb.append("runtime: ");
-    }
     sb.append("rows=");
     sb.append(numRows);
     if (runTimeNumRows >= 0) {
@@ -185,9 +141,6 @@ public class Statistics implements Serializable {
 
   public String extendedToString() {
     StringBuilder sb = new StringBuilder();
-    if (runtimeStats) {
-      sb.append(" (runtime) ");
-    }
     sb.append(" numRows: ");
     sb.append(numRows);
     sb.append(" dataSize: ");
@@ -202,9 +155,8 @@ public class Statistics implements Serializable {
   }
 
   @Override
-  public Statistics clone() {
-    Statistics clone = new Statistics(numRows, dataSize, totalFileSize, numErasureCodedFiles);
-    clone.setRunTimeNumRows(runTimeNumRows);
+  public Statistics clone() throws CloneNotSupportedException {
+    Statistics clone = new Statistics(numRows, dataSize, runTimeNumRows);
     clone.setBasicStatsState(basicStatsState);
     clone.setColumnStatsState(columnStatsState);
     if (columnStats != null) {
@@ -214,20 +166,17 @@ public class Statistics implements Serializable {
       }
       clone.setColumnStats(cloneColStats);
     }
-    // TODO: this boolean flag is set only by RS stats annotation at this point
-    //clone.setRuntimeStats(runtimeStats);
     return clone;
   }
 
-  public void addBasicStats(Statistics stats) {
-    dataSize += stats.dataSize;
-    numRows += stats.numRows;
-    basicStatsState = inferColumnStatsState(basicStatsState, stats.basicStatsState);
+  public void addToNumRows(long nr) {
+    numRows += nr;
+    updateBasicStatsState();
   }
 
-  @Deprecated
   public void addToDataSize(long rds) {
     dataSize += rds;
+    updateBasicStatsState();
   }
 
   public void setColumnStats(Map<String, ColStatistics> colStats) {
@@ -266,10 +215,6 @@ public class Statistics implements Serializable {
     }
   }
 
-  public void updateColumnStatsState(State newState) {
-    this.columnStatsState = inferColumnStatsState(columnStatsState, newState);
-  }
-
   //                  newState
   //                  -----------------------------------------
   // columnStatsState | COMPLETE          PARTIAL      NONE    |
@@ -278,28 +223,26 @@ public class Statistics implements Serializable {
   //          PARTIAL | PARTIAL           PARTIAL      PARTIAL |
   //             NONE | COMPLETE          PARTIAL      NONE    |
   //                  -----------------------------------------
-  public static State inferColumnStatsState(State prevState, State newState) {
+  public void updateColumnStatsState(State newState) {
     if (newState.equals(State.PARTIAL)) {
-      return State.PARTIAL;
+      columnStatsState = State.PARTIAL;
     }
 
     if (newState.equals(State.NONE)) {
-      if (prevState.equals(State.NONE)) {
-        return State.NONE;
+      if (columnStatsState.equals(State.NONE)) {
+        columnStatsState = State.NONE;
       } else {
-        return State.PARTIAL;
+        columnStatsState = State.PARTIAL;
       }
     }
 
     if (newState.equals(State.COMPLETE)) {
-      if (prevState.equals(State.PARTIAL)) {
-        return State.PARTIAL;
+      if (columnStatsState.equals(State.PARTIAL)) {
+        columnStatsState = State.PARTIAL;
       } else {
-        return State.COMPLETE;
+        columnStatsState = State.COMPLETE;
       }
     }
-
-    return prevState;
   }
 
   public long getAvgRowSize() {
@@ -335,27 +278,5 @@ public class Statistics implements Serializable {
 
   public void setRunTimeNumRows(long runTimeNumRows) {
     this.runTimeNumRows = runTimeNumRows;
-  }
-
-  public Statistics scaleToRowCount(long newRowCount, boolean downScaleOnly) {
-    Statistics ret = clone();
-    if (numRows == 0) {
-      return ret;
-    }
-    if (downScaleOnly && newRowCount >= numRows) {
-      return ret;
-    }
-    // FIXME: using real scaling by new/old ration might yield better results?
-    ret.numRows = newRowCount;
-    ret.dataSize = StatsUtils.safeMult(getAvgRowSize(), newRowCount);
-    return ret;
-  }
-
-  public boolean isRuntimeStats() {
-    return runtimeStats;
-  }
-
-  public void setRuntimeStats(final boolean runtimeStats) {
-    this.runtimeStats = runtimeStats;
   }
 }

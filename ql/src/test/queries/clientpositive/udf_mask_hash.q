@@ -11,6 +11,3 @@ select mask_hash('TestString-123'),
        mask_hash(cast(12345 as int)),
        mask_hash(cast(12345 as bigint)),
        mask_hash(cast('2016-04-20' as date));
-
-set hive.masking.algo=sha512;
-select mask_hash('01-28-2021');

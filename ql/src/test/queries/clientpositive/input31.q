@@ -1,5 +1,3 @@
---! qt:disabled:disabled by 54b4b2d428bb in 2018
---! qt:dataset:srcbucket
 set hive.mapred.mode=nonstrict;
 
 
@@ -20,3 +18,8 @@ select count(1) from srcbucket;
 set hive.test.mode=false;
 
 select * from tst_dest31;
+
+
+
+
+

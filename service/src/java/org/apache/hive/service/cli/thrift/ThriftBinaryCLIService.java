@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@ package org.apache.hive.service.cli.thrift;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +30,6 @@ import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
 import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.conf.HiveServer2TransportMode;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
@@ -42,7 +40,6 @@ import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
-import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
@@ -52,7 +49,6 @@ import org.apache.thrift.transport.TTransportFactory;
 
 public class ThriftBinaryCLIService extends ThriftCLIService {
   private final Runnable oomHook;
-  protected TServer server;
 
   public ThriftBinaryCLIService(CLIService cliService, Runnable oomHook) {
     super(cliService, ThriftBinaryCLIService.class.getSimpleName());
@@ -60,18 +56,14 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
   }
 
   @Override
-  protected HiveServer2TransportMode getTransportMode() {
-    return HiveServer2TransportMode.binary;
-  }
-
-  @Override
-  protected void initServer() {
+  public void run() {
     try {
       // Server thread pool
       String threadPoolName = "HiveServer2-Handler-Pool";
-      ExecutorService executorService = new ThreadPoolExecutorWithOomHook(minWorkerThreads, maxWorkerThreads,
-          workerKeepAliveTime, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
-          new ThreadFactoryWithGarbageCleanup(threadPoolName), oomHook);
+      ExecutorService executorService = new ThreadPoolExecutorWithOomHook(minWorkerThreads,
+          maxWorkerThreads, workerKeepAliveTime, TimeUnit.SECONDS,
+          new SynchronousQueue<Runnable>(), new ThreadFactoryWithGarbageCleanup(threadPoolName),
+          oomHook);
 
       // Thrift configs
       hiveAuthFactory = new HiveAuthFactory(hiveConf);
@@ -87,92 +79,71 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       } else {
         String keyStorePath = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH).trim();
         if (keyStorePath.isEmpty()) {
-          throw new IllegalArgumentException(
-              ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname + " Not configured for SSL connection");
+          throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname
+              + " Not configured for SSL connection");
         }
         String keyStorePassword = ShimLoader.getHadoopShims().getPassword(hiveConf,
             HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname);
-        String keyStoreType = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_TYPE).trim();
-        String keyStoreAlgorithm = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYMANAGERFACTORY_ALGORITHM).trim();
-        serverSocket = HiveAuthUtils.getServerSSLSocket(hiveHost, portNum, keyStorePath, keyStorePassword,
-            keyStoreType, keyStoreAlgorithm, sslVersionBlacklist);
+        serverSocket = HiveAuthUtils.getServerSSLSocket(hiveHost, portNum, keyStorePath,
+            keyStorePassword, sslVersionBlacklist);
       }
 
       // Server args
       int maxMessageSize = hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_MAX_MESSAGE_SIZE);
-      int requestTimeout = (int) hiveConf.getTimeVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT,
-          TimeUnit.SECONDS);
-      int beBackoffSlotLength = (int) hiveConf
-          .getTimeVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH, TimeUnit.MILLISECONDS);
-      TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(serverSocket).processorFactory(processorFactory)
-          .transportFactory(transportFactory).protocolFactory(new TBinaryProtocol.Factory())
+      int requestTimeout = (int) hiveConf.getTimeVar(
+          HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT, TimeUnit.SECONDS);
+      int beBackoffSlotLength = (int) hiveConf.getTimeVar(
+          HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH, TimeUnit.MILLISECONDS);
+      TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(serverSocket)
+          .processorFactory(processorFactory).transportFactory(transportFactory)
+          .protocolFactory(new TBinaryProtocol.Factory())
           .inputProtocolFactory(new TBinaryProtocol.Factory(true, true, maxMessageSize, maxMessageSize))
-          .requestTimeout(requestTimeout).requestTimeoutUnit(TimeUnit.SECONDS).beBackoffSlotLength(beBackoffSlotLength)
-          .beBackoffSlotLengthUnit(TimeUnit.MILLISECONDS).executorService(executorService);
+          .requestTimeout(requestTimeout).requestTimeoutUnit(TimeUnit.SECONDS)
+          .beBackoffSlotLength(beBackoffSlotLength).beBackoffSlotLengthUnit(TimeUnit.MILLISECONDS)
+          .executorService(executorService);
 
       // TCP Server
       server = new TThreadPoolServer(sargs);
       server.setServerEventHandler(new TServerEventHandler() {
-
         @Override
-        public ServerContext createContext(TProtocol input, TProtocol output) {
+        public ServerContext createContext(
+          TProtocol input, TProtocol output) {
           Metrics metrics = MetricsFactory.getInstance();
           if (metrics != null) {
-            metrics.incrementCounter(MetricsConstant.OPEN_CONNECTIONS);
-            metrics.incrementCounter(MetricsConstant.CUMULATIVE_CONNECTION_COUNT);
+            try {
+              metrics.incrementCounter(MetricsConstant.OPEN_CONNECTIONS);
+              metrics.incrementCounter(MetricsConstant.CUMULATIVE_CONNECTION_COUNT);
+            } catch (Exception e) {
+              LOG.warn("Error Reporting JDO operation to Metrics system", e);
+            }
           }
           return new ThriftCLIServerContext();
         }
 
-        /**
-         * This is called by the Thrift server when the underlying client
-         * connection is cleaned up by the server because the connection has
-         * been closed.
-         */
         @Override
-        public void deleteContext(ServerContext serverContext, TProtocol input, TProtocol output) {
+        public void deleteContext(ServerContext serverContext,
+          TProtocol input, TProtocol output) {
           Metrics metrics = MetricsFactory.getInstance();
           if (metrics != null) {
-            metrics.decrementCounter(MetricsConstant.OPEN_CONNECTIONS);
-          }
-
-          final ThriftCLIServerContext context = (ThriftCLIServerContext) serverContext;
-          final Optional<SessionHandle> sessionHandle = context.getSessionHandle();
-
-          if (sessionHandle.isPresent()) {
-            // Normally, the client should politely inform the server it is
-            // closing its session with Hive before closing its network
-            // connection. However, if the client connection dies for any reason
-            // (load-balancer round-robin configuration, firewall kills
-            // long-running sessions, bad client, failed client, timed-out
-            // client, etc.) then the server will close the connection without
-            // having properly cleaned up the Hive session (resources,
-            // configuration, logging etc.). That needs to be cleaned up now.
-            LOG.warn(
-                "Client connection bound to {} unexpectedly closed: closing this Hive session to release its resources. "
-                    + "The connection processed {} total messages during its lifetime of {}ms. Inspect the client connection "
-                    + "for time-out, firewall killing the connection, invalid load balancer configuration, etc.",
-                sessionHandle, context.getMessagesProcessedCount(), context.getDuration().toMillis());
             try {
-              final boolean close = cliService.getSessionManager().getSession(sessionHandle.get()).getHiveConf()
-                  .getBoolVar(ConfVars.HIVE_SERVER2_CLOSE_SESSION_ON_DISCONNECT);
+              metrics.decrementCounter(MetricsConstant.OPEN_CONNECTIONS);
+            } catch (Exception e) {
+              LOG.warn("Error Reporting JDO operation to Metrics system", e);
+            }
+          }
+          ThriftCLIServerContext context = (ThriftCLIServerContext) serverContext;
+          SessionHandle sessionHandle = context.getSessionHandle();
+          if (sessionHandle != null) {
+            LOG.info("Session disconnected without closing properly. ");
+            try {
+              boolean close = cliService.getSessionManager().getSession(sessionHandle).getHiveConf()
+                .getBoolVar(ConfVars.HIVE_SERVER2_CLOSE_SESSION_ON_DISCONNECT);
+              LOG.info((close ? "" : "Not ") + "Closing the session: " + sessionHandle);
               if (close) {
-                cliService.closeSession(sessionHandle.get());
-              } else {
-                LOG.warn("Session not actually closed because configuration {} is set to false",
-                    ConfVars.HIVE_SERVER2_CLOSE_SESSION_ON_DISCONNECT.varname);
+                cliService.closeSession(sessionHandle);
               }
             } catch (HiveSQLException e) {
-              LOG.warn("Failed to close session", e);
-            }
-          } else {
-            // There is no session handle because the client gracefully closed
-            // the session *or* because the client had some issue and never was
-            // able to create one in the first place
-            if (context.getSessionCount() == 0) {
-              LOG.info("A client connection was closed before creating a Hive session. "
-                  + "Most likely it is a client that is connecting to this server then "
-                  + "immediately closing the socket (i.e., TCP health check or port scanner)");
+              LOG.warn("Failed to close session: " + e, e);
             }
           }
         }
@@ -182,41 +153,21 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
         }
 
         @Override
-        public void processContext(ServerContext serverContext, TTransport input, TTransport output) {
-          ThriftCLIServerContext context = (ThriftCLIServerContext) serverContext;
-          currentServerContext.set(context);
-          context.incMessagesProcessedCount();
+        public void processContext(ServerContext serverContext,
+          TTransport input, TTransport output) {
+          currentServerContext.set(serverContext);
         }
       });
-      String msg = "Starting " + ThriftBinaryCLIService.class.getSimpleName() + " on port " + portNum + " with "
-          + minWorkerThreads + "..." + maxWorkerThreads + " worker threads";
+      String msg = "Starting " + ThriftBinaryCLIService.class.getSimpleName() + " on port "
+          + portNum + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads";
       LOG.info(msg);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to init thrift server", e);
-    }
-  }
-
-  @Override
-  public void run() {
-    try {
       server.serve();
     } catch (Throwable t) {
-      if (t instanceof InterruptedException) {
-        // This is likely a shutdown
-        LOG.info("Caught " + t.getClass().getSimpleName() + ". Shutting down.");
-      } else {
-        LOG.error("Exception caught by " + this.getClass().getSimpleName() +
-            ". Exiting.", t);
-      }
+      LOG.error(
+          "Error starting HiveServer2: could not start "
+              + ThriftBinaryCLIService.class.getSimpleName(), t);
       System.exit(-1);
     }
-  }
-
-  @Override
-  protected void stopServer() {
-    server.stop();
-    server = null;
-    LOG.info("Thrift server has stopped");
   }
 
 }

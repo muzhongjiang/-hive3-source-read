@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.optimizer;
 
+import java.io.Serializable;
 import java.util.Map;
 import java.util.Stack;
 
@@ -25,7 +26,7 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.optimizer.GenMRProcContext.GenMapRedCtx;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -35,7 +36,7 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 /**
  * Processor for the rule - table scan followed by reduce sink.
  */
-public class GenMRRedSink1 implements SemanticNodeProcessor {
+public class GenMRRedSink1 implements NodeProcessor {
 
   public GenMRRedSink1() {
   }
@@ -60,7 +61,7 @@ public class GenMRRedSink1 implements SemanticNodeProcessor {
     Map<Operator<? extends OperatorDesc>, GenMapRedCtx> mapCurrCtx = ctx
         .getMapCurrCtx();
     GenMapRedCtx mapredCtx = mapCurrCtx.get(stack.get(stack.size() - 2));
-    Task<?> currTask = mapredCtx.getCurrTask();
+    Task<? extends Serializable> currTask = mapredCtx.getCurrTask();
     MapredWork currPlan = (MapredWork) currTask.getWork();
     String currAliasId = mapredCtx.getCurrAliasId();
 
@@ -69,7 +70,7 @@ public class GenMRRedSink1 implements SemanticNodeProcessor {
           "But found multiple children : " + op.getChildOperators());
     }
     Operator<? extends OperatorDesc> reducer = op.getChildOperators().get(0);
-    Task<?> oldTask = ctx.getOpTaskMap().get(reducer);
+    Task<? extends Serializable> oldTask = ctx.getOpTaskMap().get(reducer);
 
     ctx.setCurrAliasId(currAliasId);
     ctx.setCurrTask(currTask);

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,18 +18,20 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import java.util.Arrays;
-
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.MathExpr;
 import org.apache.hadoop.hive.ql.exec.vector.*;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 public class CastTimestampToBoolean extends VectorExpression {
   private static final long serialVersionUID = 1L;
 
-  public CastTimestampToBoolean(int colNum, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  private int colNum;
+  private int outputColumn;
+
+  public CastTimestampToBoolean(int colNum, int outputColumn) {
+    this();
+    this.colNum = colNum;
+    this.outputColumn = outputColumn;
   }
 
   public CastTimestampToBoolean() {
@@ -42,17 +44,18 @@ public class CastTimestampToBoolean extends VectorExpression {
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       this.evaluateChildren(batch);
     }
 
-    TimestampColumnVector inputColVector = (TimestampColumnVector) batch.cols[inputColumnNum[0]];
-    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumnNum];
+    TimestampColumnVector inputColVector = (TimestampColumnVector) batch.cols[colNum];
+    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
     boolean[] inputIsNull = inputColVector.isNull;
     boolean[] outputIsNull = outputColVector.isNull;
+    outputColVector.noNulls = inputColVector.noNulls;
     int n = batch.size;
     long[] outputVector = outputColVector.vector;
 
@@ -61,57 +64,67 @@ public class CastTimestampToBoolean extends VectorExpression {
       return;
     }
 
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
     if (inputColVector.isRepeating) {
-      if (inputColVector.noNulls || !inputIsNull[0]) {
-        outputIsNull[0] = false;
-        outputVector[0] = toBool(inputColVector, 0);
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-      }
+      //All must be selected otherwise size would be zero
+      //Repeating property will not change.
+      outputVector[0] =  toBool(inputColVector, 0);
+      // Even if there are no nulls, we always copy over entry 0. Simplifies code.
+      outputIsNull[0] = inputIsNull[0];
       outputColVector.isRepeating = true;
-      return;
-    }
-
-    if (inputColVector.noNulls) {
+    } else if (inputColVector.noNulls) {
       if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
-          outputIsNull[i] = false;
-          outputVector[i] = toBool(inputColVector, i);
+          outputVector[i] =  toBool(inputColVector, i);
         }
       } else {
-        Arrays.fill(outputIsNull, 0, n, false);
         for(int i = 0; i != n; i++) {
           outputVector[i] =  toBool(inputColVector, i);
         }
       }
-    } else /* there are NULLs in the inputColVector */ {
-
-      // Carefully handle NULLs...
-      outputColVector.noNulls = false;
-
+      outputColVector.isRepeating = false;
+    } else /* there are nulls */ {
       if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
+          outputVector[i] =  toBool(inputColVector, i);
           outputIsNull[i] = inputIsNull[i];
-          outputVector[i] =  toBool(inputColVector, i);
         }
       } else {
-        System.arraycopy(inputIsNull, 0, outputIsNull, 0, n);
         for(int i = 0; i != n; i++) {
           outputVector[i] =  toBool(inputColVector, i);
         }
+        System.arraycopy(inputIsNull, 0, outputIsNull, 0, n);
       }
+      outputColVector.isRepeating = false;
     }
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "long";
+  }
+
+  public int getColNum() {
+    return colNum;
+  }
+
+  public void setColNum(int colNum) {
+    this.colNum = colNum;
+  }
+
+  public void setOutputColumn(int outputColumn) {
+    this.outputColumn = outputColumn;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]);
+    return "col " + colNum;
   }
 
   @Override

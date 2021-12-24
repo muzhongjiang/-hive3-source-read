@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.spark;
 
-import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.storage.StorageLevel;
@@ -28,13 +27,9 @@ public abstract class CacheTran<KI extends WritableComparable, VI, KO extends Wr
   // whether to cache current RDD.
   private boolean caching = false;
   private JavaPairRDD<KO, VO> cachedRDD;
-  protected final String name;
-  private final BaseWork baseWork;
 
-  protected CacheTran(boolean cache, String name, BaseWork baseWork) {
+  protected CacheTran(boolean cache) {
     this.caching = cache;
-    this.name = name;
-    this.baseWork = baseWork;
   }
 
   @Override
@@ -45,10 +40,9 @@ public abstract class CacheTran<KI extends WritableComparable, VI, KO extends Wr
         cachedRDD = doTransform(input);
         cachedRDD.persist(StorageLevel.MEMORY_AND_DISK());
       }
-      return cachedRDD.setName(this.name + " (" + cachedRDD.getNumPartitions() + ", cached)");
+      return cachedRDD;
     } else {
-      JavaPairRDD<KO, VO> rdd = doTransform(input);
-      return rdd.setName(this.name + " (" + rdd.getNumPartitions() + ")");
+      return doTransform(input);
     }
   }
 
@@ -57,14 +51,4 @@ public abstract class CacheTran<KI extends WritableComparable, VI, KO extends Wr
   }
 
   protected abstract JavaPairRDD<KO, VO> doTransform(JavaPairRDD<KI, VI> input);
-
-  @Override
-  public String getName() {
-    return name;
-  }
-
-  @Override
-  public BaseWork getBaseWork() {
-    return baseWork;
-  }
 }

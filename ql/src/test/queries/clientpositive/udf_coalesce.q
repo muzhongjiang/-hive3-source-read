@@ -1,7 +1,4 @@
---! qt:dataset:src_thrift
---! qt:dataset:src
-set hive.cbo.enable=false;
-set hive.fetch.task.conversion=none;
+set hive.fetch.task.conversion=more;
 
 DESCRIBE FUNCTION coalesce;
 DESCRIBE FUNCTION EXTENDED coalesce;
@@ -48,10 +45,6 @@ SELECT COALESCE(1),
 FROM src tablesample (1 rows);
 
 EXPLAIN
-SELECT COALESCE(key,'x') from src limit 1;
-
-
-EXPLAIN
 SELECT COALESCE(src_thrift.lint[1], 999),
        COALESCE(src_thrift.lintstring[0].mystring, '999'),
        COALESCE(src_thrift.mstringstring['key_2'], '999')
@@ -61,5 +54,3 @@ SELECT COALESCE(src_thrift.lint[1], 999),
        COALESCE(src_thrift.lintstring[0].mystring, '999'),
        COALESCE(src_thrift.mstringstring['key_2'], '999')
 FROM src_thrift;
-
-SELECT COALESCE(COALESCE(null), 'TEST');

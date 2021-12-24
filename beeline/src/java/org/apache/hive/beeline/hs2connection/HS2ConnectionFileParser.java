@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -79,7 +79,7 @@ public interface HS2ConnectionFileParser {
    * object if the connection configuration is not found
    * @throws BeelineHS2ConnectionFileParseException if there is invalid key with appropriate message
    */
-  Properties getConnectionProperties() throws BeelineConfFileParseException;
+  Properties getConnectionProperties() throws BeelineHS2ConnectionFileParseException;
   /**
    *
    * @return returns true if the configuration exists else returns false

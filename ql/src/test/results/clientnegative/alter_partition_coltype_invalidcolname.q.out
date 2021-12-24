@@ -29,6 +29,7 @@ ts                  	string
 	 	 
 # Partition Information	 	 
 # col_name            	data_type           	comment             
+	 	 
 dt                  	string              	                    
 ts                  	string              	                    
 FAILED: SemanticException [Error 10002]: Invalid column reference dd

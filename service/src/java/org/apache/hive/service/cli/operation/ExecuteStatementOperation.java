@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,43 +17,21 @@
  */
 package org.apache.hive.service.cli.operation;
 
-import static org.apache.hadoop.hive.conf.Constants.MODE;
-import static org.apache.hive.service.cli.operation.hplsql.HplSqlQueryExecutor.HPLSQL;
-import static org.apache.hive.service.cli.operation.hplsql.HplSqlQueryExecutor.QUERY_EXECUTOR;
-
 import java.sql.SQLException;
 import java.util.Map;
 
-import org.apache.hive.service.cli.operation.hplsql.BeelineConsole;
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
-import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.processors.CommandProcessor;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory;
-import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hive.common.util.HiveStringUtils;
-import org.apache.hive.hplsql.Conf;
-import org.apache.hive.hplsql.Exec;
-import org.apache.hive.hplsql.HplSqlSessionState;
-import org.apache.hive.hplsql.ResultListener;
-import org.apache.hive.hplsql.udf.Udf;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.operation.hplsql.BeelineConsole;
-import org.apache.hive.service.cli.operation.hplsql.HplSqlOperation;
-import org.apache.hive.service.cli.operation.hplsql.HplSqlQueryExecutor;
 import org.apache.hive.service.cli.session.HiveSession;
 
 public abstract class ExecuteStatementOperation extends Operation {
   protected String statement = null;
 
   public ExecuteStatementOperation(HiveSession parentSession, String statement,
-      Map<String, String> confOverlay) {
+      Map<String, String> confOverlay, boolean runInBackground) {
     super(parentSession, confOverlay, OperationType.EXECUTE_STATEMENT);
-    this.statement = statement;
-  }
-
-  public ExecuteStatementOperation(HiveSession parentSession, String statement, Map<String, String> confOverlay, boolean runInBackground, boolean generateNewQueryId) {
-    super(parentSession, confOverlay, OperationType.EXECUTE_STATEMENT, generateNewQueryId);
     this.statement = statement;
   }
 
@@ -64,25 +42,7 @@ public abstract class ExecuteStatementOperation extends Operation {
   public static ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
       String statement, Map<String, String> confOverlay, boolean runAsync, long queryTimeout)
       throws HiveSQLException {
-
-    String cleanStatement = HiveStringUtils.removeComments(statement);
-    if (proceduralMode(confOverlay) && hplSqlMode()) {
-      if (SessionState.get().getDynamicVar(Exec.class) == null) {
-        Exec interpreter = new Exec(
-                new Conf(),
-                new BeelineConsole(),
-                new HplSqlQueryExecutor(parentSession),
-                parentSession.getMetaStoreClient(),
-                new HiveHplSqlSessionState(SessionState.get())
-        );
-        interpreter.init();
-        registerUdf();
-        SessionState.get().addDynamicVar(interpreter);
-      }
-      return new HplSqlOperation(parentSession, statement, confOverlay, runAsync, SessionState.get().getDynamicVar(Exec.class));
-    }
-
-    String[] tokens = cleanStatement.trim().split("\\s+");
+    String[] tokens = statement.trim().split("\\s+");
     CommandProcessor processor = null;
     try {
       processor = CommandProcessorFactory.getForHiveCommand(tokens, parentSession.getHiveConf());
@@ -91,50 +51,8 @@ public abstract class ExecuteStatementOperation extends Operation {
     }
     if (processor == null) {
       // runAsync, queryTimeout makes sense only for a SQLOperation
-      // Pass the original statement to SQLOperation as sql parser can remove comments by itself
-      return new SQLOperation(parentSession, statement, confOverlay, runAsync, queryTimeout, hplSqlMode());
+      return new SQLOperation(parentSession, statement, confOverlay, runAsync, queryTimeout);
     }
-    return new HiveCommandOperation(parentSession, cleanStatement, processor, confOverlay);
-  }
-
-  private static void registerUdf() throws HiveSQLException {
-    try {
-      if (FunctionRegistry.getTemporaryFunctionInfo(Udf.NAME) == null) {
-        FunctionRegistry.registerTemporaryUDF(Udf.NAME, org.apache.hive.hplsql.udf.Udf.class);
-      }
-    } catch (SemanticException e) {
-      throw new HiveSQLException(e);
-    }
-  }
-
-  private static boolean proceduralMode(Map<String, String> confOverlay) {
-    return confOverlay != null && !HPLSQL.equals(confOverlay.get(QUERY_EXECUTOR));
-  }
-
-  public static boolean hplSqlMode() {
-    return HPLSQL.equalsIgnoreCase(SessionState.get().getHiveVariables().getOrDefault(MODE, ""));
-  }
-
-  private static class HiveHplSqlSessionState implements HplSqlSessionState {
-    private final SessionState sessionState;
-
-    public HiveHplSqlSessionState(SessionState sessionState) {
-      this.sessionState = sessionState;
-    }
-
-    @Override
-    public String currentUser() {
-      return sessionState.getUserName();
-    }
-
-    @Override
-    public String currentDatabase() {
-      return sessionState.getCurrentDatabase();
-    }
-
-    @Override
-    public String currentCatalog() {
-      return sessionState.getCurrentCatalog();
-    }
+    return new HiveCommandOperation(parentSession, statement, processor, confOverlay);
   }
 }

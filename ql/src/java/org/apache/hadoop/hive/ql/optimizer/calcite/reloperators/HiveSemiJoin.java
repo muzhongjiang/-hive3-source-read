@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,19 +24,19 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.InvalidRelException;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.SemiJoin;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableIntList;
 import org.apache.hadoop.hive.ql.optimizer.calcite.CalciteSemanticException;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelOptUtil;
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveRulesRegistry;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Sets;
 
-public class HiveSemiJoin extends Join implements HiveRelNode {
+public class HiveSemiJoin extends SemiJoin implements HiveRelNode {
 
   private final RexNode joinFilter;
 
@@ -46,9 +46,12 @@ public class HiveSemiJoin extends Join implements HiveRelNode {
           RelTraitSet traitSet,
           RelNode left,
           RelNode right,
-          RexNode condition) {
+          RexNode condition,
+          ImmutableIntList leftKeys,
+          ImmutableIntList rightKeys) {
     try {
-      HiveSemiJoin semiJoin = new HiveSemiJoin(cluster, traitSet, left, right, condition);
+      HiveSemiJoin semiJoin = new HiveSemiJoin(cluster, traitSet, left, right,
+              condition, leftKeys, rightKeys);
       return semiJoin;
     } catch (InvalidRelException | CalciteSemanticException e) {
       throw new RuntimeException(e);
@@ -59,8 +62,10 @@ public class HiveSemiJoin extends Join implements HiveRelNode {
           RelTraitSet traitSet,
           RelNode left,
           RelNode right,
-          RexNode condition) throws InvalidRelException, CalciteSemanticException {
-    super(cluster, traitSet, left, right, condition, JoinRelType.SEMI, Sets.newHashSet());
+          RexNode condition,
+          ImmutableIntList leftKeys,
+          ImmutableIntList rightKeys) throws InvalidRelException, CalciteSemanticException {
+    super(cluster, traitSet, left, right, condition, leftKeys, rightKeys);
     final List<RelDataTypeField> systemFieldList = ImmutableList.of();
     List<List<RexNode>> joinKeyExprs = new ArrayList<List<RexNode>>();
     List<Integer> filterNulls = new ArrayList<Integer>();
@@ -76,11 +81,12 @@ public class HiveSemiJoin extends Join implements HiveRelNode {
   }
 
   @Override
-  public HiveSemiJoin copy(RelTraitSet traitSet, RexNode condition,
+  public SemiJoin copy(RelTraitSet traitSet, RexNode condition,
           RelNode left, RelNode right, JoinRelType joinType, boolean semiJoinDone) {
     try {
       final JoinInfo joinInfo = JoinInfo.of(left, right, condition);
-      HiveSemiJoin semijoin = new HiveSemiJoin(getCluster(), traitSet, left, right, condition);
+      HiveSemiJoin semijoin = new HiveSemiJoin(getCluster(), traitSet, left, right, condition,
+              joinInfo.leftKeys, joinInfo.rightKeys);
       // If available, copy state to registry for optimization rules
       HiveRulesRegistry registry = semijoin.getCluster().getPlanner().getContext().unwrap(HiveRulesRegistry.class);
       if (registry != null) {

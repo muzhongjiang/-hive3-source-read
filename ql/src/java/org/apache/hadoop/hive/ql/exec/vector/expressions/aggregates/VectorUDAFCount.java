@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,13 +20,15 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates;
 
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
-import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorAggregationBufferRow;
-import org.apache.hadoop.hive.ql.exec.vector.VectorAggregationDesc;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.Mode;
+import org.apache.hadoop.hive.ql.plan.AggregationDesc;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
+import org.apache.hadoop.io.LongWritable;
 
 
 /**
@@ -57,17 +59,23 @@ public class VectorUDAFCount extends VectorAggregateExpression {
       }
     }
 
-    // This constructor is used to momentarily create the object so match can be called.
+    private VectorExpression inputExpression = null;
+
+    @Override
+    public VectorExpression inputExpression() {
+      return inputExpression;
+    }
+
+    transient private final LongWritable result;
+
+    public VectorUDAFCount(VectorExpression inputExpression) {
+      this();
+      this.inputExpression = inputExpression;
+    }
+
     public VectorUDAFCount() {
       super();
-    }
-
-    public VectorUDAFCount(VectorAggregationDesc vecAggrDesc) {
-      super(vecAggrDesc);
-      init();
-    }
-
-    private void init() {
+      result = new LongWritable(0);
     }
 
     private Aggregation getCurrentAggregationBuffer(
@@ -93,7 +101,7 @@ public class VectorUDAFCount extends VectorAggregateExpression {
 
       inputExpression.evaluate(batch);
 
-      ColumnVector inputVector = batch.cols[this.inputExpression.getOutputColumnNum()];
+      ColumnVector inputVector = batch.cols[this.inputExpression.getOutputColumn()];
 
       if (inputVector.isRepeating) {
         if (inputVector.noNulls || !inputVector.isNull[0]) {
@@ -172,7 +180,7 @@ public class VectorUDAFCount extends VectorAggregateExpression {
 
       inputExpression.evaluate(batch);
 
-      ColumnVector inputVector = batch.cols[this.inputExpression.getOutputColumnNum()];
+      ColumnVector inputVector = batch.cols[this.inputExpression.getOutputColumn()];
 
       int batchSize = batch.size;
 
@@ -239,7 +247,19 @@ public class VectorUDAFCount extends VectorAggregateExpression {
     }
 
     @Override
-    public long getAggregationBufferFixedSize() {
+    public Object evaluateOutput(AggregationBuffer agg) throws HiveException {
+      Aggregation myagg = (Aggregation) agg;
+      result.set (myagg.count);
+      return result;
+    }
+
+    @Override
+    public ObjectInspector getOutputObjectInspector() {
+      return PrimitiveObjectInspectorFactory.writableLongObjectInspector;
+    }
+
+    @Override
+    public int getAggregationBufferFixedSize() {
       JavaDataModel model = JavaDataModel.get();
       return JavaDataModel.alignUp(
         model.object() +
@@ -248,29 +268,17 @@ public class VectorUDAFCount extends VectorAggregateExpression {
         model.memoryAlign());
     }
 
-  @Override
-  public boolean matches(String name, ColumnVector.Type inputColVectorType,
-      ColumnVector.Type outputColVectorType, Mode mode) {
+    @Override
+    public void init(AggregationDesc desc) throws HiveException {
+      // No-op
+    }
 
-    /*
-     * Count *any* input except null which is for COUNT(*) and output is LONG.
-     *
-     * Just modes (PARTIAL1, COMPLETE).
-     */
-    return
-        name.equals("count") &&
-        inputColVectorType != null &&
-        outputColVectorType == ColumnVector.Type.LONG &&
-        (mode == Mode.PARTIAL1 || mode == Mode.COMPLETE);
-  }
+    public VectorExpression getInputExpression() {
+      return inputExpression;
+    }
 
-  @Override
-  public void assignRowColumn(VectorizedRowBatch batch, int batchIndex, int columnNum,
-      AggregationBuffer agg) throws HiveException {
-
-    LongColumnVector outputColVector = (LongColumnVector) batch.cols[columnNum];
-    Aggregation myagg = (Aggregation) agg;
-    outputColVector.isNull[batchIndex] = false;
-    outputColVector.vector[batchIndex] = myagg.count;
-  }
+    public void setInputExpression(VectorExpression inputExpression) {
+      this.inputExpression = inputExpression;
+    }
 }
+

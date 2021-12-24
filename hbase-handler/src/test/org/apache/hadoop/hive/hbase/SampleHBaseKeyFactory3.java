@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,8 +28,6 @@ import java.util.Map;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.filter.FilterList.Operator;
 import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hive.hbase.ColumnMappings.ColumnMapping;
 import org.apache.hadoop.hive.ql.index.IndexSearchCondition;
@@ -75,7 +73,7 @@ class SampleHBasePredicateDecomposer extends AbstractHBaseKeyPredicateDecomposer
       }
       fieldCond.add(condition);
     }
-    List<Filter> filters = new ArrayList<Filter>();
+    Filter filter = null;
     HBaseScanRange range = new HBaseScanRange();
 
     StructTypeInfo type = (StructTypeInfo) keyMapping.columnType;
@@ -93,21 +91,23 @@ class SampleHBasePredicateDecomposer extends AbstractHBaseKeyPredicateDecomposer
 
         byte[] valueAsBytes = toBinary(constantVal, FIXED_LENGTH, false, false);
 
-        if (comparisonOp.endsWith("UDFOPEqualOrGreaterThan")) {
-          filters.add(new RowFilter(CompareOp.GREATER_OR_EQUAL, new BinaryComparator(valueAsBytes)));
+        if (comparisonOp.endsWith("UDFOPEqual")) {
+          filter = new RowFilter(CompareOp.EQUAL, new BinaryComparator(valueAsBytes));
+        } else if (comparisonOp.endsWith("UDFOPEqualOrGreaterThan")) {
+          filter = new RowFilter(CompareOp.GREATER_OR_EQUAL, new BinaryComparator(valueAsBytes));
         } else if (comparisonOp.endsWith("UDFOPGreaterThan")) {
-          filters.add(new RowFilter(CompareOp.GREATER, new BinaryComparator(valueAsBytes)));
+          filter = new RowFilter(CompareOp.GREATER, new BinaryComparator(valueAsBytes));
         } else if (comparisonOp.endsWith("UDFOPEqualOrLessThan")) {
-          filters.add(new RowFilter(CompareOp.LESS_OR_EQUAL, new BinaryComparator(valueAsBytes)));
+          filter = new RowFilter(CompareOp.LESS_OR_EQUAL, new BinaryComparator(valueAsBytes));
         } else if (comparisonOp.endsWith("UDFOPLessThan")) {
-          filters.add(new RowFilter(CompareOp.LESS, new BinaryComparator(valueAsBytes)));
+          filter = new RowFilter(CompareOp.LESS, new BinaryComparator(valueAsBytes));
         } else {
           throw new IOException(comparisonOp + " is not a supported comparison operator");
         }
       }
     }
-    if (!filters.isEmpty()) {
-      range.addFilter(new FilterList(Operator.MUST_PASS_ALL, filters));
+    if (filter != null) {
+      range.addFilter(filter);
     }
     return range;
   }

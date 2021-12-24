@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,7 @@
 
 package org.apache.hadoop.hive.ql.udf.generic;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -35,16 +35,9 @@ import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import org.junit.Test;
 
-/**
- * TestGenericUDFAbs.
- */
-public class TestGenericUDFAbs {
+public class TestGenericUDFAbs extends TestCase {
 
-  @Test
   public void testInt() throws HiveException {
     GenericUDFAbs udf = new GenericUDFAbs();
     ObjectInspector valueOI = PrimitiveObjectInspectorFactory.writableIntObjectInspector;
@@ -64,7 +57,6 @@ public class TestGenericUDFAbs {
     assertEquals("abs() test for INT failed ", 107, output.get());
   }
 
-  @Test
   public void testLong() throws HiveException {
     GenericUDFAbs udf = new GenericUDFAbs();
     ObjectInspector valueOI = PrimitiveObjectInspectorFactory.writableLongObjectInspector;
@@ -84,7 +76,6 @@ public class TestGenericUDFAbs {
     assertEquals("abs() test for LONG failed ", 107, output.get());
   }
 
-  @Test
   public void testDouble() throws HiveException {
     GenericUDFAbs udf = new GenericUDFAbs();
     ObjectInspector valueOI = PrimitiveObjectInspectorFactory.writableDoubleObjectInspector;
@@ -95,16 +86,15 @@ public class TestGenericUDFAbs {
     DeferredObject[] args = {valueObj};
     DoubleWritable output = (DoubleWritable) udf.evaluate(args);
 
-    assertEquals("abs() test for Double failed ", 107.78, output.get(), 1e-15);
+    assertEquals("abs() test for Double failed ", 107.78, output.get());
 
     valueObj = new DeferredJavaObject(new DoubleWritable(-107.78));
     args[0] = valueObj;
     output = (DoubleWritable) udf.evaluate(args);
 
-    assertEquals("abs() test for Double failed ", 107.78, output.get(), 1e-15);
+    assertEquals("abs() test for Double failed ", 107.78, output.get());
   }
 
-  @Test
   public void testFloat() throws HiveException {
     GenericUDFAbs udf = new GenericUDFAbs();
     ObjectInspector valueOI = PrimitiveObjectInspectorFactory.writableFloatObjectInspector;
@@ -126,7 +116,6 @@ public class TestGenericUDFAbs {
   }
 
 
-  @Test
   public void testText() throws HiveException {
     GenericUDFAbs udf = new GenericUDFAbs();
     ObjectInspector valueOI = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -152,7 +141,6 @@ public class TestGenericUDFAbs {
     assertEquals("abs() test for String failed ", null, output);
   }
 
-  @Test
   public void testHiveDecimal() throws HiveException {
     GenericUDFAbs udf = new GenericUDFAbs();
     int prec = 12;
@@ -172,14 +160,14 @@ public class TestGenericUDFAbs {
     HiveDecimalWritable output = (HiveDecimalWritable) udf.evaluate(args);
 
     assertEquals("abs() test for HiveDecimal failed ", 107.123456789, output.getHiveDecimal()
-        .doubleValue(), 1e-15);
+        .doubleValue());
 
     valueObj = new DeferredJavaObject(new HiveDecimalWritable(HiveDecimal.create("-107.123456789")));
     args[0] = valueObj;
     output = (HiveDecimalWritable) udf.evaluate(args);
 
     assertEquals("abs() test for HiveDecimal failed ", 107.123456789, output.getHiveDecimal()
-        .doubleValue(), 1e-15);
+        .doubleValue());
 
     // null input
     args[0] = new DeferredJavaObject(null);

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,7 @@ package org.apache.hadoop.hive.ql.optimizer.calcite.translator;
 import java.lang.annotation.Annotation;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
@@ -38,7 +38,6 @@ import org.apache.calcite.sql.type.SqlReturnTypeInference;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.util.Util;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.hive.ql.exec.DataSketchesFunctions;
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.FunctionInfo;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
@@ -46,24 +45,13 @@ import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.optimizer.calcite.CalciteSemanticException;
 import org.apache.hadoop.hive.ql.optimizer.calcite.CalciteSemanticException.UnsupportedFeature;
 import org.apache.hadoop.hive.ql.optimizer.calcite.functions.CanAggregateDistinct;
-import org.apache.hadoop.hive.ql.optimizer.calcite.functions.HiveSqlAverageAggFunction;
 import org.apache.hadoop.hive.ql.optimizer.calcite.functions.HiveSqlCountAggFunction;
 import org.apache.hadoop.hive.ql.optimizer.calcite.functions.HiveSqlMinMaxAggFunction;
 import org.apache.hadoop.hive.ql.optimizer.calcite.functions.HiveSqlSumAggFunction;
-import org.apache.hadoop.hive.ql.optimizer.calcite.functions.HiveSqlVarianceAggFunction;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveBetween;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveConcat;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveDateAddSqlOperator;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveDateSubSqlOperator;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveExtractDate;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveFloorDate;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveFromUnixTimeSqlOperator;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveIn;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSqlFunction;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveToDateSqlOperator;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTruncSqlOperator;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveToUnixTimestampSqlOperator;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveUnixTimestampSqlOperator;
 import org.apache.hadoop.hive.ql.parse.ASTNode;
 import org.apache.hadoop.hive.ql.parse.HiveParser;
 import org.apache.hadoop.hive.ql.parse.ParseDriver;
@@ -77,12 +65,9 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDTF;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
-import org.apache.hadoop.hive.serde2.typeinfo.TimestampLocalTZTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.VarcharTypeInfo;
-import org.apache.hive.plugin.api.HiveUDFPlugin;
-import org.apache.hive.plugin.api.HiveUDFPlugin.UDFDescriptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -124,12 +109,7 @@ public class SqlFunctionConverter {
       // let's be proper...
       name = FunctionRegistry.getNormalizedFunctionName(funcTextName);
     }
-
-    // For calcite, isDeterministic just matters for within the query.
-    // runtimeConstant used to indicate the function is not deterministic between queries.
-    boolean isDeterministic = FunctionRegistry.isConsistentWithinQuery(hiveUDF);
-    boolean runtimeConstant = FunctionRegistry.isRuntimeConstant(hiveUDF);
-    return getCalciteFn(name, calciteArgTypes, retType, isDeterministic, runtimeConstant);
+    return getCalciteFn(name, calciteArgTypes, retType, FunctionRegistry.isDeterministic(hiveUDF));
   }
 
   public static SqlOperator getCalciteOperator(String funcTextName, GenericUDTF hiveUDTF,
@@ -137,7 +117,7 @@ public class SqlFunctionConverter {
     // We could just do toLowerCase here and let SA qualify it, but
     // let's be proper...
     String name = FunctionRegistry.getNormalizedFunctionName(funcTextName);
-    return getCalciteFn(name, calciteArgTypes, retType, false, false);
+    return getCalciteFn(name, calciteArgTypes, retType, false);
   }
 
   public static GenericUDF getHiveUDF(SqlOperator op, RelDataType dt, int argsLength) {
@@ -147,22 +127,22 @@ public class SqlFunctionConverter {
     }
     // Make sure we handle unary + and - correctly.
     if (argsLength == 1) {
-      if ("+".equals(name)) {
+      if (name == "+") {
         name = FunctionRegistry.UNARY_PLUS_FUNC_NAME;
-      } else if ("-".equals(name)) {
+      } else if (name == "-") {
         name = FunctionRegistry.UNARY_MINUS_FUNC_NAME;
       }
     }
     FunctionInfo hFn;
     try {
-      hFn = handleExplicitCast(op, dt);
+      hFn = name != null ? FunctionRegistry.getFunctionInfo(name) : null;
     } catch (SemanticException e) {
       LOG.warn("Failed to load udf " + name, e);
       hFn = null;
     }
     if (hFn == null) {
       try {
-        hFn = name != null ? FunctionRegistry.getFunctionInfo(name) : null;
+        hFn = handleExplicitCast(op, dt);
       } catch (SemanticException e) {
         LOG.warn("Failed to load udf " + name, e);
         hFn = null;
@@ -201,9 +181,6 @@ public class SqlFunctionConverter {
         castUDF = FunctionRegistry.getFunctionInfo("double");
       } else if (castType.equals(TypeInfoFactory.timestampTypeInfo)) {
         castUDF = FunctionRegistry.getFunctionInfo("timestamp");
-      } else if (castType instanceof TimestampLocalTZTypeInfo) {
-        castUDF = handleCastForParameterizedType(castType,
-            FunctionRegistry.getFunctionInfo(serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME));
       } else if (castType.equals(TypeInfoFactory.dateTypeInfo)) {
         castUDF = FunctionRegistry.getFunctionInfo("date");
       } else if (castType instanceof DecimalTypeInfo) {
@@ -215,9 +192,8 @@ public class SqlFunctionConverter {
         castUDF = FunctionRegistry.getFunctionInfo(serdeConstants.INTERVAL_DAY_TIME_TYPE_NAME);
       } else if (castType.equals(TypeInfoFactory.intervalYearMonthTypeInfo)) {
         castUDF = FunctionRegistry.getFunctionInfo(serdeConstants.INTERVAL_YEAR_MONTH_TYPE_NAME);
-      } else {
+      } else
         throw new IllegalStateException("Unexpected type : " + castType.getQualifiedName());
-      }
     }
 
     return castUDF;
@@ -244,20 +220,11 @@ public class SqlFunctionConverter {
         case IN:
         case BETWEEN:
         case ROW:
-        case ARRAY_VALUE_CONSTRUCTOR:
-        case MAP_VALUE_CONSTRUCTOR:
-        case IS_NOT_TRUE:
-        case IS_TRUE:
-        case IS_NOT_FALSE:
-        case IS_FALSE:
         case IS_NOT_NULL:
         case IS_NULL:
         case CASE:
-        case COALESCE:
         case EXTRACT:
         case FLOOR:
-        case CEIL:
-        case LIKE:
         case OTHER_FUNCTION:
           node = (ASTNode) ParseDriver.adaptor.create(HiveParser.TOK_FUNCTION, "TOK_FUNCTION");
           node.addChild((ASTNode) ParseDriver.adaptor.create(hToken.type, hToken.text));
@@ -276,7 +243,7 @@ public class SqlFunctionConverter {
           // Handle COUNT/SUM/AVG function for the case of COUNT(*) and COUNT(DISTINCT)
           if (op instanceof HiveSqlCountAggFunction ||
               op instanceof HiveSqlSumAggFunction ||
-              op instanceof HiveSqlAverageAggFunction) {
+              (op instanceof CalciteUDAF && op.getName().equalsIgnoreCase(SqlStdOperatorTable.AVG.getName()))) {
             if (children.size() == 0) {
               node = (ASTNode) ParseDriver.adaptor.create(HiveParser.TOK_FUNCTIONSTAR,
                 "TOK_FUNCTIONSTAR");
@@ -334,9 +301,8 @@ public class SqlFunctionConverter {
         udfName = udfDescription.name();
         if (udfName != null) {
           String[] aliases = udfName.split(",");
-          if (aliases.length > 0) {
+          if (aliases.length > 0)
             udfName = aliases[0];
-          }
         }
       }
 
@@ -366,7 +332,7 @@ public class SqlFunctionConverter {
       registerFunction("-", SqlStdOperatorTable.MINUS, hToken(HiveParser.MINUS, "-"));
       registerFunction("*", SqlStdOperatorTable.MULTIPLY, hToken(HiveParser.STAR, "*"));
       registerFunction("/", SqlStdOperatorTable.DIVIDE, hToken(HiveParser.DIVIDE, "/"));
-      registerFunction("%", SqlStdOperatorTable.MOD, hToken(HiveParser.MOD, "%"));
+      registerFunction("%", SqlStdOperatorTable.MOD, hToken(HiveParser.Identifier, "%"));
       registerFunction("and", SqlStdOperatorTable.AND, hToken(HiveParser.KW_AND, "and"));
       registerFunction("or", SqlStdOperatorTable.OR, hToken(HiveParser.KW_OR, "or"));
       registerFunction("=", SqlStdOperatorTable.EQUALS, hToken(HiveParser.EQUAL, "="));
@@ -384,20 +350,10 @@ public class SqlFunctionConverter {
       registerFunction("in", HiveIn.INSTANCE, hToken(HiveParser.Identifier, "in"));
       registerFunction("between", HiveBetween.INSTANCE, hToken(HiveParser.Identifier, "between"));
       registerFunction("struct", SqlStdOperatorTable.ROW, hToken(HiveParser.Identifier, "struct"));
-      registerFunction("array", SqlStdOperatorTable.ARRAY_VALUE_CONSTRUCTOR, hToken(HiveParser.Identifier, "array"));
-      registerFunction("map", SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, hToken(HiveParser.Identifier, "map"));
-      registerFunction("isnotnull", SqlStdOperatorTable.IS_NOT_NULL, hToken(HiveParser.Identifier, "isnotnull"));
-      registerFunction("isnull", SqlStdOperatorTable.IS_NULL, hToken(HiveParser.Identifier, "isnull"));
-      registerFunction("isnottrue", SqlStdOperatorTable.IS_NOT_TRUE, hToken(HiveParser.Identifier, "isnottrue"));
-      registerFunction("istrue", SqlStdOperatorTable.IS_TRUE, hToken(HiveParser.Identifier, "istrue"));
-      registerFunction("isnotfalse", SqlStdOperatorTable.IS_NOT_FALSE, hToken(HiveParser.Identifier, "isnotfalse"));
-      registerFunction("isfalse", SqlStdOperatorTable.IS_FALSE, hToken(HiveParser.Identifier, "isfalse"));
-      registerFunction("is_not_distinct_from", SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, hToken(HiveParser.EQUAL_NS, "<=>"));
-      registerDuplicateFunction("<=>", SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, hToken(HiveParser.EQUAL_NS, "<=>"));
+      registerFunction("isnotnull", SqlStdOperatorTable.IS_NOT_NULL, hToken(HiveParser.TOK_ISNOTNULL, "TOK_ISNOTNULL"));
+      registerFunction("isnull", SqlStdOperatorTable.IS_NULL, hToken(HiveParser.TOK_ISNULL, "TOK_ISNULL"));
       registerFunction("when", SqlStdOperatorTable.CASE, hToken(HiveParser.Identifier, "when"));
       registerDuplicateFunction("case", SqlStdOperatorTable.CASE, hToken(HiveParser.Identifier, "when"));
-      registerFunction("coalesce", SqlStdOperatorTable.COALESCE, hToken(HiveParser.Identifier, "coalesce"));
-
       // timebased
       registerFunction("year", HiveExtractDate.YEAR,
           hToken(HiveParser.Identifier, "year"));
@@ -431,67 +387,6 @@ public class SqlFunctionConverter {
           hToken(HiveParser.Identifier, "floor_minute"));
       registerFunction("floor_second", HiveFloorDate.SECOND,
           hToken(HiveParser.Identifier, "floor_second"));
-      registerFunction("power", SqlStdOperatorTable.POWER, hToken(HiveParser.Identifier, "power"));
-      registerDuplicateFunction("pow", SqlStdOperatorTable.POWER,
-          hToken(HiveParser.Identifier, "power")
-      );
-      registerFunction("ceil", SqlStdOperatorTable.CEIL, hToken(HiveParser.Identifier, "ceil"));
-      registerDuplicateFunction("ceiling", SqlStdOperatorTable.CEIL,
-          hToken(HiveParser.Identifier, "ceil")
-      );
-      registerFunction("floor", SqlStdOperatorTable.FLOOR, hToken(HiveParser.Identifier, "floor"));
-      registerFunction("log10", SqlStdOperatorTable.LOG10, hToken(HiveParser.Identifier, "log10"));
-      registerFunction("ln", SqlStdOperatorTable.LN, hToken(HiveParser.Identifier, "ln"));
-      registerFunction("cos", SqlStdOperatorTable.COS, hToken(HiveParser.Identifier, "cos"));
-      registerFunction("sin", SqlStdOperatorTable.SIN, hToken(HiveParser.Identifier, "sin"));
-      registerFunction("tan", SqlStdOperatorTable.TAN, hToken(HiveParser.Identifier, "tan"));
-      registerFunction("concat", HiveConcat.INSTANCE,
-          hToken(HiveParser.Identifier, "concat")
-      );
-      registerFunction("substring", SqlStdOperatorTable.SUBSTRING,
-          hToken(HiveParser.Identifier, "substring")
-      );
-      registerFunction("like", SqlStdOperatorTable.LIKE, hToken(HiveParser.Identifier, "like"));
-      registerFunction("exp", SqlStdOperatorTable.EXP, hToken(HiveParser.Identifier, "exp"));
-      registerFunction("div", SqlStdOperatorTable.DIVIDE_INTEGER,
-          hToken(HiveParser.DIV, "div")
-      );
-      registerFunction("sqrt", SqlStdOperatorTable.SQRT, hToken(HiveParser.Identifier, "sqrt"));
-      registerFunction("lower", SqlStdOperatorTable.LOWER, hToken(HiveParser.Identifier, "lower"));
-      registerFunction("upper", SqlStdOperatorTable.UPPER, hToken(HiveParser.Identifier, "upper"));
-      registerFunction("abs", SqlStdOperatorTable.ABS, hToken(HiveParser.Identifier, "abs"));
-      registerFunction("character_length", SqlStdOperatorTable.CHAR_LENGTH,
-          hToken(HiveParser.Identifier, "character_length")
-      );
-      registerDuplicateFunction("char_length", SqlStdOperatorTable.CHAR_LENGTH,
-          hToken(HiveParser.Identifier, "character_length")
-      );
-      registerFunction("length", SqlStdOperatorTable.CHARACTER_LENGTH,
-          hToken(HiveParser.Identifier, "length")
-      );
-      registerFunction("trunc", HiveTruncSqlOperator.INSTANCE, hToken(HiveParser.Identifier, "trunc"));
-      registerFunction("to_date", HiveToDateSqlOperator.INSTANCE, hToken(HiveParser.Identifier, "to_date"));
-      registerFunction("to_unix_timestamp", HiveToUnixTimestampSqlOperator.INSTANCE,
-          hToken(HiveParser.Identifier, "to_unix_timestamp"));
-      registerFunction("unix_timestamp", HiveUnixTimestampSqlOperator.INSTANCE,
-          hToken(HiveParser.Identifier, "unix_timestamp"));
-      registerFunction("from_unixtime", HiveFromUnixTimeSqlOperator.INSTANCE,
-          hToken(HiveParser.Identifier, "from_unixtime"));
-      registerFunction("date_add", HiveDateAddSqlOperator.INSTANCE, hToken(HiveParser.Identifier, "date_add"));
-      registerFunction("date_sub", HiveDateSubSqlOperator.INSTANCE, hToken(HiveParser.Identifier, "date_sub"));
-
-      registerPlugin(DataSketchesFunctions.INSTANCE);
-    }
-
-    private void registerPlugin(HiveUDFPlugin plugin) {
-      for (UDFDescriptor udfDesc : plugin.getDescriptors()) {
-        Optional<SqlFunction> calciteFunction = udfDesc.getCalciteFunction();
-        if (calciteFunction.isPresent()) {
-          registerDuplicateFunction(udfDesc.getFunctionName(), calciteFunction.get(),
-              hToken(HiveParser.Identifier, udfDesc.getFunctionName()));
-        }
-      }
-
     }
 
     private void registerFunction(String name, SqlOperator calciteFn, HiveToken hiveToken) {
@@ -541,6 +436,22 @@ public class SqlFunctionConverter {
     }
   }
 
+  private static class CalciteSqlFn extends SqlFunction {
+    private final boolean deterministic;
+
+    public CalciteSqlFn(String name, SqlKind kind, SqlReturnTypeInference returnTypeInference,
+        SqlOperandTypeInference operandTypeInference, SqlOperandTypeChecker operandTypeChecker,
+        SqlFunctionCategory category, boolean deterministic) {
+      super(name, kind, returnTypeInference, operandTypeInference, operandTypeChecker, category);
+      this.deterministic = deterministic;
+    }
+
+    @Override
+    public boolean isDeterministic() {
+      return deterministic;
+    }
+  }
+
   private static class CalciteUDFInfo {
     private String                     udfName;
     private SqlReturnTypeInference     returnTypeInference;
@@ -549,7 +460,7 @@ public class SqlFunctionConverter {
   }
 
   private static CalciteUDFInfo getUDFInfo(String hiveUdfName,
-      List<RelDataType> calciteArgTypes, RelDataType calciteRetType) {
+      ImmutableList<RelDataType> calciteArgTypes, RelDataType calciteRetType) {
     CalciteUDFInfo udfInfo = new CalciteUDFInfo();
     udfInfo.udfName = hiveUdfName;
     udfInfo.returnTypeInference = ReturnTypes.explicit(calciteRetType);
@@ -563,10 +474,15 @@ public class SqlFunctionConverter {
   }
 
   public static SqlOperator getCalciteFn(String hiveUdfName,
-      ImmutableList<RelDataType> calciteArgTypes, RelDataType calciteRetType,
-      boolean deterministic, boolean runtimeConstant)
+      ImmutableList<RelDataType> calciteArgTypes, RelDataType calciteRetType, boolean deterministic)
       throws CalciteSemanticException {
 
+    if (hiveUdfName != null && hiveUdfName.trim().equals("<=>")) {
+      // We can create Calcite IS_DISTINCT_FROM operator for this. But since our
+      // join reordering algo cant handle this anyway there is no advantage of
+      // this.So, bail out for now.
+      throw new CalciteSemanticException("<=> is not yet supported for cbo.", UnsupportedFeature.Less_than_equal_greater_than);
+    }
     SqlOperator calciteOp;
     CalciteUDFInfo uInf = getUDFInfo(hiveUdfName, calciteArgTypes, calciteRetType);
     switch (hiveUdfName) {
@@ -584,9 +500,9 @@ public class SqlFunctionConverter {
       default:
         calciteOp = hiveToCalcite.get(hiveUdfName);
         if (null == calciteOp) {
-          calciteOp = new HiveSqlFunction(uInf.udfName, SqlKind.OTHER_FUNCTION, uInf.returnTypeInference,
+          calciteOp = new CalciteSqlFn(uInf.udfName, SqlKind.OTHER_FUNCTION, uInf.returnTypeInference,
               uInf.operandTypeInference, uInf.operandTypeChecker,
-              SqlFunctionCategory.USER_DEFINED_FUNCTION, deterministic, runtimeConstant);
+              SqlFunctionCategory.USER_DEFINED_FUNCTION, deterministic);
         }
         break;
     }
@@ -601,83 +517,42 @@ public class SqlFunctionConverter {
       CalciteUDFInfo udfInfo = getUDFInfo(hiveUdfName, calciteArgTypes, calciteRetType);
 
       switch (hiveUdfName.toLowerCase()) {
-      case "sum":
-        calciteAggFn = new HiveSqlSumAggFunction(
-            isDistinct,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
-      case "count":
-        calciteAggFn = new HiveSqlCountAggFunction(
-            isDistinct,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
-      case "min":
-        calciteAggFn = new HiveSqlMinMaxAggFunction(
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker, true);
-        break;
-      case "max":
-        calciteAggFn = new HiveSqlMinMaxAggFunction(
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker, false);
-        break;
-      case "avg":
-        calciteAggFn = new HiveSqlAverageAggFunction(
-            isDistinct,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
-      case "std":
-      case "stddev":
-      case "stddev_pop":
-        calciteAggFn = new HiveSqlVarianceAggFunction(
-            "stddev_pop",
-            SqlKind.STDDEV_POP,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
-      case "stddev_samp":
-        calciteAggFn = new HiveSqlVarianceAggFunction(
-            "stddev_samp",
-            SqlKind.STDDEV_SAMP,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
-      case "variance":
-      case "var_pop":
-        calciteAggFn = new HiveSqlVarianceAggFunction(
-            "var_pop",
-            SqlKind.VAR_POP,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
-      case "var_samp":
-        calciteAggFn = new HiveSqlVarianceAggFunction(
-            "var_samp",
-            SqlKind.VAR_SAMP,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
-      default:
-        calciteAggFn = new CalciteUDAF(
-            isDistinct,
-            udfInfo.udfName,
-            udfInfo.returnTypeInference,
-            udfInfo.operandTypeInference,
-            udfInfo.operandTypeChecker);
-        break;
+        case "sum":
+          calciteAggFn = new HiveSqlSumAggFunction(
+              isDistinct,
+              udfInfo.returnTypeInference,
+              udfInfo.operandTypeInference,
+              udfInfo.operandTypeChecker);
+          break;
+        case "count":
+          calciteAggFn = new HiveSqlCountAggFunction(
+              isDistinct,
+              udfInfo.returnTypeInference,
+              udfInfo.operandTypeInference,
+              udfInfo.operandTypeChecker);
+          break;
+        case "min":
+          calciteAggFn = new HiveSqlMinMaxAggFunction(
+              udfInfo.returnTypeInference,
+              udfInfo.operandTypeInference,
+              udfInfo.operandTypeChecker, true);
+          break;
+        case "max":
+          calciteAggFn = new HiveSqlMinMaxAggFunction(
+              udfInfo.returnTypeInference,
+              udfInfo.operandTypeInference,
+              udfInfo.operandTypeChecker, false);
+          break;
+        default:
+          calciteAggFn = new CalciteUDAF(
+              isDistinct,
+              udfInfo.udfName,
+              udfInfo.returnTypeInference,
+              udfInfo.operandTypeInference,
+              udfInfo.operandTypeChecker);
+          break;
       }
+
     }
     return calciteAggFn;
   }

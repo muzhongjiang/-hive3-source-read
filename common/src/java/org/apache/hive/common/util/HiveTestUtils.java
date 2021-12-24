@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,25 +20,16 @@ package org.apache.hive.common.util;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
-import org.apache.commons.io.IOUtils;
+import com.google.common.io.Files;
+
 import org.apache.hadoop.hive.common.classification.InterfaceAudience;
 import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.common.io.Files;
 
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
@@ -62,9 +53,8 @@ public class HiveTestUtils {
     final Process p1 = Runtime.getRuntime().exec(cmdArr, null, dir);
     new Thread(new Runnable() {
       @Override
-      @SuppressFBWarnings(value = "OS_OPEN_STREAM", justification = "Testing only")
       public void run() {
-        BufferedReader input = new BufferedReader(new InputStreamReader(p1.getErrorStream(), StandardCharsets.UTF_8));
+        BufferedReader input = new BufferedReader(new InputStreamReader(p1.getErrorStream()));
         String line;
         try {
           while ((line = input.readLine()) != null) {
@@ -80,34 +70,16 @@ public class HiveTestUtils {
 
   public static File genLocalJarForTest(String pathToClazzFile, String clazzName)
       throws IOException, InterruptedException {
-    return genLocalJarForTest(pathToClazzFile, clazzName, new HashMap<File, String>());
-  }
-
-  @SuppressFBWarnings(value = "RV_RETURN_VALUE_IGNORED_BAD_PRACTICE", justification = "Testing only")
-  public static File genLocalJarForTest(String pathToClazzFile, String clazzName, Map<File,String>extraContent)
-      throws IOException, InterruptedException {
     String u = pathToClazzFile;
     File dir = new File(u);
     File parentDir = dir.getParentFile();
     File f = new File(parentDir, clazzName + JAVA_FILE_EXT);
     Files.copy(dir, f);
     executeCmd(new String[] { "javac", clazzName + JAVA_FILE_EXT }, parentDir);
+    executeCmd(new String[] { "jar", "cf", clazzName + JAR_FILE_EXT, clazzName + CLAZZ_FILE_EXT },
+        parentDir);
     f.delete();
-
-    File outputJar=new File(parentDir, clazzName + JAR_FILE_EXT);
-    ZipOutputStream zos=new ZipOutputStream(new FileOutputStream(outputJar));
-    String contentClassName = clazzName + CLAZZ_FILE_EXT;
-    zos.putNextEntry(new ZipEntry(contentClassName));
-    IOUtils.copy(new FileInputStream(new File(parentDir,contentClassName)), zos);
-    zos.closeEntry();
-
-    for (Entry<File, String> entry : extraContent.entrySet()) {
-      zos.putNextEntry(new ZipEntry(entry.getKey().toString()));
-      zos.write(entry.getValue().getBytes(StandardCharsets.UTF_8));
-      zos.closeEntry();
-    }
-    zos.close();
-    new File(parentDir, contentClassName).delete();
-    return outputJar;
+    new File(parentDir, clazzName + CLAZZ_FILE_EXT).delete();
+    return new File(parentDir, clazzName + JAR_FILE_EXT);
   }
 }

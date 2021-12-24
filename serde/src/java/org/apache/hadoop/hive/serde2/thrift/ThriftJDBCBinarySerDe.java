@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.ByteStream;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.SerDeStats;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
@@ -66,18 +67,16 @@ public class ThriftJDBCBinarySerDe extends AbstractSerDe {
   private int count;
   private StructObjectInspector rowObjectInspector;
 
-  @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-      throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
 
+  @Override
+  public void initialize(Configuration conf, Properties tbl) throws SerDeException {
     // Get column names
     MAX_BUFFERED_ROWS =
-      HiveConf.getIntVar(configuration, HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE);
+      HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE);
     LOG.info("ThriftJDBCBinarySerDe max number of buffered columns: " + MAX_BUFFERED_ROWS);
-    String columnNameProperty = properties.getProperty(serdeConstants.LIST_COLUMNS);
-    String columnTypeProperty = properties.getProperty(serdeConstants.LIST_COLUMN_TYPES);
-    final String columnNameDelimiter = properties.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? properties
+    String columnNameProperty = tbl.getProperty(serdeConstants.LIST_COLUMNS);
+    String columnTypeProperty = tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES);
+    final String columnNameDelimiter = tbl.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? tbl
         .getProperty(serdeConstants.COLUMN_NAME_DELIMITER) : String.valueOf(SerDeUtils.COMMA);
     if (columnNameProperty.length() == 0) {
       columnNames = new ArrayList<String>();
@@ -96,9 +95,9 @@ public class ThriftJDBCBinarySerDe extends AbstractSerDe {
 
     initializeRowAndColumns();
     try {
-      thriftFormatter.initialize(configuration, properties);
+      thriftFormatter.initialize(conf, tbl);
     } catch (Exception e) {
-      throw new SerDeException(e);
+      new SerDeException(e);
     }
   }
 
@@ -159,6 +158,11 @@ public class ThriftJDBCBinarySerDe extends AbstractSerDe {
         count = 0;
         return serializeBatch();
     }
+    return null;
+  }
+
+  @Override
+  public SerDeStats getSerDeStats() {
     return null;
   }
 

@@ -22,7 +22,7 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.apache.hive.ptest.execution.LogDirectoryCleaner;
 import org.junit.Rule;

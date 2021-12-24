@@ -1,9 +1,6 @@
---! qt:dataset:src
---! qt:dataset:part
-CREATE EXTERNAL TABLE hbase_pushdown(key int, value string) 
+CREATE TABLE hbase_pushdown(key int, value string) 
 STORED BY 'org.apache.hadoop.hive.hbase.HBaseStorageHandler'
-WITH SERDEPROPERTIES ("hbase.columns.mapping" = ":key,cf:string")
-TBLPROPERTIES ("external.table.purge" = "true");
+WITH SERDEPROPERTIES ("hbase.columns.mapping" = ":key,cf:string");
 
 INSERT OVERWRITE TABLE hbase_pushdown 
 SELECT *

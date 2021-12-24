@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,10 +22,10 @@ import java.util.List;
 
 public class OpTraits {
 
-  private List<List<String>> bucketColNames;
-  private List<List<String>> sortColNames;
-  private int numBuckets;
-  private int numReduceSinks;
+  List<List<String>> bucketColNames;
+  List<List<String>> sortColNames;
+  int numBuckets;
+  int numReduceSinks;
 
   public OpTraits(List<List<String>> bucketColNames, int numBuckets,
       List<List<String>> sortColNames, int numReduceSinks) {
@@ -68,9 +68,10 @@ public class OpTraits {
     return this.numReduceSinks;
   }
 
+  
   @Override
   public String toString() {
     return "{ bucket column names: " + bucketColNames + "; sort column names: "
-        + sortColNames + "; bucket count: " + numBuckets + "}";
+        + sortColNames + "; bucket count: " + numBuckets + " }";
   }
 }

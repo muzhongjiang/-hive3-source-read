@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.ql.plan.DummyStoreDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
 import org.apache.hadoop.hive.serde2.objectinspector.InspectableObject;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption;
 
 /**
  * For SortMerge joins, this is a dummy operator, which stores the row for the
@@ -35,9 +36,9 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
  * Consider a query like:
  *
  * select * from
- *   (subq1 --&gt; has a filter)
+ *   (subq1 --> has a filter)
  *   join
- *   (subq2 --&gt; has a filter)
+ *   (subq2 --> has a filter)
  * on some key
  *
  * Let us assume that subq1 is the small table (either specified by the user or inferred
@@ -49,12 +50,12 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
  *
  * Therefore the following operator tree is created:
  *
- * TableScan (subq1) --&gt; Select --&gt; Filter --&gt; DummyStore
+ * TableScan (subq1) --> Select --> Filter --> DummyStore
  *                                                         \
  *                                                          \     SMBJoin
  *                                                          /
  *                                                         /
- * TableScan (subq2) --&gt; Select --&gt; Filter
+ * TableScan (subq2) --> Select --> Filter
  *
  * In order to fetch the row with the least join key from the small table, the row from subq1
  * is partially processed, and stored in DummyStore. For the actual processing of the join,
@@ -98,7 +99,8 @@ public class DummyStoreOperator extends Operator<DummyStoreDesc> implements Seri
   @Override
   public void process(Object row, int tag) throws HiveException {
     // Store the row. See comments above for why we need a new copy of the row.
-    result.o = ObjectInspectorUtils.copyToStandardObject(row, inputObjInspectors[0]);
+    result.o = ObjectInspectorUtils.copyToStandardObject(row, inputObjInspectors[0],
+        ObjectInspectorCopyOption.WRITABLE);
   }
 
   @Override

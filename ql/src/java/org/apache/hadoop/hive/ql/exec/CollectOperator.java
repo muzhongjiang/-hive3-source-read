@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,8 +19,7 @@
 package org.apache.hadoop.hive.ql.exec;
 
 import java.io.Serializable;
-import java.util.ArrayDeque;
-import java.util.Queue;
+import java.util.ArrayList;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
@@ -38,7 +37,7 @@ public class CollectOperator extends Operator<CollectDesc> implements
     Serializable {
 
   private static final long serialVersionUID = 1L;
-  protected transient Queue<Object> rowList;
+  protected transient ArrayList<Object> rowList;
   protected transient ObjectInspector standardRowInspector;
   transient int maxSize;
 
@@ -54,7 +53,7 @@ public class CollectOperator extends Operator<CollectDesc> implements
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
-    this.rowList = new ArrayDeque<>();
+    rowList = new ArrayList<Object>();
     maxSize = conf.getBufferSize().intValue();
   }
 
@@ -84,7 +83,7 @@ public class CollectOperator extends Operator<CollectDesc> implements
       result.o = null;
       result.oi = null;
     } else {
-      result.o = rowList.poll();
+      result.o = rowList.remove(0);
       result.oi = standardRowInspector;
     }
   }
@@ -101,10 +100,5 @@ public class CollectOperator extends Operator<CollectDesc> implements
 
   public static String getOperatorName() {
     return "COLLECT";
-  }
-
-  @Override
-  public boolean logicalEquals(Operator other) {
-    return getClass().getName().equals(other.getClass().getName());
   }
 }

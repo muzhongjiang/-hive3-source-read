@@ -1,5 +1,3 @@
---! qt:dataset:srcpart
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.compute.query.using.stats=true;
 set hive.stats.autogather=true;

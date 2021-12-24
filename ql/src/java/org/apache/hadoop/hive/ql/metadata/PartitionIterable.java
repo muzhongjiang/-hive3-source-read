@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,12 +24,13 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+
 /**
- * PartitionIterable - effectively a lazy Iterable&lt;Partition&gt;
+ * PartitionIterable - effectively a lazy Iterable<Partition>
  *
  * Sometimes, we have a need for iterating through a list of partitions,
  * but the list of partitions can be too big to fetch as a single object.
- * Thus, the goal of PartitionIterable is to act as an Iterable&lt;Partition&gt;
+ * Thus, the goal of PartitionIterable is to act as an Iterable<Partition>
  * while lazily fetching each relevant partition, one after the other as
  * independent metadata calls.
  *
@@ -92,14 +93,14 @@ public class PartitionIterable implements Iterable<Partition> {
       }
 
       private void getNextBatch() {
-        int batchCounter = 0;
+        int batch_counter = 0;
         List<String> nameBatch = new ArrayList<String>();
-        while (batchCounter < batchSize && partitionNamesIter.hasNext()){
+        while (batch_counter < batch_size && partitionNamesIter.hasNext()){
           nameBatch.add(partitionNamesIter.next());
-          batchCounter++;
+          batch_counter++;
         }
         try {
-          batchIter = db.getPartitionsByNames(table, nameBatch, getColStats).iterator();
+          batchIter = db.getPartitionsByNames(table,nameBatch).iterator();
         } catch (HiveException e) {
           throw new RuntimeException(e);
         }
@@ -128,13 +129,12 @@ public class PartitionIterable implements Iterable<Partition> {
   private Table table = null;
   private Map<String, String> partialPartitionSpec = null;
   private List<String> partitionNames = null;
-  private int batchSize;
-  private boolean getColStats = false;
+  private int batch_size;
 
   /**
    * Dummy constructor, which simply acts as an iterator on an already-present
    * list of partitions, allows for easy drop-in replacement for other methods
-   * that already have a List&lt;Partition&gt;
+   * that already have a List<Partition>
    */
   public PartitionIterable(Collection<Partition> ptnsProvided){
     this.currType = Type.LIST_PROVIDED;
@@ -146,22 +146,12 @@ public class PartitionIterable implements Iterable<Partition> {
    * a Hive object and a table object, and a partial partition spec.
    */
   public PartitionIterable(Hive db, Table table, Map<String, String> partialPartitionSpec,
-                           int batchSize) throws HiveException {
-    this(db, table, partialPartitionSpec, batchSize, false);
-  }
-
-  /**
-   * Primary constructor that fetches all partitions in a given table, given
-   * a Hive object and a table object, and a partial partition spec.
-   */
-  public PartitionIterable(Hive db, Table table, Map<String, String> partialPartitionSpec,
-                           int batchSize, boolean getColStats) throws HiveException {
+      int batch_size) throws HiveException {
     this.currType = Type.LAZY_FETCH_PARTITIONS;
     this.db = db;
     this.table = table;
     this.partialPartitionSpec = partialPartitionSpec;
-    this.batchSize = batchSize;
-    this.getColStats = getColStats;
+    this.batch_size = batch_size;
 
     if (this.partialPartitionSpec == null){
       partitionNames = db.getPartitionNames(

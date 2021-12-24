@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -222,6 +222,7 @@ public class VectorKeySeriesLongSerialized<T extends SerializeWrite>
   private void serialize(int pos, long value) throws IOException {
     serializeWrite.setAppend(output);
 
+    // UNDONE: Add support for DATE, TIMESTAMP, INTERVAL_YEAR_MONTH, INTERVAL_DAY_TIME...
     switch (primitiveCategory) {
     case BOOLEAN:
       serializeWrite.writeBoolean(value != 0);
@@ -234,9 +235,6 @@ public class VectorKeySeriesLongSerialized<T extends SerializeWrite>
       break;
     case INT:
       serializeWrite.writeInt((int) value);
-      break;
-    case DATE:
-      serializeWrite.writeDate((int) value);
       break;
     case LONG:
       serializeWrite.writeLong(value);

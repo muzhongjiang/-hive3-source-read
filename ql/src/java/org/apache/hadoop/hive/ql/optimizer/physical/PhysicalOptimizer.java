@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -46,6 +46,9 @@ public class PhysicalOptimizer {
    */
   private void initialize(HiveConf hiveConf) {
     resolvers = new ArrayList<PhysicalPlanResolver>();
+    if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVESKEWJOIN)) {
+      resolvers.add(new SkewJoinResolver());
+    }
     if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVECONVERTJOIN)) {
       resolvers.add(new CommonJoinResolver());
 
@@ -56,10 +59,10 @@ public class PhysicalOptimizer {
         resolvers.add(new SortMergeJoinResolver());
       }
     }
-    if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVESKEWJOIN)) {
-      resolvers.add(new SkewJoinResolver());
-    }
 
+    if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVEOPTINDEXFILTER)) {
+      resolvers.add(new IndexWhereResolver());
+    }
     resolvers.add(new MapJoinResolver());
     if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVEMETADATAONLYQUERIES)) {
       resolvers.add(new MetadataOnlyOptimizer());
@@ -79,16 +82,14 @@ public class PhysicalOptimizer {
     }
 
     if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_CHECK_CROSS_PRODUCT)) {
-      resolvers.add(new CrossProductHandler());
+      resolvers.add(new CrossProductCheck());
     }
 
     // Vectorization should be the last optimization, because it doesn't modify the plan
     // or any operators. It makes a very low level transformation to the expressions to
     // run in the vectorized mode.
-    if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED) ||
-        HiveConf.getVar(hiveConf,
-            HiveConf.ConfVars.HIVE_TEST_VECTORIZATION_ENABLED_OVERRIDE).equalsIgnoreCase(
-                "enable")) {
+    if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED)
+        && pctx.getContext().getExplainAnalyze() == null) {
       resolvers.add(new Vectorizer());
     }
     if (!"none".equalsIgnoreCase(hiveConf.getVar(HiveConf.ConfVars.HIVESTAGEIDREARRANGE))) {
@@ -104,7 +105,7 @@ public class PhysicalOptimizer {
    * invoke all the resolvers one-by-one, and alter the physical plan.
    *
    * @return PhysicalContext
-   * @throws SemanticException
+   * @throws HiveException
    */
   public PhysicalContext optimize() throws SemanticException {
     for (PhysicalPlanResolver r : resolvers) {

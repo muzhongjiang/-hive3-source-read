@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,14 +22,12 @@ import org.apache.hadoop.hive.conf.HiveConf;
 
 public class TezEdgeProperty {
 
-  public enum EdgeType {//todo: HIVE-15549
-    SIMPLE_EDGE,//SORT_PARTITION_EDGE
+  public enum EdgeType {
+    SIMPLE_EDGE,
     BROADCAST_EDGE,
-    CONTAINS,//used for union (all?)
-    CUSTOM_EDGE,//CO_PARTITION_EDGE
-    CUSTOM_SIMPLE_EDGE,//PARTITION_EDGE
-    ONE_TO_ONE_EDGE,
-    XPROD_EDGE
+    CONTAINS,
+    CUSTOM_EDGE,
+    CUSTOM_SIMPLE_EDGE,
   }
 
   private HiveConf hiveConf;
@@ -37,11 +35,9 @@ public class TezEdgeProperty {
   private int numBuckets;
 
   private boolean isAutoReduce;
-  private boolean isSlowStart = true;
   private int minReducer;
   private int maxReducer;
   private long inputSizePerReducer;
-  private Integer bufferSize;
 
   public TezEdgeProperty(HiveConf hiveConf, EdgeType edgeType,
       int buckets) {
@@ -51,15 +47,8 @@ public class TezEdgeProperty {
   }
 
   public TezEdgeProperty(HiveConf hiveConf, EdgeType edgeType, boolean isAutoReduce,
-      boolean isSlowStart, int minReducer, int maxReducer, long bytesPerReducer) {
+      int minReducer, int maxReducer, long bytesPerReducer) {
     this(hiveConf, edgeType, -1);
-    setAutoReduce(hiveConf, isAutoReduce, minReducer, maxReducer, bytesPerReducer);
-    this.isSlowStart = isSlowStart;
-  }
-
-  public void setAutoReduce(HiveConf hiveConf, boolean isAutoReduce, int minReducer,
-      int maxReducer, long bytesPerReducer) {
-    this.hiveConf = hiveConf;
     this.minReducer = minReducer;
     this.maxReducer = maxReducer;
     this.isAutoReduce = isAutoReduce;
@@ -97,25 +86,4 @@ public class TezEdgeProperty {
   public long getInputSizePerReducer() {
     return inputSizePerReducer;
   }
-
-  public boolean isSlowStart() {
-    return isSlowStart;
-  }
-
-  public void setSlowStart(boolean slowStart) {
-    this.isSlowStart = slowStart;
-  }
-
-  public void setBufferSize(Integer bufferSize) {
-    this.bufferSize = bufferSize;
-  }
-
-  public Integer getBufferSize() {
-    return bufferSize;
-  }
-
-  public void setEdgeType(EdgeType type) {
-    this.edgeType = type;
-  }
-
 }

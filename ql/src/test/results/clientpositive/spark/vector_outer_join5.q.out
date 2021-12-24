@@ -25,15 +25,13 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@sorted_mod_4
 POSTHOOK: Output: default@sorted_mod_4
 PREHOOK: query: ANALYZE TABLE sorted_mod_4 COMPUTE STATISTICS FOR COLUMNS
-PREHOOK: type: ANALYZE_TABLE
+PREHOOK: type: QUERY
 PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: ANALYZE TABLE sorted_mod_4 COMPUTE STATISTICS FOR COLUMNS
-POSTHOOK: type: ANALYZE_TABLE
+POSTHOOK: type: QUERY
 POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 PREHOOK: query: create table small_table stored
 as orc as select ctinyint, cbigint from alltypesorc limit 100
 PREHOOK: type: CREATETABLE_AS_SELECT
@@ -57,15 +55,13 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table
 POSTHOOK: Output: default@small_table
 PREHOOK: query: ANALYZE TABLE small_table COMPUTE STATISTICS FOR COLUMNS
-PREHOOK: type: ANALYZE_TABLE
+PREHOOK: type: QUERY
 PREHOOK: Input: default@small_table
-PREHOOK: Output: default@small_table
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: ANALYZE TABLE small_table COMPUTE STATISTICS FOR COLUMNS
-POSTHOOK: type: ANALYZE_TABLE
+POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table
-POSTHOOK: Output: default@small_table
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, st.*
 from sorted_mod_4 s
@@ -73,9 +69,6 @@ left outer join small_table st
 on s.ctinyint = st.ctinyint
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@small_table
-PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, st.*
 from sorted_mod_4 s
@@ -83,9 +76,6 @@ left outer join small_table st
 on s.ctinyint = st.ctinyint
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@small_table
-POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.*, st.*
 from sorted_mod_4 s
@@ -95,7 +85,7 @@ on s.ctinyint = st.ctinyint
 PREHOOK: type: QUERY
 PREHOOK: Input: default@small_table
 PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.*, st.*
 from sorted_mod_4 s
 left outer join small_table st
@@ -104,7 +94,7 @@ on s.ctinyint = st.ctinyint
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table
 POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 6876
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
@@ -113,9 +103,6 @@ left outer join small_table sm
 on s.ctinyint = sm.ctinyint and s.cmodint = 2
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@small_table
-PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
@@ -123,9 +110,6 @@ left outer join small_table sm
 on s.ctinyint = sm.ctinyint and s.cmodint = 2
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@small_table
-POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
@@ -135,7 +119,7 @@ on s.ctinyint = sm.ctinyint and s.cmodint = 2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@small_table
 PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
 left outer join small_table sm
@@ -144,7 +128,7 @@ on s.ctinyint = sm.ctinyint and s.cmodint = 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table
 POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 6058
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
@@ -153,9 +137,6 @@ left outer join small_table sm
 on s.ctinyint = sm.ctinyint and pmod(s.ctinyint, 4) = s.cmodint
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@small_table
-PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
@@ -163,9 +144,6 @@ left outer join small_table sm
 on s.ctinyint = sm.ctinyint and pmod(s.ctinyint, 4) = s.cmodint
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@small_table
-POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
@@ -175,7 +153,7 @@ on s.ctinyint = sm.ctinyint and pmod(s.ctinyint, 4) = s.cmodint
 PREHOOK: type: QUERY
 PREHOOK: Input: default@small_table
 PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
 left outer join small_table sm
@@ -184,7 +162,7 @@ on s.ctinyint = sm.ctinyint and pmod(s.ctinyint, 4) = s.cmodint
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table
 POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 6248
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
@@ -193,9 +171,6 @@ left outer join small_table sm
 on s.ctinyint = sm.ctinyint and s.ctinyint < 100
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@small_table
-PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
@@ -203,9 +178,6 @@ left outer join small_table sm
 on s.ctinyint = sm.ctinyint and s.ctinyint < 100
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@small_table
-POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
@@ -215,7 +187,7 @@ on s.ctinyint = sm.ctinyint and s.ctinyint < 100
 PREHOOK: type: QUERY
 PREHOOK: Input: default@small_table
 PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.ctinyint, s.cmodint, sm.cbigint 
 from sorted_mod_4 s
 left outer join small_table sm
@@ -224,7 +196,7 @@ on s.ctinyint = sm.ctinyint and s.ctinyint < 100
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table
 POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 6876
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, sm.*, s2.* 
@@ -235,9 +207,6 @@ left outer join sorted_mod_4 s2
   on s2.ctinyint = s.ctinyint
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@small_table
-PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, sm.*, s2.* 
 from sorted_mod_4 s
@@ -247,9 +216,6 @@ left outer join sorted_mod_4 s2
   on s2.ctinyint = s.ctinyint
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@small_table
-POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.*, sm.*, s2.* 
 from sorted_mod_4 s
@@ -261,7 +227,7 @@ left outer join sorted_mod_4 s2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@small_table
 PREHOOK: Input: default@sorted_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.*, sm.*, s2.* 
 from sorted_mod_4 s
 left outer join small_table sm
@@ -272,7 +238,7 @@ left outer join sorted_mod_4 s2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table
 POSTHOOK: Input: default@sorted_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 3268334
 PREHOOK: query: create table mod_8_mod_4 stored as orc
 as select pmod(ctinyint, 8) as cmodtinyint, pmod(cint, 4) as cmodint from alltypesorc
@@ -299,15 +265,13 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mod_8_mod_4
 POSTHOOK: Output: default@mod_8_mod_4
 PREHOOK: query: ANALYZE TABLE mod_8_mod_4 COMPUTE STATISTICS FOR COLUMNS
-PREHOOK: type: ANALYZE_TABLE
+PREHOOK: type: QUERY
 PREHOOK: Input: default@mod_8_mod_4
-PREHOOK: Output: default@mod_8_mod_4
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: ANALYZE TABLE mod_8_mod_4 COMPUTE STATISTICS FOR COLUMNS
-POSTHOOK: type: ANALYZE_TABLE
+POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mod_8_mod_4
-POSTHOOK: Output: default@mod_8_mod_4
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 PREHOOK: query: create table small_table2 stored
 as orc as select pmod(ctinyint, 16) as cmodtinyint, cbigint from alltypesorc limit 100
 PREHOOK: type: CREATETABLE_AS_SELECT
@@ -331,15 +295,13 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table2
 POSTHOOK: Output: default@small_table2
 PREHOOK: query: ANALYZE TABLE small_table2 COMPUTE STATISTICS FOR COLUMNS
-PREHOOK: type: ANALYZE_TABLE
+PREHOOK: type: QUERY
 PREHOOK: Input: default@small_table2
-PREHOOK: Output: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: ANALYZE TABLE small_table2 COMPUTE STATISTICS FOR COLUMNS
-POSTHOOK: type: ANALYZE_TABLE
+POSTHOOK: type: QUERY
 POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, st.*
 from mod_8_mod_4 s
@@ -347,9 +309,6 @@ left outer join small_table2 st
 on s.cmodtinyint = st.cmodtinyint
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@mod_8_mod_4
-PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, st.*
 from mod_8_mod_4 s
@@ -357,9 +316,6 @@ left outer join small_table2 st
 on s.cmodtinyint = st.cmodtinyint
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@mod_8_mod_4
-POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.*, st.*
 from mod_8_mod_4 s
@@ -369,7 +325,7 @@ on s.cmodtinyint = st.cmodtinyint
 PREHOOK: type: QUERY
 PREHOOK: Input: default@mod_8_mod_4
 PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.*, st.*
 from mod_8_mod_4 s
 left outer join small_table2 st
@@ -378,7 +334,7 @@ on s.cmodtinyint = st.cmodtinyint
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mod_8_mod_4
 POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 39112
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
@@ -387,9 +343,6 @@ left outer join small_table2 sm
 on s.cmodtinyint = sm.cmodtinyint and s.cmodint = 2
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@mod_8_mod_4
-PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
@@ -397,9 +350,6 @@ left outer join small_table2 sm
 on s.cmodtinyint = sm.cmodtinyint and s.cmodint = 2
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@mod_8_mod_4
-POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
@@ -409,7 +359,7 @@ on s.cmodtinyint = sm.cmodtinyint and s.cmodint = 2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@mod_8_mod_4
 PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
 left outer join small_table2 sm
@@ -418,7 +368,7 @@ on s.cmodtinyint = sm.cmodtinyint and s.cmodint = 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mod_8_mod_4
 POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 11171
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
@@ -427,9 +377,6 @@ left outer join small_table2 sm
 on s.cmodtinyint = sm.cmodtinyint and pmod(s.cmodtinyint, 4) = s.cmodint
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@mod_8_mod_4
-PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
@@ -437,9 +384,6 @@ left outer join small_table2 sm
 on s.cmodtinyint = sm.cmodtinyint and pmod(s.cmodtinyint, 4) = s.cmodint
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@mod_8_mod_4
-POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
@@ -449,7 +393,7 @@ on s.cmodtinyint = sm.cmodtinyint and pmod(s.cmodtinyint, 4) = s.cmodint
 PREHOOK: type: QUERY
 PREHOOK: Input: default@mod_8_mod_4
 PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
 left outer join small_table2 sm
@@ -458,7 +402,7 @@ on s.cmodtinyint = sm.cmodtinyint and pmod(s.cmodtinyint, 4) = s.cmodint
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mod_8_mod_4
 POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 14371
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
@@ -467,9 +411,6 @@ left outer join small_table2 sm
 on s.cmodtinyint = sm.cmodtinyint and s.cmodtinyint < 3
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@mod_8_mod_4
-PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
@@ -477,9 +418,6 @@ left outer join small_table2 sm
 on s.cmodtinyint = sm.cmodtinyint and s.cmodtinyint < 3
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@mod_8_mod_4
-POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
@@ -489,7 +427,7 @@ on s.cmodtinyint = sm.cmodtinyint and s.cmodtinyint < 3
 PREHOOK: type: QUERY
 PREHOOK: Input: default@mod_8_mod_4
 PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.cmodtinyint, s.cmodint, sm.cbigint 
 from mod_8_mod_4 s
 left outer join small_table2 sm
@@ -498,7 +436,7 @@ on s.cmodtinyint = sm.cmodtinyint and s.cmodtinyint < 3
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mod_8_mod_4
 POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 17792
 PREHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, sm.*, s2.* 
@@ -509,9 +447,6 @@ left outer join mod_8_mod_4 s2
   on s2.cmodtinyint = s.cmodtinyint
 ) t1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@mod_8_mod_4
-PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail formatted
 select count(*) from (select s.*, sm.*, s2.* 
 from mod_8_mod_4 s
@@ -521,9 +456,6 @@ left outer join mod_8_mod_4 s2
   on s2.cmodtinyint = s.cmodtinyint
 ) t1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@mod_8_mod_4
-POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 #### A masked pattern was here ####
 PREHOOK: query: select count(*) from (select s.*, sm.*, s2.* 
 from mod_8_mod_4 s
@@ -535,7 +467,7 @@ left outer join mod_8_mod_4 s2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@mod_8_mod_4
 PREHOOK: Input: default@small_table2
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select count(*) from (select s.*, sm.*, s2.* 
 from mod_8_mod_4 s
 left outer join small_table2 sm
@@ -546,5 +478,5 @@ left outer join mod_8_mod_4 s2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mod_8_mod_4
 POSTHOOK: Input: default@small_table2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 6524438

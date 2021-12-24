@@ -5,6 +5,7 @@ declare i int = 3;
 proc p1  
 begin
   print 'i: ' || i;
+  print 'j: ' || j;
   print 'k: ' || k;
 end;
 
@@ -20,9 +21,8 @@ end;
 
 p2();
 print 'i: ' || i;
-print 'k: ' || k;
 print 'j: ' || j;
-
+print 'k: ' || k;
 
 
 

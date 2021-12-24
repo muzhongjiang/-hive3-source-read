@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,6 +25,7 @@ import java.util.Set;
 
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.SemiJoin;
 import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMdSelectivity;
 import org.apache.calcite.rel.metadata.RelMdUtil;
@@ -36,7 +37,6 @@ import org.apache.calcite.util.Pair;
 import org.apache.hadoop.hive.ql.optimizer.calcite.CalciteSemanticException;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveCalciteUtil.JoinLeafPredicateInfo;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveCalciteUtil.JoinPredicateInfo;
-import org.apache.hadoop.hive.ql.optimizer.calcite.HiveConfPlannerContext;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableScan;
 
@@ -56,7 +56,7 @@ public class HiveRelMdSelectivity extends RelMdSelectivity {
 
   public Double getSelectivity(HiveTableScan t, RelMetadataQuery mq, RexNode predicate) {
     if (predicate != null) {
-      FilterSelectivityEstimator filterSelEstmator = new FilterSelectivityEstimator(t, mq);
+      FilterSelectivityEstimator filterSelEstmator = new FilterSelectivityEstimator(t);
       return filterSelEstmator.estimateSelectivity(predicate);
     }
 
@@ -64,12 +64,8 @@ public class HiveRelMdSelectivity extends RelMdSelectivity {
   }
 
   public Double getSelectivity(Join j, RelMetadataQuery mq, RexNode predicate) {
-    if (j.getJoinType().equals(JoinRelType.INNER) || j.isSemiJoin() || j.getJoinType().equals(JoinRelType.ANTI)) {
-      Double selectivity =  computeInnerJoinSelectivity(j, mq, predicate);
-      if (j.getJoinType().equals(JoinRelType.ANTI)) {
-        return 1 - selectivity;
-      }
-      return selectivity;
+    if (j.getJoinType().equals(JoinRelType.INNER)) {
+      return computeInnerJoinSelectivity(j, mq, predicate);
     } else if (j.getJoinType().equals(JoinRelType.LEFT) ||
             j.getJoinType().equals(JoinRelType.RIGHT)) {
       double left = mq.getRowCount(j.getLeft());
@@ -89,7 +85,7 @@ public class HiveRelMdSelectivity extends RelMdSelectivity {
         getCombinedPredicateForJoin(j, predicate);
     if (!predInfo.getKey()) {
       return
-          new FilterSelectivityEstimator(j, mq).
+          new FilterSelectivityEstimator(j).
           estimateSelectivity(predInfo.getValue());
     }
 
@@ -101,34 +97,23 @@ public class HiveRelMdSelectivity extends RelMdSelectivity {
     } catch (CalciteSemanticException e) {
       throw new RuntimeException(e);
     }
-    ImmutableMap.Builder<Integer, Double> colStatMapBuilder = ImmutableMap.builder();
+    ImmutableMap.Builder<Integer, Double> colStatMapBuilder = ImmutableMap
+        .builder();
     ImmutableMap<Integer, Double> colStatMap;
     int rightOffSet = j.getLeft().getRowType().getFieldCount();
 
     // 1. Update Col Stats Map with col stats for columns from left side of
     // Join which are part of join keys
     for (Integer ljk : jpi.getProjsFromLeftPartOfJoinKeysInChildSchema()) {
-      Double ljkDistRowCount =
-          HiveRelMdDistinctRowCount.getDistinctRowCount(j.getLeft(), mq, ljk);
-      if (ljkDistRowCount == null) {
-        // Distinct row count could not be determined,
-        // return default selectivity
-        return 1.0;
-      }
-      colStatMapBuilder.put(ljk, ljkDistRowCount);
+      colStatMapBuilder.put(ljk,
+          HiveRelMdDistinctRowCount.getDistinctRowCount(j.getLeft(), mq, ljk));
     }
 
     // 2. Update Col Stats Map with col stats for columns from right side of
     // Join which are part of join keys
     for (Integer rjk : jpi.getProjsFromRightPartOfJoinKeysInChildSchema()) {
-      Double rjkDistRowCount =
-          HiveRelMdDistinctRowCount.getDistinctRowCount(j.getRight(), mq, rjk);
-      if (rjkDistRowCount == null) {
-        // Distinct row count could not be determined,
-        // return default selectivity
-        return 1.0;
-      }
-      colStatMapBuilder.put(rjk + rightOffSet, rjkDistRowCount);
+      colStatMapBuilder.put(rjk + rightOffSet,
+          HiveRelMdDistinctRowCount.getDistinctRowCount(j.getRight(), mq, rjk));
     }
     colStatMap = colStatMapBuilder.build();
 
@@ -136,29 +121,23 @@ public class HiveRelMdSelectivity extends RelMdSelectivity {
     // NDV of the join can not exceed the cardinality of cross join.
     List<JoinLeafPredicateInfo> peLst = jpi.getEquiJoinPredicateElements();
     int noOfPE = peLst.size();
-    double ndvEstimate = 1;
+    double ndvCrossProduct = 1;
     if (noOfPE > 0) {
-      boolean isCorrelatedColumns = j.getCluster().getPlanner().getContext().
-          unwrap(HiveConfPlannerContext.class).getIsCorrelatedColumns();
-      if (noOfPE > 1 && isCorrelatedColumns) {
-        ndvEstimate = maxNdvForCorrelatedColumns(peLst, colStatMap);
-      } else {
-        ndvEstimate = exponentialBackoff(peLst, colStatMap);
-      }
+      ndvCrossProduct = exponentialBackoff(peLst, colStatMap);
 
-      if (j.isSemiJoin() || (j.getJoinType().equals(JoinRelType.ANTI))) {
-        ndvEstimate = Math.min(mq.getRowCount(j.getLeft()),
-            ndvEstimate);
-      } else if (j instanceof HiveJoin) {
-        ndvEstimate = Math.min(mq.getRowCount(j.getLeft())
-            * mq.getRowCount(j.getRight()), ndvEstimate);
+      if (j instanceof SemiJoin) {
+        ndvCrossProduct = Math.min(mq.getRowCount(j.getLeft()),
+            ndvCrossProduct);
+      }else if (j instanceof HiveJoin){
+        ndvCrossProduct = Math.min(mq.getRowCount(j.getLeft())
+            * mq.getRowCount(j.getRight()), ndvCrossProduct);
       } else {
         throw new RuntimeException("Unexpected Join type: " + j.getClass().getName());
       }
     }
 
     // 4. Join Selectivity = 1/NDV
-    return (1 / ndvEstimate);
+    return (1 / ndvCrossProduct);
   }
 
   // 3.2 if conjunctive predicate elements are more than one, then walk
@@ -204,17 +183,6 @@ public class HiveRelMdSelectivity extends RelMdSelectivity {
       }
     }
     return ndvCrossProduct;
-  }
-
-  // max ndv across all column references from both sides of table
-  protected double maxNdvForCorrelatedColumns(List<JoinLeafPredicateInfo> peLst,
-  ImmutableMap<Integer, Double> colStatMap) {
-    int noOfPE = peLst.size();
-    List<Double> ndvs = new ArrayList<Double>(noOfPE);
-    for (int i = 0; i < noOfPE; i++) {
-      ndvs.add(getMaxNDVForJoinSelectivity(peLst.get(i), colStatMap));
-    }
-    return Collections.max(ndvs);
   }
 
   /*

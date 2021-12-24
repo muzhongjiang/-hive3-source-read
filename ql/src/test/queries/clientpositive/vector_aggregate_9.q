@@ -2,7 +2,7 @@ set hive.explain.user=false;
 SET hive.vectorized.execution.enabled=true;
 set hive.fetch.task.conversion=none;
 
-create table vectortab2k_n4(
+create table vectortab2k(
             t tinyint,
             si smallint,
             i int,
@@ -19,9 +19,9 @@ create table vectortab2k_n4(
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../../data/files/vectortab2k' OVERWRITE INTO TABLE vectortab2k_n4;
+LOAD DATA LOCAL INPATH '../../data/files/vectortab2k' OVERWRITE INTO TABLE vectortab2k;
 
-create table vectortab2korc_n4(
+create table vectortab2korc(
             t tinyint,
             si smallint,
             i int,
@@ -37,21 +37,11 @@ create table vectortab2korc_n4(
             dt date)
 STORED AS ORC;
 
-INSERT INTO TABLE vectortab2korc_n4 SELECT * FROM vectortab2k_n4;
+INSERT INTO TABLE vectortab2korc SELECT * FROM vectortab2k;
+
+explain vectorization expression
+select min(dc), max(dc), sum(dc), avg(dc) from vectortab2korc;
 
 -- SORT_QUERY_RESULTS
 
-explain vectorization detail
-select min(dc), max(dc), sum(dc), avg(dc) from vectortab2korc_n4;
-
-select min(dc), max(dc), sum(dc), avg(dc) from vectortab2korc_n4;
-
-explain vectorization detail
-select min(d), max(d), sum(d), avg(d) from vectortab2korc_n4;
-
-select min(d), max(d), sum(d), avg(d) from vectortab2korc_n4;
-
-explain vectorization detail
-select min(ts), max(ts), sum(ts), avg(ts) from vectortab2korc_n4;
-
-select min(ts), max(ts), sum(ts), avg(ts) from vectortab2korc_n4;
+select min(dc), max(dc), sum(dc), avg(dc) from vectortab2korc;

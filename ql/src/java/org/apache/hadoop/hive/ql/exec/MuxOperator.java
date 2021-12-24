@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -225,11 +225,15 @@ public class MuxOperator extends Operator<MuxDesc> implements Serializable{
   @Override
   protected void initializeChildren(Configuration hconf) throws HiveException {
     state = State.INIT;
-    LOG.info("Operator " + id + " " + getName() + " initialized");
+    if (isLogInfoEnabled) {
+      LOG.info("Operator " + id + " " + getName() + " initialized");
+    }
     if (childOperators == null || childOperators.isEmpty()) {
       return;
     }
-    LOG.info("Initializing children of " + id + " " + getName());
+    if (isLogInfoEnabled) {
+      LOG.info("Initializing children of " + id + " " + getName());
+    }
     childOperatorsArray[0].initialize(hconf, outputObjectInspectors);
     if (reporter != null) {
       childOperatorsArray[0].setReporter(reporter);
@@ -238,7 +242,7 @@ public class MuxOperator extends Operator<MuxDesc> implements Serializable{
 
   @Override
   public void process(Object row, int tag) throws HiveException {
-    if (LOG.isInfoEnabled()) {
+    if (isLogInfoEnabled) {
       cntrs[tag]++;
       if (cntrs[tag] == nextCntrs[tag]) {
         LOG.info(id + ", tag=" + tag + ", forwarding " + cntrs[tag] + " rows");
@@ -313,7 +317,7 @@ public class MuxOperator extends Operator<MuxDesc> implements Serializable{
 
   @Override
   protected void closeOp(boolean abort) throws HiveException {
-    if (LOG.isInfoEnabled()) {
+    if (isLogInfoEnabled) {
       for (int i = 0; i < numParents; i++) {
         LOG.info(id + ", tag=" + i + ", forwarded " + cntrs[i] + " rows");
       }
@@ -335,10 +339,5 @@ public class MuxOperator extends Operator<MuxDesc> implements Serializable{
   @Override
   public OperatorType getType() {
     return OperatorType.MUX;
-  }
-
-  @Override
-  public boolean logicalEquals(Operator other) {
-    return getClass().getName().equals(other.getClass().getName());
   }
 }

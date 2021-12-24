@@ -37,7 +37,7 @@ POSTHOOK: Output: default@orcfile_merge3a@ds=1
 POSTHOOK: Lineage: orcfile_merge3a PARTITION(ds=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
 POSTHOOK: Lineage: orcfile_merge3a PARTITION(ds=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 Found 1 items
--rw-r--r--   3 ### USER ### ### GROUP ###       2532 ### HDFS DATE ### hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 PREHOOK: query: INSERT OVERWRITE TABLE orcfile_merge3a PARTITION (ds='1')
     SELECT * FROM src
 PREHOOK: type: QUERY
@@ -63,23 +63,15 @@ POSTHOOK: Output: default@orcfile_merge3a@ds=2
 POSTHOOK: Lineage: orcfile_merge3a PARTITION(ds=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
 POSTHOOK: Lineage: orcfile_merge3a PARTITION(ds=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 Found 1 items
--rw-r--r--   3 ### USER ### ### GROUP ###       2532 ### HDFS DATE ### hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 Found 1 items
--rw-r--r--   3 ### USER ### ### GROUP ###       2532 ### HDFS DATE ### hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 PREHOOK: query: EXPLAIN INSERT OVERWRITE TABLE orcfile_merge3b
     SELECT key, value FROM orcfile_merge3a
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orcfile_merge3a
-PREHOOK: Input: default@orcfile_merge3a@ds=1
-PREHOOK: Input: default@orcfile_merge3a@ds=2
-PREHOOK: Output: default@orcfile_merge3b
 POSTHOOK: query: EXPLAIN INSERT OVERWRITE TABLE orcfile_merge3b
     SELECT key, value FROM orcfile_merge3a
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orcfile_merge3a
-POSTHOOK: Input: default@orcfile_merge3a@ds=1
-POSTHOOK: Input: default@orcfile_merge3a@ds=2
-POSTHOOK: Output: default@orcfile_merge3b
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-7 depends on stages: Stage-1 , consists of Stage-4, Stage-3, Stage-5
@@ -120,7 +112,7 @@ STAGE PLANS:
     Move Operator
       files:
           hdfs directory: true
-          destination: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 
   Stage: Stage-0
     Move Operator
@@ -133,8 +125,7 @@ STAGE PLANS:
               name: default.orcfile_merge3b
 
   Stage: Stage-2
-    Stats Work
-      Basic Stats Work:
+    Stats-Aggr Operator
 
   Stage: Stage-3
     Spark
@@ -170,7 +161,7 @@ STAGE PLANS:
     Move Operator
       files:
           hdfs directory: true
-          destination: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 
 PREHOOK: query: INSERT OVERWRITE TABLE orcfile_merge3b
     SELECT key, value FROM orcfile_merge3a
@@ -196,7 +187,7 @@ PREHOOK: type: QUERY
 PREHOOK: Input: default@orcfile_merge3a
 PREHOOK: Input: default@orcfile_merge3a@ds=1
 PREHOOK: Input: default@orcfile_merge3a@ds=2
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: SELECT SUM(HASH(c)) FROM (
     SELECT TRANSFORM(key, value) USING 'tr \t _' AS (c)
     FROM orcfile_merge3a
@@ -205,7 +196,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orcfile_merge3a
 POSTHOOK: Input: default@orcfile_merge3a@ds=1
 POSTHOOK: Input: default@orcfile_merge3a@ds=2
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 14412220296
 PREHOOK: query: SELECT SUM(HASH(c)) FROM (
     SELECT TRANSFORM(key, value) USING 'tr \t _' AS (c)
@@ -213,14 +204,14 @@ PREHOOK: query: SELECT SUM(HASH(c)) FROM (
 ) t
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orcfile_merge3b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: SELECT SUM(HASH(c)) FROM (
     SELECT TRANSFORM(key, value) USING 'tr \t _' AS (c)
     FROM orcfile_merge3b
 ) t
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orcfile_merge3b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 14412220296
 PREHOOK: query: DROP TABLE orcfile_merge3a
 PREHOOK: type: DROPTABLE

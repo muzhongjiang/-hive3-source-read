@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,6 +21,7 @@ package org.apache.hive.hcatalog.templeton;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.concurrent.TimeoutException;
+import org.eclipse.jetty.http.HttpStatus;
 
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -33,7 +34,6 @@ import static org.junit.Assert.assertTrue;
  * Requests and job request execution time outs. Verify that we get appropriate exceptions
  * and exception message.
  */
-@org.junit.Ignore("HIVE-23983")
 public class TestConcurrentJobRequestsThreadsAndTimeout extends ConcurrentJobRequestsTestBase {
 
   private static AppConfig config;

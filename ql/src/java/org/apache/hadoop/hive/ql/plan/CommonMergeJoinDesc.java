@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,8 +19,6 @@
 package org.apache.hadoop.hive.ql.plan;
 
 import java.io.Serializable;
-import java.util.List;
-
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 
 
@@ -36,14 +34,6 @@ public class CommonMergeJoinDesc extends MapJoinDesc implements Serializable {
   public CommonMergeJoinDesc(int numBuckets, int mapJoinConversionPos,
       MapJoinDesc joinDesc) {
     super(joinDesc);
-
-    for (List<ExprNodeDesc> keys : joinDesc.getKeys().values()) {
-      if (!isSupportedComplexType(keys)) {
-        //TODO : https://issues.apache.org/jira/browse/HIVE-25042
-        throw new RuntimeException("map and union type is not supported for common merge join");
-      }
-    }
-
     this.numBuckets = numBuckets;
     this.mapJoinConversionPos = mapJoinConversionPos;
   }
@@ -58,14 +48,5 @@ public class CommonMergeJoinDesc extends MapJoinDesc implements Serializable {
 
   public void setBigTablePosition(int pos) {
     mapJoinConversionPos = pos;
-  }
-
-  @Override
-  public boolean isSame(OperatorDesc other) {
-    if (super.isSame(other)) {
-      CommonMergeJoinDesc otherDesc = (CommonMergeJoinDesc) other;
-      return getNumBuckets() == otherDesc.getNumBuckets();
-    }
-    return false;
   }
 }

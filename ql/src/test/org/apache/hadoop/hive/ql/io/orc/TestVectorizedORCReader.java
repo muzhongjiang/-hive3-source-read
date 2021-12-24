@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,17 +19,17 @@
 package org.apache.hadoop.hive.ql.io.orc;
 
 import java.io.File;
-import java.time.LocalDateTime;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.util.Calendar;
 import java.util.Random;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.common.type.Date;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
@@ -38,11 +38,11 @@ import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.serde2.io.ByteWritable;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.io.BooleanWritable;
@@ -133,7 +133,7 @@ public class TestVectorizedORCReader {
     for (int i = 0; i < 21000; ++i) {
       if ((i % 7) != 0) {
         writer.addRow(new MyRecord(((i % 3) == 0), (byte)(i % 5), i, (long) 200, (short) (300 + i), (double) (400 + i),
-            words[r1.nextInt(words.length)], Timestamp.valueOf(LocalDateTime.now().toString()),
+            words[r1.nextInt(words.length)], new Timestamp(Calendar.getInstance().getTime().getTime()),
             Date.valueOf(dates[i % 3]), HiveDecimal.create(decimalStrings[i % decimalStrings.length])));
       } else {
         writer.addRow(new MyRecord(null, null, i, (long) 200, null, null, null, null, null, null));
@@ -151,16 +151,12 @@ public class TestVectorizedORCReader {
         OrcFile.readerOptions(conf));
     RecordReaderImpl vrr = (RecordReaderImpl) vreader.rows();
     RecordReaderImpl rr = (RecordReaderImpl) reader.rows();
-    VectorizedRowBatch batch = reader.getSchema().createRowBatchV2();
+    VectorizedRowBatch batch = reader.getSchema().createRowBatch();
     OrcStruct row = null;
 
-    long lastRowNumber = -1;
     // Check Vectorized ORC reader against ORC row reader
     while (vrr.nextBatch(batch)) {
-      Assert.assertEquals(lastRowNumber + 1, vrr.getRowNumber());
       for (int i = 0; i < batch.size; i++) {
-        Assert.assertEquals(rr.getRowNumber(), vrr.getRowNumber()+i);
-        lastRowNumber = rr.getRowNumber();
         row = (OrcStruct) rr.next(row);
         for (int j = 0; j < batch.cols.length; j++) {
           Object a = (row.getFieldValue(j));
@@ -177,21 +173,19 @@ public class TestVectorizedORCReader {
             Long temp = (long) (((BooleanWritable) a).get() ? 1 : 0);
             long b = ((LongColumnVector) cv).vector[rowId];
             Assert.assertEquals(temp.toString(), Long.toString(b));
-          } else if (a instanceof TimestampWritableV2) {
+          } else if (a instanceof TimestampWritable) {
             // Timestamps are stored as long, so convert and compare
-            TimestampWritableV2 t = ((TimestampWritableV2) a);
+            TimestampWritable t = ((TimestampWritable) a);
             TimestampColumnVector tcv = ((TimestampColumnVector) cv);
-            java.sql.Timestamp ts = tcv.asScratchTimestamp(rowId);
-            Assert.assertEquals(
-                t.getTimestamp(), Timestamp.ofEpochMilli(ts.getTime(), ts.getNanos()));
+            Assert.assertEquals(t.getTimestamp(), tcv.asScratchTimestamp(rowId));
 
-          } else if (a instanceof DateWritableV2) {
+          } else if (a instanceof DateWritable) {
             // Dates are stored as long, so convert and compare
 
-            DateWritableV2 adt = (DateWritableV2) a;
+            DateWritable adt = (DateWritable) a;
             long b = ((LongColumnVector) cv).vector[rowId];
-            Assert.assertEquals(adt.get().toEpochMilli(),
-                DateWritableV2.daysToMillis((int) b));
+            Assert.assertEquals(adt.get().getTime(),
+                DateWritable.daysToMillis((int) b));
 
           } else if (a instanceof HiveDecimalWritable) {
             // Decimals are stored as BigInteger, so convert and compare

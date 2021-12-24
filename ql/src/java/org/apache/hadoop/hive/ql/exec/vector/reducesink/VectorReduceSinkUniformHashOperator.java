@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,32 +18,62 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
+import java.util.Random;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
+import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator.Counter;
+import org.apache.hadoop.hive.ql.exec.TerminalOperator;
+import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.vector.VectorExtractRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.keyseries.VectorKeySeriesSerialized;
+import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
+import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
+import org.apache.hadoop.hive.ql.plan.TableDesc;
+import org.apache.hadoop.hive.ql.plan.VectorReduceSinkDesc;
+import org.apache.hadoop.hive.ql.plan.VectorReduceSinkInfo;
+import org.apache.hadoop.hive.ql.plan.api.OperatorType;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
-import org.apache.hive.common.util.Murmur3;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.base.Preconditions;
+import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
+import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
+import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
+import org.apache.hadoop.hive.serde2.objectinspector.StructField;
+import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hive.common.util.HashCodeUtil;
 
 /**
  * This class is uniform hash (common) operator class for native vectorized reduce sink.
- * There are variation operators for Long, String, and MultiKey.  And, a special case operator
- * for no key (VectorReduceSinkEmptyKeyOperator).
  */
 public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSinkCommonOperator {
 
   private static final long serialVersionUID = 1L;
   private static final String CLASS_NAME = VectorReduceSinkUniformHashOperator.class.getName();
-  private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
+  private static final Log LOG = LogFactory.getLog(CLASS_NAME);
 
   // The above members are initialized by the constructor and must not be
   // transient.
@@ -66,16 +96,15 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
     super(ctx);
   }
 
-  public VectorReduceSinkUniformHashOperator(CompilationOpContext ctx, OperatorDesc conf,
-      VectorizationContext vContext, VectorDesc vectorDesc) throws HiveException {
-    super(ctx, conf, vContext, vectorDesc);
+  public VectorReduceSinkUniformHashOperator(CompilationOpContext ctx,
+      VectorizationContext vContext, OperatorDesc conf) throws HiveException {
+    super(ctx, vContext, conf);
   }
 
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
 
-    Preconditions.checkState(!isEmptyKey);
     // Create all nulls key.
     try {
       Output nullKeyOutput = new Output();
@@ -86,7 +115,7 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
       int nullBytesLength = nullKeyOutput.getLength();
       nullBytes = new byte[nullBytesLength];
       System.arraycopy(nullKeyOutput.getData(), 0, nullBytes, 0, nullBytesLength);
-      nullKeyHashCode = Murmur3.hash32(nullBytes, 0, nullBytesLength, 0);
+      nullKeyHashCode = HashCodeUtil.calculateBytesHashCode(nullBytes, 0, nullBytesLength);
     } catch (Exception e) {
       throw new HiveException(e);
     }
@@ -126,7 +155,10 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
       boolean selectedInUse = batch.selectedInUse;
       int[] selected = batch.selected;
 
+      int keyLength;
       int logical;
+      int end;
+      int batchIndex;
       do {
         if (serializedKeySeries.getCurrentIsAllNull()) {
 
@@ -147,7 +179,7 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
           // One serialized key for 1 or more rows for the duplicate keys.
           // LOG.info("reduceSkipTag " + reduceSkipTag + " tag " + tag + " reduceTagByte " + (int) reduceTagByte + " keyLength " + serializedKeySeries.getSerializedLength());
           // LOG.info("process offset " + serializedKeySeries.getSerializedStart() + " length " + serializedKeySeries.getSerializedLength());
-          final int keyLength = serializedKeySeries.getSerializedLength();
+          keyLength = serializedKeySeries.getSerializedLength();
           if (tag == -1 || reduceSkipTag) {
             keyWritable.set(serializedKeySeries.getSerializedBytes(),
                 serializedKeySeries.getSerializedStart(), keyLength);
@@ -162,38 +194,18 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
         }
 
         logical = serializedKeySeries.getCurrentLogical();
-        final int end = logical + serializedKeySeries.getCurrentDuplicateCount();
-        if (!isEmptyValue) {
-          if (selectedInUse) {
-            do {
-              final int batchIndex = selected[logical];
+        end = logical + serializedKeySeries.getCurrentDuplicateCount();
+        do {
+          batchIndex = (selectedInUse ? selected[logical] : logical);
 
-              valueLazyBinarySerializeWrite.reset();
-              valueVectorSerializeRow.serializeWrite(batch, batchIndex);
+          valueLazyBinarySerializeWrite.reset();
+          valueVectorSerializeRow.serializeWrite(batch, batchIndex);
 
-              valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
+          valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
 
-              collect(keyWritable, valueBytesWritable);
-            } while (++logical < end);
-          } else {
-            do {
-              valueLazyBinarySerializeWrite.reset();
-              valueVectorSerializeRow.serializeWrite(batch, logical);
-
-              valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
-
-              collect(keyWritable, valueBytesWritable);
-            } while (++logical < end);
-
-          }
-        } else {
-
-          // Empty value, too.
-          do {
-            collect(keyWritable, valueBytesWritable);
-          } while (++logical < end);
-        }
-
+          collect(keyWritable, valueBytesWritable);
+        } while (++logical < end);
+  
         if (!serializedKeySeries.next()) {
           break;
         }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hive.common.type;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.io.EOFException;
 import java.io.IOException;
@@ -137,9 +136,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
     10000000000000L,
     100000000000000L,
     1000000000000000L,
-    10000000000000000L,   // 16
-    100000000000000000L,
-    1000000000000000000L, // 18
+    10000000000000000L    // 16
   };
 
   public static final int MAX_DECIMAL_DIGITS = 38;
@@ -156,9 +153,6 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
   private static final int LONGWORD_DECIMAL_DIGITS = 16;
   private static final long MAX_LONGWORD_DECIMAL = powerOfTenTable[LONGWORD_DECIMAL_DIGITS] - 1;
   private static final long MULTIPLER_LONGWORD_DECIMAL = powerOfTenTable[LONGWORD_DECIMAL_DIGITS];
-
-  public static final int DECIMAL64_DECIMAL_DIGITS = 18;
-  public static final long MAX_ABS_DECIMAL64 = 999999999999999999L;  // 18 9's -- quite reliable!
 
   private static final int TWO_X_LONGWORD_DECIMAL_DIGITS = 2 * LONGWORD_DECIMAL_DIGITS;
   private static final int THREE_X_LONGWORD_DECIMAL_DIGITS = 3 * LONGWORD_DECIMAL_DIGITS;
@@ -230,7 +224,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
     final int end = offset + length;
     throw new RuntimeException(
         "Invalid fast decimal \"" +
-            new String(bytes, offset, end, StandardCharsets.UTF_8) + "\"" +
+            new String(bytes, offset, end) + "\"" +
         " fastSignum " + fastResult.fastSignum + " fast0 " + fastResult.fast0 + " fast1 " + fastResult.fast1 + " fast2 " + fastResult.fast2 +
             " fastIntegerDigitCount " + fastResult.fastIntegerDigitCount +" fastScale " + fastResult.fastScale +
         " stack trace: " + getStackTraceAsSingleLine(Thread.currentThread().getStackTrace()));
@@ -847,34 +841,37 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
         // For some strange reason BigDecimal 0 can have a scale.  We do not support that.
         bigDecimal = BigDecimal.ZERO;
       }
-    }
+    } else {
+      BigDecimal bigDecimalStripped = bigDecimal.stripTrailingZeros();
+      int stripTrailingZerosScale = bigDecimalStripped.scale();
+      // System.out.println("FAST_SET_FROM_BIG_DECIMAL bigDecimal " + bigDecimal);
+      // System.out.println("FAST_SET_FROM_BIG_DECIMAL bigDecimalStripped " + bigDecimalStripped);
+      // System.out.println("FAST_SET_FROM_BIG_DECIMAL stripTrailingZerosScale " + stripTrailingZerosScale);
+      if (stripTrailingZerosScale < 0) {
 
-    if (!allowRounding) {
-      if (bigDecimal.signum() != 0) {
-        BigDecimal bigDecimalStripped = bigDecimal.stripTrailingZeros();
-        int stripTrailingZerosScale = bigDecimalStripped.scale();
-        // System.out.println("FAST_SET_FROM_BIG_DECIMAL bigDecimal " + bigDecimal);
-        // System.out.println("FAST_SET_FROM_BIG_DECIMAL bigDecimalStripped " + bigDecimalStripped);
-        // System.out.println("FAST_SET_FROM_BIG_DECIMAL stripTrailingZerosScale " + stripTrailingZerosScale);
-        if (stripTrailingZerosScale < 0) {
+        // The trailing zeroes extend into the integer part -- we only want to eliminate the
+        // fractional zero digits.
 
-          // The trailing zeroes extend into the integer part -- we only want to eliminate the
-          // fractional zero digits.
+        bigDecimal = bigDecimal.setScale(0);
+      } else {
 
-          bigDecimal = bigDecimal.setScale(0);
-        } else {
+        // Ok, use result with some or all fractional digits stripped.
 
-          // Ok, use result with some or all fractional digits stripped.
-
-          bigDecimal = bigDecimalStripped;
-        }
+        bigDecimal = bigDecimalStripped;
       }
-      int scale = bigDecimal.scale();
+    }
+    // System.out.println("FAST_SET_FROM_BIG_DECIMAL adjusted for zeroes/scale " + bigDecimal + " scale " + bigDecimal.scale());
+
+    BigInteger unscaledValue = bigDecimal.unscaledValue();
+    // System.out.println("FAST_SET_FROM_BIG_DECIMAL unscaledValue " + unscaledValue + " length " + unscaledValue.toString().length());
+
+    final int scale = bigDecimal.scale();
+    if (!allowRounding) {
       if (scale < 0 || scale > HiveDecimal.MAX_SCALE) {
         return false;
       }
       // The digits must fit without rounding.
-      if (!fastSetFromBigInteger(bigDecimal.unscaledValue(), fastResult)) {
+      if (!fastSetFromBigInteger(unscaledValue, fastResult)) {
         return false;
       }
       if (fastResult.fastSignum != 0) {
@@ -884,8 +881,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
       return true;
     }
     // This method will scale down and round to fit, if necessary.
-    if (!fastSetFromBigInteger(bigDecimal.unscaledValue(), bigDecimal.scale(),
-        bigDecimal.precision(), fastResult)) {
+    if (!fastSetFromBigInteger(unscaledValue, scale, fastResult)) {
       return false;
     }
     return true;
@@ -904,7 +900,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
    */
   public static boolean fastSetFromString(
       String string, boolean trimBlanks, FastHiveDecimal result) {
-    byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
+    byte[] bytes = string.getBytes();
     return fastSetFromBytes(bytes, 0, bytes.length, trimBlanks, result);
   }
 
@@ -1132,24 +1128,6 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
    */
   public static boolean fastSetFromBigInteger(
       BigInteger bigInteger, int scale, FastHiveDecimal fastResult) {
-    // Poor performance, because the precision will be calculated by bigInteger.toString()
-    return fastSetFromBigInteger(bigInteger, scale, -1, fastResult);
-  }
-
-  /**
-   * Creates a fast decimal from a BigInteger with a specified scale.
-   *
-   * NOTE: The fastSetFromBigInteger method requires the caller to pass a fastResult
-   * parameter has been reset for better performance.
-   *
-   * @param bigInteger the value to set as an integer
-   * @param scale the scale to use
-   * @param precision the precision to use
-   * @param fastResult an object to reuse
-   * @return True if the BigInteger and scale were successfully converted to a decimal.
-   */
-  public static boolean fastSetFromBigInteger(
-      BigInteger bigInteger, int scale, int precision, FastHiveDecimal fastResult) {
 
     if (scale < 0) {
 
@@ -1172,10 +1150,8 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
       bigInteger = bigInteger.negate();
     }
 
-    if (precision < 0) {
-      // A slow way to get the number of decimal digits.
-      precision = bigInteger.toString().length();
-    }
+    // A slow way to get the number of decimal digits.
+    int precision = bigInteger.toString().length();
 
     // System.out.println("FAST_SET_FROM_BIG_INTEGER adjusted bigInteger " + bigInteger + " precision " + precision);
 
@@ -2142,70 +2118,6 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
 
     // Should not get here.
     throw new RuntimeException("Unexpected");
-  }
-
-  public static long getDecimal64AbsMax(int precision) {
-    return powerOfTenTable[precision] - 1;
-  }
-
-  /*
-   * Deserializes 64-bit decimals up to the maximum 64-bit precision (18 decimal digits).
-   *
-   * NOTE: Major assumption: the input decimal64 has already been bounds checked and a least
-   * has a precision <= DECIMAL64_DECIMAL_DIGITS.  We do not bounds check here for better
-   * performance.
-   */
-  public static void fastDeserialize64(
-      final long inputDecimal64Long, final int inputScale,
-      FastHiveDecimal fastResult) {
-
-    long decimal64Long;
-    if (inputDecimal64Long == 0) {
-      fastResult.fastReset();
-      return;
-    } else if (inputDecimal64Long > 0) {
-      fastResult.fastSignum = 1;
-      decimal64Long = inputDecimal64Long;
-    } else {
-      fastResult.fastSignum = -1;
-      decimal64Long = -inputDecimal64Long;
-    }
-
-    // Trim trailing zeroes -- but only below the decimal point.
-    int trimScale = inputScale;
-    while (trimScale > 0 && decimal64Long % 10 == 0) {
-      decimal64Long /= 10;
-      trimScale--;
-    }
-
-    fastResult.fast2 = 0;
-    fastResult.fast1 = decimal64Long / MULTIPLER_LONGWORD_DECIMAL;
-    fastResult.fast0 = decimal64Long % MULTIPLER_LONGWORD_DECIMAL;
-
-    fastResult.fastScale = trimScale;
-
-    fastResult.fastIntegerDigitCount =
-        Math.max(0, fastRawPrecision(fastResult) - fastResult.fastScale);
-  }
-
-  /*
-   * Serializes decimal64 up to the maximum 64-bit precision (18 decimal digits).
-   *
-   * NOTE: Major assumption: the fast decimal has already been bounds checked and a least
-   * has a precision <= DECIMAL64_DECIMAL_DIGITS.  We do not bounds check here for better
-   * performance.
-   */
-  public static long fastSerialize64(
-      int scale,
-      int fastSignum, long fast1, long fast0, int fastScale) {
-
-    if (fastSignum == 0) {
-      return 0;
-    } else if (fastSignum == 1) {
-      return (fast1 * MULTIPLER_LONGWORD_DECIMAL + fast0) * powerOfTenTable[scale - fastScale];
-    } else {
-      return -(fast1 * MULTIPLER_LONGWORD_DECIMAL + fast0) * powerOfTenTable[scale - fastScale];
-    }
   }
 
   //************************************************************************************************
@@ -3983,7 +3895,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
 
     long key = fast0;
 
-    // Hash code logic from original calculateLongHashCode
+    // Hash code logic from calculateLongHashCode.
 
     key = (~key) + (key << 21); // key = (key << 21) - key - 1;
     key = key ^ (key >>> 24);
@@ -5141,6 +5053,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
       fastResult.fastIntegerDigitCount = 0;
       fastResult.fastScale = 0;
     } else {
+      fastResult.fastSignum = 0;
       fastResult.fastSignum = fastSignum;
       fastResult.fastIntegerDigitCount = fastRawPrecision(fastResult);
       fastResult.fastScale = 0;
@@ -8287,6 +8200,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
       long left0, long left1, long left2,
       long right0, long right1, long right2,
       long[] result) {
+    assert (result.length == 5);
     if (result.length != 5) {
       throw new IllegalArgumentException("Expecting result array length = 5");
     }
@@ -8981,7 +8895,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
           formatScale,
           scratchBuffer);
     return
-        new String(scratchBuffer, index, FAST_SCRATCH_BUFFER_LEN_TO_BYTES - index, StandardCharsets.UTF_8);
+        new String(scratchBuffer, index, FAST_SCRATCH_BUFFER_LEN_TO_BYTES - index);
   }
 
   //************************************************************************************************
@@ -8997,7 +8911,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
             fastSignum, fast0, fast1, fast2,
             fastIntegerDigitCount, fastScale, formatScale,
             scratchBuffer);
-    return new String(scratchBuffer, index, scratchBuffer.length - index, StandardCharsets.UTF_8);
+    return new String(scratchBuffer, index, scratchBuffer.length - index);
   }
 
   public static int fastToFormatBytes(
@@ -9072,7 +8986,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
             fastIntegerDigitCount,
             scratchBuffer);
     return
-        new String(scratchBuffer, index, FAST_SCRATCH_BUFFER_LEN_TO_BYTES - index, StandardCharsets.UTF_8);
+        new String(scratchBuffer, index, FAST_SCRATCH_BUFFER_LEN_TO_BYTES - index);
   }
 
   public static int fastToBytes(
@@ -9096,7 +9010,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
             scratchBuffer);
     return
         new String(
-            scratchBuffer, index, FAST_SCRATCH_BUFFER_LEN_TO_BYTES - index, StandardCharsets.UTF_8);
+            scratchBuffer, index, FAST_SCRATCH_BUFFER_LEN_TO_BYTES - index);
   }
 
   private static String doFastToString(
@@ -9108,7 +9022,7 @@ public class FastHiveDecimalImpl extends FastHiveDecimal {
             fastSignum, fast0, fast1, fast2,
             fastIntegerDigitCount, fastScale, fastTrailingZeroesScale,
             scratchBuffer);
-    return new String(scratchBuffer, index, scratchBuffer.length - index, StandardCharsets.UTF_8);
+    return new String(scratchBuffer, index, scratchBuffer.length - index);
   }
 
   private static int doFastToBytes(

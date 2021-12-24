@@ -1,23 +1,22 @@
 Found 1 items
--rw-r--r--   3 ### USER ### ### GROUP ###         16 ### HDFS DATE ### hdfs://### HDFS PATH ###
-PREHOOK: query: create temporary external table temp_table_external (c1 int, c2 int) location 'hdfs://### HDFS PATH ###'
+#### A masked pattern was here ####
 PREHOOK: type: CREATETABLE
-PREHOOK: Input: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 PREHOOK: Output: database:default
 PREHOOK: Output: default@temp_table_external
-POSTHOOK: query: create temporary external table temp_table_external (c1 int, c2 int) location 'hdfs://### HDFS PATH ###'
+#### A masked pattern was here ####
 POSTHOOK: type: CREATETABLE
-POSTHOOK: Input: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@temp_table_external
 PREHOOK: query: select * from temp_table_external
 PREHOOK: type: QUERY
 PREHOOK: Input: default@temp_table_external
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select * from temp_table_external
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@temp_table_external
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 NULL	35
 48	NULL
 100	100
@@ -30,5 +29,4 @@ POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@temp_table_external
 POSTHOOK: Output: default@temp_table_external
 Found 1 items
--rw-r--r--   3 ### USER ### ### GROUP ###         16 ### HDFS DATE ### hdfs://### HDFS PATH ###
 #### A masked pattern was here ####

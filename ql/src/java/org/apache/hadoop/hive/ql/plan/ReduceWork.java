@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.plan;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,12 +29,18 @@ import java.util.Set;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
+import org.apache.hadoop.hive.ql.exec.JoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
+import org.apache.hadoop.hive.ql.optimizer.physical.VectorizerReason;
+import org.apache.hadoop.hive.ql.plan.BaseWork.BaseExplainVectorization;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
+import org.apache.hadoop.hive.serde2.Deserializer;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hive.common.util.ReflectionUtil;
 
 /**
  * ReduceWork represents all the information used to run a reduce task on the cluster.
@@ -78,11 +85,6 @@ public class ReduceWork extends BaseWork {
 
   // boolean that says whether tez auto reduce parallelism should be used
   private boolean isAutoReduceParallelism;
-  // boolean that says whether the data distribution is uniform hash (not java HashCode)
-  private transient boolean isUniformDistribution = false;
-
-  // boolean that says whether to slow start or not
-  private boolean isSlowStart = true;
 
   // for auto reduce parallelism - minimum reducers requested
   private int minReduceTasks;
@@ -95,11 +97,6 @@ public class ReduceWork extends BaseWork {
 
   private boolean reduceVectorizationEnabled;
   private String vectorReduceEngine;
-
-  private String vectorReduceColumnSortOrder;
-  private String vectorReduceColumnNullOrder;
-
-  private transient TezEdgeProperty edgeProp;
 
   /**
    * If the plan has a reducer and correspondingly a reduce-sink, then store the TableDesc pointing
@@ -126,17 +123,15 @@ public class ReduceWork extends BaseWork {
   @Explain(displayName = "Execution mode", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED },
       vectorization = Vectorization.SUMMARY_PATH)
   public String getExecutionMode() {
-    if (vectorMode &&
-        !(getIsTestForcedVectorizationEnable() &&
-          getIsTestVectorizationSuppressExplainExecutionMode())) {
+    if (vectorMode) {
       if (llapMode) {
-        if (uberMode) {
-          return "vectorized, uber";
-        } else {
-          return "vectorized, llap";
-        }
+	if (uberMode) {
+	  return "vectorized, uber";
+	} else {
+	  return "vectorized, llap";
+	}
       } else {
-        return "vectorized";
+	return "vectorized";
       }
     } else if (llapMode) {
       return uberMode? "uber" : "llap";
@@ -205,29 +200,21 @@ public class ReduceWork extends BaseWork {
     this.numReduceTasks = numReduceTasks;
   }
 
+  @Override
+  public void configureJobConf(JobConf job) {
+    if (reducer != null) {
+      for (FileSinkOperator fs : OperatorUtils.findOperators(reducer, FileSinkOperator.class)) {
+        PlanUtils.configureJobConf(fs.getConf().getTableInfo(), job);
+      }
+    }
+  }
+
   public void setAutoReduceParallelism(boolean isAutoReduceParallelism) {
     this.isAutoReduceParallelism = isAutoReduceParallelism;
   }
 
   public boolean isAutoReduceParallelism() {
     return isAutoReduceParallelism;
-  }
-
-  public boolean isSlowStart() {
-    return isSlowStart;
-  }
-
-  public void setSlowStart(boolean isSlowStart) {
-    this.isSlowStart = isSlowStart;
-  }
-
-  // ReducerTraits.UNIFORM
-  public void setUniformDistribution(boolean isUniformDistribution) {
-    this.isUniformDistribution = isUniformDistribution;
-  }
-
-  public boolean isUniformDistribution() {
-    return this.isUniformDistribution;
   }
 
   public void setMinReduceTasks(int minReduceTasks) {
@@ -260,22 +247,6 @@ public class ReduceWork extends BaseWork {
 
   public String getVectorReduceEngine() {
     return vectorReduceEngine;
-  }
-
-  public void setVectorReduceColumnSortOrder(String vectorReduceColumnSortOrder) {
-    this.vectorReduceColumnSortOrder = vectorReduceColumnSortOrder;
-  }
-
-  public String getVectorReduceColumnSortOrder() {
-    return vectorReduceColumnSortOrder;
-  }
-
-  public void setVectorReduceColumnNullOrder(String vectorReduceColumnNullOrder) {
-    this.vectorReduceColumnNullOrder = vectorReduceColumnNullOrder;
-  }
-
-  public String getVectorReduceColumnNullOrder() {
-    return vectorReduceColumnNullOrder;
   }
 
   // Use LinkedHashSet to give predictable display order.
@@ -329,22 +300,6 @@ public class ReduceWork extends BaseWork {
       }
       return VectorizationCondition.getConditionsNotMet(reduceVectorizationConditions);
     }
-
-    @Explain(vectorization = Vectorization.DETAIL, displayName = "reduceColumnSortOrder", explainLevels = { Level.DEFAULT, Level.EXTENDED })
-    public String getReduceColumnSortOrder() {
-      if (!getVectorizationExamined()) {
-        return null;
-      }
-      return reduceWork.getVectorReduceColumnSortOrder();
-    }
-
-    @Explain(vectorization = Vectorization.DETAIL, displayName = "reduceColumnNullOrder", explainLevels = { Level.DEFAULT, Level.EXTENDED })
-    public String getReduceColumnNullOrder() {
-      if (!getVectorizationExamined()) {
-        return null;
-      }
-      return reduceWork.getVectorReduceColumnNullOrder();
-    }
   }
 
   @Explain(vectorization = Vectorization.SUMMARY, displayName = "Reduce Vectorization", explainLevels = { Level.DEFAULT, Level.EXTENDED })
@@ -353,13 +308,5 @@ public class ReduceWork extends BaseWork {
       return null;
     }
     return new ReduceExplainVectorization(this);
-  }
-
-  public void setEdgePropRef(TezEdgeProperty edgeProp) {
-    this.edgeProp = edgeProp;
-  }
-
-  public TezEdgeProperty getEdgePropRef() {
-    return edgeProp;
   }
 }

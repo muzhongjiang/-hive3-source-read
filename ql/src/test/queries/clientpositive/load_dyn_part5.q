@@ -1,4 +1,3 @@
---! qt:dataset:src
 
 
 create table if not exists nzhang_part5 (key string) partitioned by (value string);
@@ -6,6 +5,7 @@ describe extended nzhang_part5;
 
 set hive.merge.mapfiles=false;
 set hive.exec.dynamic.partition=true;
+set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.exec.max.dynamic.partitions=2000;
 set hive.exec.max.dynamic.partitions.pernode=2000;
 

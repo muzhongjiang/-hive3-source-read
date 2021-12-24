@@ -1,5 +1,3 @@
--- SORT_QUERY_RESULTS
-
 set hive.mapred.mode=nonstrict;
 create table fact(m1 int, m2 int, d1 int, d2 int);
 create table dim1(f1 int, f2 int);

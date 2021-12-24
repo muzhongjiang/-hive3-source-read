@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -35,7 +35,6 @@ import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.SetOp;
 import org.apache.calcite.rel.core.Sort;
-import org.apache.calcite.rel.core.Aggregate.Group;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
@@ -46,7 +45,6 @@ import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.ReflectUtil;
 import org.apache.calcite.util.ReflectiveVisitor;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveAggregate;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.jdbc.HiveJdbcConverter;
 
 import com.google.common.collect.ImmutableList;
 
@@ -90,9 +88,6 @@ public class HiveRelColumnsAlignment implements ReflectiveVisitor {
   }
 
   protected final RelNode dispatchAlign(RelNode node, List<RelFieldCollation> collations) {
-    if (node instanceof HiveJdbcConverter) {
-      return node;
-    }
     return alignDispatcher.invoke(node, collations);
   }
 
@@ -101,7 +96,7 @@ public class HiveRelColumnsAlignment implements ReflectiveVisitor {
     // sort them so they respect it
     LinkedHashSet<Integer> aggregateColumnsOrder = new LinkedHashSet<>();
     ImmutableList.Builder<RelFieldCollation> propagateCollations = ImmutableList.builder();
-    if (rel.getGroupType() == Group.SIMPLE && !collations.isEmpty()) {
+    if (!rel.indicator && !collations.isEmpty()) {
       for (RelFieldCollation c : collations) {
         if (c.getFieldIndex() < rel.getGroupCount()) {
           // Group column found

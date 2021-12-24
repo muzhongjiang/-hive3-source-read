@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,16 +23,18 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.UnionOperator;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.LevelOrderWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.optimizer.Transform;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
@@ -66,7 +68,7 @@ public class UnionProcessor extends Transform {
   public ParseContext transform(ParseContext pCtx) throws SemanticException {
     // create a walker which walks the tree in a BFS manner while maintaining
     // the operator stack.
-    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
     opRules.put(new RuleRegExp("R1",
       ReduceSinkOperator.getOperatorName() + "%.*" + UnionOperator.getOperatorName() + "%"),
       UnionProcFactory.getMapRedUnion());
@@ -81,7 +83,7 @@ public class UnionProcessor extends Transform {
     // context along
     UnionProcContext uCtx = new UnionProcContext();
     uCtx.setParseContext(pCtx);
-    SemanticDispatcher disp = new DefaultRuleDispatcher(UnionProcFactory.getNoUnion(),
+    Dispatcher disp = new DefaultRuleDispatcher(UnionProcFactory.getNoUnion(),
         opRules, uCtx);
     LevelOrderWalker ogw = new LevelOrderWalker(disp);
     ogw.setNodeTypes(UnionOperator.class);

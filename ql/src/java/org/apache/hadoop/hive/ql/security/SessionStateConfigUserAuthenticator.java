@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.session.ISessionAuthState;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
 /**
@@ -36,7 +35,7 @@ public class SessionStateConfigUserAuthenticator implements HiveAuthenticationPr
   private final List<String> groupNames = new ArrayList<String>();
 
   protected Configuration conf;
-  private ISessionAuthState sessionState;
+  private SessionState sessionState;
 
   @Override
   public List<String> getGroupNames() {
@@ -68,7 +67,7 @@ public class SessionStateConfigUserAuthenticator implements HiveAuthenticationPr
   }
 
   @Override
-  public void setSessionState(ISessionAuthState sessionState) {
+  public void setSessionState(SessionState sessionState) {
     this.sessionState = sessionState;
   }
 

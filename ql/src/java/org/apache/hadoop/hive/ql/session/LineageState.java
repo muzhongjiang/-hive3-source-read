@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,11 +21,11 @@ package org.apache.hadoop.hive.ql.session;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.io.Serializable;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.ql.exec.ColumnInfo;
+import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.hooks.LineageInfo;
 import org.apache.hadoop.hive.ql.hooks.LineageInfo.DataContainer;
@@ -36,7 +36,7 @@ import org.apache.hadoop.hive.ql.optimizer.lineage.LineageCtx.Index;
  * lineage information for the post execution hooks.
  *
  */
-public class LineageState implements Serializable {
+public class LineageState {
 
   /**
    * Mapping from the directory name to FileSinkOperator (may not be FileSinkOperator for views). This
@@ -44,7 +44,7 @@ public class LineageState implements Serializable {
    * time and is then later used to created the mapping from
    * movetask to the set of filesink operators.
    */
-  private final Map<String, Operator> dirToFop;
+  private final Map<Path, Operator> dirToFop;
 
   /**
    * The lineage context index for this query.
@@ -61,7 +61,7 @@ public class LineageState implements Serializable {
    * Constructor.
    */
   public LineageState() {
-    dirToFop = new HashMap<>();
+    dirToFop = new HashMap<Path, Operator>();
     linfo = new LineageInfo();
     index = new Index();
   }
@@ -72,22 +72,8 @@ public class LineageState implements Serializable {
    * @param dir The directory name.
    * @param fop The sink operator.
    */
-  public synchronized void mapDirToOp(Path dir, Operator fop) {
-    dirToFop.put(dir.toUri().toString(), fop);
-  }
-
-  /**
-   * Update the path of the captured lineage information in case the
-   * conditional input path and the linked MoveWork were merged into one MoveWork.
-   * This should only happen for Blobstore systems with optimization turned on.
-   * @param newPath conditional input path
-   * @param oldPath path of the old linked MoveWork
-   */
-  public synchronized void updateDirToOpMap(Path newPath, Path oldPath) {
-    Operator op = dirToFop.get(oldPath.toUri().toString());
-    if (op != null) {
-      dirToFop.put(newPath.toUri().toString(), op);
-    }
+  public void mapDirToOp(Path dir, Operator fop) {
+    dirToFop.put(dir, fop);
   }
 
   /**
@@ -97,10 +83,10 @@ public class LineageState implements Serializable {
    * @param dc The associated data container.
    * @param cols The list of columns.
    */
-  public synchronized void setLineage(Path dir, DataContainer dc,
+  public void setLineage(Path dir, DataContainer dc,
       List<FieldSchema> cols) {
     // First lookup the file sink operator from the load work.
-    Operator<?> op = dirToFop.get(dir.toUri().toString());
+    Operator<?> op = dirToFop.get(dir);
 
     // Go over the associated fields and look up the dependencies
     // by position in the row schema of the filesink operator.
@@ -136,7 +122,7 @@ public class LineageState implements Serializable {
   /**
    * Clear all lineage states
    */
-  public synchronized void clear() {
+  public void clear() {
     dirToFop.clear();
     linfo.clear();
     index.clear();

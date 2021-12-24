@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,8 +22,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.hive.ql.parse.HiveParser;
-import org.apache.hadoop.hive.ql.plan.Explain;
-import org.apache.hadoop.hive.ql.plan.Explain.Level;
 
 /**
  * Privilege type
@@ -35,6 +33,7 @@ public enum PrivilegeType {
   ALTER_METADATA(HiveParser.TOK_PRIV_ALTER_METADATA, "Alter"),
   CREATE(HiveParser.TOK_PRIV_CREATE, "Create"),
   DROP(HiveParser.TOK_PRIV_DROP, "Drop"),
+  INDEX(HiveParser.TOK_PRIV_INDEX, "Index"),
   LOCK(HiveParser.TOK_PRIV_LOCK, "Lock"),
   SELECT(HiveParser.TOK_PRIV_SELECT, "Select"),
   SHOW_DATABASE(HiveParser.TOK_PRIV_SHOW_DATABASE, "Show_Database"),
@@ -51,7 +50,6 @@ public enum PrivilegeType {
   }
 
   @Override
-  @Explain(displayName = "type", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED })
   public String toString(){
     return name == null ? "unkown" : name;
   }
@@ -65,7 +63,7 @@ public enum PrivilegeType {
 
   /**
    * Do case lookup of PrivilegeType associated with this antlr token
-   * @param token
+   * @param privilegeName
    * @return corresponding PrivilegeType
    */
   public static PrivilegeType getPrivTypeByToken(int token) {

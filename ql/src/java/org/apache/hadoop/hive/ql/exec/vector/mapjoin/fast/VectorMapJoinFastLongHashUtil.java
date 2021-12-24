@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableDeseriali
 public class VectorMapJoinFastLongHashUtil {
 
   public static long deserializeLongKey(BinarySortableDeserializeRead keyBinarySortableDeserializeRead,
-      HashTableKeyType hashTableKeyType) throws RuntimeException {
+      HashTableKeyType hashTableKeyType) throws IOException {
     long key = 0;
     switch (hashTableKeyType) {
     case BOOLEAN:
@@ -40,9 +40,6 @@ public class VectorMapJoinFastLongHashUtil {
       break;
     case INT:
       key = (long) keyBinarySortableDeserializeRead.currentInt;
-      break;
-    case DATE:
-      key = (long) keyBinarySortableDeserializeRead.currentDateWritable.getDays();
       break;
     case LONG:
       key = keyBinarySortableDeserializeRead.currentLong;

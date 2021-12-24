@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,8 +37,8 @@ import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.util.Progressable;
 
 /**
- * HiveIgnoreKeyTextOutputFormat replaces key with null before feeding the &lt;key,
- * value&gt; to TextOutputFormat.RecordWriter.
+ * HiveIgnoreKeyTextOutputFormat replaces key with null before feeding the <key,
+ * value> to TextOutputFormat.RecordWriter.
  *
  */
 public class HiveIgnoreKeyTextOutputFormat<K extends WritableComparable, V extends Writable>
@@ -87,7 +87,7 @@ public class HiveIgnoreKeyTextOutputFormat<K extends WritableComparable, V exten
           outStream.write(tr.getBytes(), 0, tr.getLength());
           outStream.write(finalRowSeparator);
         } else {
-          // Binary SerDes always write out BytesWritable
+          // DynamicSerDe always writes out BytesWritable
           BytesWritable bw = (BytesWritable) r;
           outStream.write(bw.get(), 0, bw.getSize());
           outStream.write(finalRowSeparator);

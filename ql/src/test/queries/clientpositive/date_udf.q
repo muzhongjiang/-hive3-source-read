@@ -1,4 +1,3 @@
---! qt:dataset:src
 drop table date_udf;
 drop table date_udf_string;
 drop table date_udf_flight;
@@ -21,7 +20,7 @@ create table date_udf_flight (
 LOAD DATA LOCAL INPATH '../../data/files/flights_tiny.txt.1' OVERWRITE INTO TABLE date_udf_flight;
 
 -- Test UDFs with date input
-select unix_timestamp(cast(d as timestamp with local time zone)), unix_timestamp(d), year(d), month(d), day(d), dayofmonth(d),
+select unix_timestamp(d), year(d), month(d), day(d), dayofmonth(d),
     weekofyear(d), to_date(d)
   from date_udf;
 
@@ -75,13 +74,7 @@ select
 select min(fl_date) from date_udf_flight;
 select max(fl_date) from date_udf_flight;
 
-create external table testdatediff(datetimecol string) stored as orc;
-insert into testdatediff values ('2019-09-09T10:45:49+02:00'),('2019-07-24');
 
-select datetimecol from testdatediff where datediff(cast(current_timestamp as string), datetimecol)>183;
-select cast(datetimecol as date), datetimecol from testdatediff;
-
-drop table testdatediff;
 drop table date_udf;
 drop table date_udf_string;
 drop table date_udf_flight;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,7 +26,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConfUtil;
 
 /**
  * A servlet to print out the running configuration data.
@@ -82,14 +81,11 @@ public class ConfServlet extends HttpServlet {
    * Guts of the servlet - extracted for easy testing.
    */
   static void writeResponse(Configuration conf, Writer out, String format)
-      throws IOException, BadFormatException {
-    //redact the sensitive information from the configuration values
-    Configuration hconf = new Configuration(conf);
-    HiveConfUtil.stripConfigurations(hconf);
+    throws IOException, BadFormatException {
     if (FORMAT_JSON.equals(format)) {
-      Configuration.dumpConfiguration(hconf, out);
+      Configuration.dumpConfiguration(conf, out);
     } else if (FORMAT_XML.equals(format)) {
-      hconf.writeXml(out);
+      conf.writeXml(out);
     } else {
       throw new BadFormatException("Bad format: " + format);
     }

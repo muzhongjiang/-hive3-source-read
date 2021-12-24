@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,40 +17,38 @@
  */
 package org.apache.hadoop.hive.ql.udf.generic;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.CastDateToTimestamp;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.CastDecimalToTimestamp;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.CastDoubleToTimestamp;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.CastLongToTimestamp;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.CastStringToTimestamp;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorConverter.TimestampConverter;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorUtils;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorUtils.PrimitiveGrouping;
 
 /**
  *
  * GenericUDFTimestamp
  *
  * Example usage:
- * ... CAST(&lt;Timestamp string&gt; as TIMESTAMP) ...
+ * ... CAST(<Timestamp string> as TIMESTAMP) ...
  *
- * Creates a TimestampWritableV2 object using PrimitiveObjectInspectorConverter
+ * Creates a TimestampWritable object using PrimitiveObjectInspectorConverter
  *
  */
 @Description(name = "timestamp",
 value = "cast(date as timestamp) - Returns timestamp")
-@VectorizedExpressions({CastLongToTimestamp.class, CastDateToTimestamp.class,
-  CastDoubleToTimestamp.class, CastDecimalToTimestamp.class, CastStringToTimestamp.class})
+@VectorizedExpressions({CastLongToTimestamp.class,
+  CastDoubleToTimestamp.class, CastDecimalToTimestamp.class})
 public class GenericUDFTimestamp extends GenericUDF {
 
   private transient PrimitiveObjectInspector argumentOI;
@@ -82,15 +80,6 @@ public class GenericUDFTimestamp extends GenericUDF {
     } catch (ClassCastException e) {
       throw new UDFArgumentException(
           "The function TIMESTAMP takes only primitive types");
-    }
-
-    if (ss != null && ss.getConf().getBoolVar(ConfVars.HIVE_STRICT_TIMESTAMP_CONVERSION)) {
-      PrimitiveCategory category = argumentOI.getPrimitiveCategory();
-      PrimitiveGrouping group = PrimitiveObjectInspectorUtils.getPrimitiveGrouping(category);
-      if (group == PrimitiveGrouping.NUMERIC_GROUP) {
-        throw new UDFArgumentException(
-            "Casting NUMERIC types to TIMESTAMP is prohibited (" + ConfVars.HIVE_STRICT_TIMESTAMP_CONVERSION + ")");
-      }
     }
 
     tc = new TimestampConverter(argumentOI,

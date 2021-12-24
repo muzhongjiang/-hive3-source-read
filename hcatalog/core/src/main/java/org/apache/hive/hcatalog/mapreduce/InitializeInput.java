@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -34,6 +34,7 @@ import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hive.hcatalog.common.ErrorType;
+import org.apache.hive.hcatalog.common.HCatConstants;
 import org.apache.hive.hcatalog.common.HCatException;
 import org.apache.hive.hcatalog.common.HCatUtil;
 import org.apache.hive.hcatalog.data.schema.HCatSchema;
@@ -67,8 +68,8 @@ class InitializeInput {
    *
    * After calling setInput, InputJobInfo can be retrieved from the job configuration as follows:
    * {code}
-   * LinkedList&lt;InputJobInfo&gt; inputInfo = (LinkedList&lt;InputJobInfo&gt;) HCatUtil
-   * .deserialize(job.getConfiguration().get(HCatConstants.HCAT_KEY_JOB_INFO));
+   * InputJobInfo inputInfo = (InputJobInfo) HCatUtil.deserialize(
+   *     job.getConfiguration().get(HCatConstants.HCAT_KEY_JOB_INFO));
    * {code}
    *
    * @param conf the job Configuration object
@@ -82,15 +83,15 @@ class InitializeInput {
       theirInputJobInfo.getTableName(),
       theirInputJobInfo.getFilter(),
       theirInputJobInfo.getProperties());
-
-    populateInputJobInfo(conf, inputJobInfo, null);
-    HCatUtil.putInputJobInfoToConf(inputJobInfo, conf);
+    conf.set(
+      HCatConstants.HCAT_KEY_JOB_INFO,
+      HCatUtil.serialize(getInputJobInfo(conf, inputJobInfo, null)));
   }
 
   /**
    * Returns the given InputJobInfo after populating with data queried from the metadata service.
    */
-  private static void populateInputJobInfo(
+  private static InputJobInfo getInputJobInfo(
     Configuration conf, InputJobInfo inputJobInfo, String locationFilter) throws Exception {
     IMetaStoreClient client = null;
     HiveConf hiveConf = null;
@@ -121,15 +122,13 @@ class InitializeInput {
         }
 
         // populate partition info
-        if (parts != null) {
-          for (Partition ptn : parts) {
-            HCatSchema schema = HCatUtil.extractSchema(
-                    new org.apache.hadoop.hive.ql.metadata.Partition(table, ptn));
-            PartInfo partInfo = extractPartInfo(schema, ptn.getSd(),
-                    ptn.getParameters(), conf, inputJobInfo);
-            partInfo.setPartitionValues(InternalUtil.createPtnKeyValueMap(table, ptn));
-            partInfoList.add(partInfo);
-          }
+        for (Partition ptn : parts) {
+          HCatSchema schema = HCatUtil.extractSchema(
+            new org.apache.hadoop.hive.ql.metadata.Partition(table, ptn));
+          PartInfo partInfo = extractPartInfo(schema, ptn.getSd(),
+            ptn.getParameters(), conf, inputJobInfo);
+          partInfo.setPartitionValues(InternalUtil.createPtnKeyValueMap(table, ptn));
+          partInfoList.add(partInfo);
         }
 
       } else {
@@ -142,6 +141,7 @@ class InitializeInput {
       }
       inputJobInfo.setPartitions(partInfoList);
 
+      return inputJobInfo;
     } finally {
       HCatUtil.closeHiveClientQuietly(client);
     }

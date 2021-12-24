@@ -17,8 +17,7 @@ CREATE TABLE test_serializer(string1 STRING,
                              bytes1 BINARY,
                              fixed1 BINARY)
  ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' COLLECTION ITEMS TERMINATED BY ':' MAP KEYS TERMINATED BY '#' LINES TERMINATED BY '\n'
- STORED AS TEXTFILE
- TBLPROPERTIES ("hive.serialization.decode.binary.as.base64"="false");
+ STORED AS TEXTFILE;
 
 LOAD DATA LOCAL INPATH '../../data/files/csv.txt' INTO TABLE test_serializer;
 

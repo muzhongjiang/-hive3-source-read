@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -127,19 +127,6 @@ public class JobState {
   }
 
   /**
-   * The job type
-   */
-  public String getJobType()
-          throws IOException {
-    return getField("jobType");
-  }
-
-  public void setJobType(String jobType)
-          throws IOException {
-    setField("jobType", jobType);
-  }
-
-  /**
    * Add a jobid to the list of children of this job.
    *
    * @param jobid
@@ -233,7 +220,7 @@ public class JobState {
     throws IOException
   {
     String jsonString = getField("userArgs");
-    return JsonBuilder.jsonToMap(jsonString);
+    return (Map<String, Object>)JsonBuilder.jsonToMap(jsonString);
   }
   public void setUserArgs(Map<String, Object> userArgs)
     throws IOException
@@ -295,7 +282,7 @@ public class JobState {
       return null;
     else {
       try {
-        return Long.valueOf(s);
+        return new Long(s);
       } catch (NumberFormatException e) {
         LOG.error("templeton: bug " + name + " " + s + " : " + e);
         return null;

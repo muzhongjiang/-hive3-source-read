@@ -15,9 +15,7 @@
 package org.apache.hive.storage.jdbc;
 
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.MapWritable;
-import org.apache.hadoop.io.ObjectWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
@@ -43,7 +41,7 @@ public class JdbcRecordReader implements RecordReader<LongWritable, MapWritable>
 
 
   public JdbcRecordReader(JobConf conf, JdbcInputSplit split) {
-    LOGGER.trace("Initializing JdbcRecordReader");
+    LOGGER.debug("Initializing JdbcRecordReader");
     this.split = split;
     this.conf = conf;
   }
@@ -52,22 +50,20 @@ public class JdbcRecordReader implements RecordReader<LongWritable, MapWritable>
   @Override
   public boolean next(LongWritable key, MapWritable value) throws IOException {
     try {
-      LOGGER.trace("JdbcRecordReader.next called");
+      LOGGER.debug("JdbcRecordReader.next called");
       if (dbAccessor == null) {
         dbAccessor = DatabaseAccessorFactory.getAccessor(conf);
-        iterator = dbAccessor.getRecordIterator(conf, split.getPartitionColumn(), split.getLowerBound(), split
-                        .getUpperBound(), split.getLimit(), split.getOffset());
+        iterator = dbAccessor.getRecordIterator(conf, split.getLimit(), split.getOffset());
       }
 
       if (iterator.hasNext()) {
-        LOGGER.trace("JdbcRecordReader has more records to read.");
+        LOGGER.debug("JdbcRecordReader has more records to read.");
         key.set(pos);
         pos++;
-        Map<String, Object> record = iterator.next();
+        Map<String, String> record = iterator.next();
         if ((record != null) && (!record.isEmpty())) {
-          for (Entry<String, Object> entry : record.entrySet()) {
-            value.put(new Text(entry.getKey()),
-                entry.getValue() == null ? NullWritable.get() : new ObjectWritable(entry.getValue()));
+          for (Entry<String, String> entry : record.entrySet()) {
+            value.put(new Text(entry.getKey()), new Text(entry.getValue()));
           }
           return true;
         }
@@ -82,7 +78,8 @@ public class JdbcRecordReader implements RecordReader<LongWritable, MapWritable>
       }
     }
     catch (Exception e) {
-      throw new IOException(e);
+      LOGGER.error("An error occurred while reading the next record from DB.", e);
+      return false;
     }
   }
 
@@ -110,9 +107,6 @@ public class JdbcRecordReader implements RecordReader<LongWritable, MapWritable>
     if (iterator != null) {
       iterator.close();
     }
-    if (dbAccessor != null) {
-      dbAccessor = null;
-    }
   }
 
 
@@ -125,4 +119,15 @@ public class JdbcRecordReader implements RecordReader<LongWritable, MapWritable>
       return split.getLength() > 0 ? pos / (float) split.getLength() : 1.0f;
     }
   }
+
+
+  public void setDbAccessor(DatabaseAccessor dbAccessor) {
+    this.dbAccessor = dbAccessor;
+  }
+
+
+  public void setIterator(JdbcRecordIterator iterator) {
+    this.iterator = iterator;
+  }
+
 }

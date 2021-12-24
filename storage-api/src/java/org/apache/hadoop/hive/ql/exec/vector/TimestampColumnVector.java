@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,14 +18,9 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Arrays;
 
-import org.apache.hadoop.hive.common.type.CalendarUtils;
 import org.apache.hadoop.io.Writable;
-import org.apache.hive.common.util.SuppressFBWarnings;
 
 /**
  * This class represents a nullable timestamp column vector capable of handing a wide range of
@@ -58,10 +53,6 @@ public class TimestampColumnVector extends ColumnVector {
   private Writable scratchWritable;
       // Supports keeping a TimestampWritable object without having to import that definition...
 
-  private boolean isUTC;
-
-  private boolean usingProlepticCalendar = false;
-
   /**
    * Use this constructor by default. All column vectors
    * should normally be the default size.
@@ -76,7 +67,7 @@ public class TimestampColumnVector extends ColumnVector {
    * @param len the number of rows
    */
   public TimestampColumnVector(int len) {
-    super(Type.TIMESTAMP, len);
+    super(len);
 
     time = new long[len];
     nanos = new int[len];
@@ -84,8 +75,6 @@ public class TimestampColumnVector extends ColumnVector {
     scratchTimestamp = new Timestamp(0);
 
     scratchWritable = null;     // Allocated by caller.
-
-    isUTC = false;
   }
 
   /**
@@ -133,7 +122,6 @@ public class TimestampColumnVector extends ColumnVector {
    * @param elementNum
    * @return
    */
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "Expose internal rep for efficiency")
   public Timestamp asScratchTimestamp(int elementNum) {
     scratchTimestamp.setTime(time[elementNum]);
     scratchTimestamp.setNanos(nanos[elementNum]);
@@ -144,7 +132,6 @@ public class TimestampColumnVector extends ColumnVector {
    * Return the scratch timestamp (contents undefined).
    * @return
    */
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "Expose internal rep for efficiency")
   public Timestamp getScratchTimestamp() {
     return scratchTimestamp;
   }
@@ -254,57 +241,13 @@ public class TimestampColumnVector extends ColumnVector {
         asScratchTimestamp(elementNum2));
   }
 
-  /**
-   * Set the element in this column vector from the given input vector.
-   *
-   * The inputElementNum will be adjusted to 0 if the input column has isRepeating set.
-   *
-   * On the other hand, the outElementNum must have been adjusted to 0 in ADVANCE when the output
-   * has isRepeating set.
-   *
-   * IMPORTANT: if the output entry is marked as NULL, this method will do NOTHING.  This
-   * supports the caller to do output NULL processing in advance that may cause the output results
-   * operation to be ignored.  Thus, make sure the output isNull entry is set in ADVANCE.
-   *
-   * The inputColVector noNulls and isNull entry will be examined.  The output will only
-   * be set if the input is NOT NULL.  I.e. noNulls || !isNull[inputElementNum] where
-   * inputElementNum may have been adjusted to 0 for isRepeating.
-   *
-   * If the input entry is NULL or out-of-range, the output will be marked as NULL.
-   * I.e. set output noNull = false and isNull[outElementNum] = true.  An example of out-of-range
-   * is the DecimalColumnVector which can find the input decimal does not fit in the output
-   * precision/scale.
-   *
-   * (Since we return immediately if the output entry is NULL, we have no need and do not mark
-   * the output entry to NOT NULL).
-   *
-   */
   @Override
-  public void setElement(int outputElementNum, int inputElementNum, ColumnVector inputColVector) {
+  public void setElement(int outElementNum, int inputElementNum, ColumnVector inputVector) {
 
-    // Invariants.
-    if (isRepeating && outputElementNum != 0) {
-      throw new RuntimeException("Output column number expected to be 0 when isRepeating");
-    }
-    if (inputColVector.isRepeating) {
-      inputElementNum = 0;
-    }
+    TimestampColumnVector timestampColVector = (TimestampColumnVector) inputVector;
 
-    // Do NOTHING if output is NULL.
-    if (!noNulls && isNull[outputElementNum]) {
-      return;
-    }
-
-    if (inputColVector.noNulls || !inputColVector.isNull[inputElementNum]) {
-      TimestampColumnVector timestampColVector = (TimestampColumnVector) inputColVector;
-      time[outputElementNum] = timestampColVector.time[inputElementNum];
-      nanos[outputElementNum] = timestampColVector.nanos[inputElementNum];
-    } else {
-
-      // Only mark output NULL when input is NULL.
-      isNull[outputElementNum] = true;
-      noNulls = false;
-    }
+    time[outElementNum] = timestampColVector.time[inputElementNum];
+    nanos[outElementNum] = timestampColVector.nanos[inputElementNum];
   }
 
   // Simplify vector by brute-force flattening noNulls and isRepeating
@@ -332,35 +275,23 @@ public class TimestampColumnVector extends ColumnVector {
   }
 
   /**
-   * Set a field from a Timestamp.
-   *
-   * This is a FAST version that assumes the caller has checked to make sure elementNum
-   * is correctly adjusted for isRepeating.  And, that the isNull entry
-   * has been set.  Only the output entry fields will be set by this method.
-   *
-   * For backward compatibility, this method does check if the timestamp is null and set the
-   * isNull entry appropriately.
-   *
+   * Set a row from a timestamp.
+   * We assume the entry has already been isRepeated adjusted.
    * @param elementNum
    * @param timestamp
    */
   public void set(int elementNum, Timestamp timestamp) {
     if (timestamp == null) {
-      isNull[elementNum] = true;
-      noNulls = false;
-      return;
+      this.noNulls = false;
+      this.isNull[elementNum] = true;
+    } else {
+      this.time[elementNum] = timestamp.getTime();
+      this.nanos[elementNum] = timestamp.getNanos();
     }
-    this.time[elementNum] = timestamp.getTime();
-    this.nanos[elementNum] = timestamp.getNanos();
   }
 
   /**
-   * Set a field from the current value in the scratch timestamp.
-   *
-   * This is a FAST version that assumes the caller has checked to make sure the current value in
-   * the scratch timestamp is valid and elementNum is correctly adjusted for isRepeating.  And,
-   * that the isNull entry has been set.  Only the output entry fields will be set by this method.
-   *
+   * Set a row from the current value in the scratch timestamp.
    * @param elementNum
    */
   public void setFromScratchTimestamp(int elementNum) {
@@ -380,84 +311,47 @@ public class TimestampColumnVector extends ColumnVector {
 
   // Copy the current object contents into the output. Only copy selected entries,
   // as indicated by selectedInUse and the sel array.
-  @Override
   public void copySelected(
-      boolean selectedInUse, int[] sel, int size, ColumnVector outputColVector) {
+      boolean selectedInUse, int[] sel, int size, TimestampColumnVector output) {
 
-    TimestampColumnVector output = (TimestampColumnVector) outputColVector;
-    boolean[] outputIsNull = output.isNull;
-
-    // We do not need to do a column reset since we are carefully changing the output.
+    // Output has nulls if and only if input has nulls.
+    output.noNulls = noNulls;
     output.isRepeating = false;
 
     // Handle repeating case
     if (isRepeating) {
-      if (noNulls || !isNull[0]) {
-        outputIsNull[0] = false;
-        output.time[0] = time[0];
-        output.nanos[0] = nanos[0];
-      } else {
-        outputIsNull[0] = true;
-        output.noNulls = false;
-      }
+      output.time[0] = time[0];
+      output.nanos[0] = nanos[0];
+      output.isNull[0] = isNull[0];
       output.isRepeating = true;
       return;
     }
 
     // Handle normal case
 
-    if (noNulls) {
-      if (selectedInUse) {
-
-        // CONSIDER: For large n, fill n or all of isNull array and use the tighter ELSE loop.
-
-        if (!outputColVector.noNulls) {
-          for(int j = 0; j != size; j++) {
-           final int i = sel[j];
-           // Set isNull before call in case it changes it mind.
-           outputIsNull[i] = false;
-           output.time[i] = time[i];
-           output.nanos[i] = nanos[i];
-         }
-        } else {
-          for(int j = 0; j != size; j++) {
-            final int i = sel[j];
-            output.time[i] = time[i];
-            output.nanos[i] = nanos[i];
-          }
-        }
-      } else {
-        if (!outputColVector.noNulls) {
-
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
-        }
-        System.arraycopy(time, 0, output.time, 0, size);
-        System.arraycopy(nanos, 0, output.nanos, 0, size);
+    // Copy data values over
+    if (selectedInUse) {
+      for (int j = 0; j < size; j++) {
+        int i = sel[j];
+        output.time[i] = time[i];
+        output.nanos[i] = nanos[i];
       }
-    } else /* there are nulls in our column */ {
+    }
+    else {
+      System.arraycopy(time, 0, output.time, 0, size);
+      System.arraycopy(nanos, 0, output.nanos, 0, size);
+    }
 
-      // Carefully handle NULLs...
-
-      /*
-       * For better performance on LONG/DOUBLE we don't want the conditional
-       * statements inside the for loop.
-       */
-      output.noNulls = false;
-
+    // Copy nulls over if needed
+    if (!noNulls) {
       if (selectedInUse) {
         for (int j = 0; j < size; j++) {
           int i = sel[j];
           output.isNull[i] = isNull[i];
-          output.time[i] = time[i];
-          output.nanos[i] = nanos[i];
         }
-      } else {
+      }
+      else {
         System.arraycopy(isNull, 0, output.isNull, 0, size);
-        System.arraycopy(time, 0, output.time, 0, size);
-        System.arraycopy(nanos, 0, output.nanos, 0, size);
       }
     }
   }
@@ -467,8 +361,8 @@ public class TimestampColumnVector extends ColumnVector {
    * @param timestamp
    */
   public void fill(Timestamp timestamp) {
+    noNulls = true;
     isRepeating = true;
-    isNull[0] = false;
     time[0] = timestamp.getTime();
     nanos[0] = timestamp.getNanos();
   }
@@ -490,22 +384,6 @@ public class TimestampColumnVector extends ColumnVector {
     this.scratchWritable = scratchWritable;
   }
 
-  /**
-   * Return the value for the utc boolean variable.
-   * @return
-   */
-  public boolean isUTC() {
-    return this.isUTC;
-  }
-
-  /**
-   * Set the utc boolean variable
-   * @param value
-   */
-  public void setIsUTC(boolean value) {
-    this.isUTC = value;
-  }
-
   @Override
   public void stringifyValue(StringBuilder buffer, int row) {
     if (isRepeating) {
@@ -514,13 +392,7 @@ public class TimestampColumnVector extends ColumnVector {
     if (noNulls || !isNull[row]) {
       scratchTimestamp.setTime(time[row]);
       scratchTimestamp.setNanos(nanos[row]);
-      if (isUTC) {
-        LocalDateTime ts =
-            LocalDateTime.ofInstant(Instant.ofEpochMilli(time[row]), ZoneOffset.UTC).withNano(nanos[row]);
-        buffer.append(ts.toLocalDate().toString() + ' ' + ts.toLocalTime().toString());
-      } else {
-        buffer.append(scratchTimestamp.toString());
-      }
+      buffer.append(scratchTimestamp.toString());
     } else {
       buffer.append("null");
     }
@@ -551,57 +423,5 @@ public class TimestampColumnVector extends ColumnVector {
     super.shallowCopyTo(other);
     other.time = time;
     other.nanos = nanos;
-  }
-
-  /**
-   * Change the calendar to or from proleptic. If the new and old values of the flag are the
-   * same, nothing is done.
-   * useProleptic - set the flag for the proleptic calendar
-   * updateData - change the data to match the new value of the flag.
-   */
-  public void changeCalendar(boolean useProleptic, boolean updateData) {
-    if (useProleptic == usingProlepticCalendar) {
-      return;
-    }
-    usingProlepticCalendar = useProleptic;
-    if (updateData) {
-      try {
-        updateDataAccordingProlepticSetting();
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
-  }
-
-  private void updateDataAccordingProlepticSetting() throws Exception {
-    for (int i = 0; i < nanos.length; i++) {
-      if (time[i] >= CalendarUtils.SWITCHOVER_MILLIS) { // no need for conversion
-        continue;
-      }
-      asScratchTimestamp(i);
-      long offset = 0;
-
-      long millis = usingProlepticCalendar ? CalendarUtils.convertTimeToProleptic(scratchTimestamp.getTime())
-          : CalendarUtils.convertTimeToHybrid(scratchTimestamp.getTime());
-
-      Timestamp newTimeStamp = Timestamp.from(Instant.ofEpochMilli(millis));
-
-      scratchTimestamp.setTime(newTimeStamp.getTime() + offset);
-      scratchTimestamp.setNanos(nanos[i]);
-
-      setFromScratchTimestamp(i);
-    }
-  }
-
-  public TimestampColumnVector setUsingProlepticCalendar(boolean usingProlepticCalendar) {
-    this.usingProlepticCalendar = usingProlepticCalendar;
-    return this;
-  }
-
-  /**
-   * Detect whether this data is using the proleptic calendar.
-   */
-  public boolean usingProlepticCalendar() {
-    return usingProlepticCalendar;
   }
 }

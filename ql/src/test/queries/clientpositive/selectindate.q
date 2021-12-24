@@ -1,4 +1,3 @@
--- SORT_QUERY_RESULTS
 drop table if exists datetest;
 create table datetest(dValue date, iValue int);
 insert into datetest values('2000-03-22', 1);

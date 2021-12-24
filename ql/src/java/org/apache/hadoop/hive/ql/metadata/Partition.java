@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,23 +21,20 @@ package org.apache.hadoop.hive.ql.metadata;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Properties;
 
 import org.apache.hadoop.hive.common.StringInternUtils;
-import org.apache.hadoop.hive.metastore.HiveMetaStoreUtils;
-import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.MetaException;
@@ -216,24 +213,16 @@ public class Partition implements Serializable {
 
   public Path getDataLocation() {
     if (table.isPartitioned()) {
-      if (tPartition.getSd() == null) {
-        return null;
-      } else {
-        return new Path(tPartition.getSd().getLocation());
-      }
+      return new Path(tPartition.getSd().getLocation());
     } else {
-      if (table.getTTable() == null || table.getTTable().getSd() == null) {
-        return null;
-      } else {
-        return new Path(table.getTTable().getSd().getLocation());
-      }
+      return new Path(table.getTTable().getSd().getLocation());
     }
   }
 
   final public Deserializer getDeserializer() {
     if (deserializer == null) {
       try {
-        deserializer = HiveMetaStoreUtils.getDeserializer(SessionState.getSessionConf(),
+        deserializer = MetaStoreUtils.getDeserializer(SessionState.getSessionConf(),
             tPartition, table.getTTable());
       } catch (MetaException e) {
         throw new RuntimeException(e);
@@ -251,8 +240,8 @@ public class Partition implements Serializable {
   }
 
   public Properties getSchemaFromTableSchema(Properties tblSchema) {
-    return MetaStoreUtils.getPartSchemaFromTableSchema(tPartition.getSd(),
-        tPartition.getParameters(),
+    return MetaStoreUtils.getPartSchemaFromTableSchema(tPartition.getSd(), table.getTTable().getSd(),
+        tPartition.getParameters(), table.getDbName(), table.getTableName(), table.getPartitionKeys(),
         tblSchema);
   }
 
@@ -378,23 +367,11 @@ public class Partition implements Serializable {
   // TODO: add test case and clean it up
   @SuppressWarnings("nls")
   public Path getBucketPath(int bucketNum) {
-    // Note: this makes assumptions that won't work with MM tables, unions, etc.
     FileStatus srcs[] = getSortedPaths();
     if (srcs == null) {
       return null;
     }
-
-    // Compute bucketid from srcs and return the 1st match.
-    for (FileStatus src : srcs) {
-      String bucketName = src.getPath().getName();
-      String bucketIdStr = Utilities.getBucketFileNameFromPathSubString(bucketName);
-      int bucketId = Utilities.getBucketIdFromFile(bucketIdStr);
-      if (bucketId == bucketNum) {
-        // match, return
-        return src.getPath();
-      }
-    }
-    return null;
+    return srcs[bucketNum].getPath();
   }
 
   @SuppressWarnings("nls")
@@ -509,13 +486,13 @@ public class Partition implements Serializable {
           SessionState.getSessionConf(), serializationLib, table.getParameters())) {
         return Hive.getFieldsFromDeserializerForMsStorage(table, getDeserializer());
       }
-      return HiveMetaStoreUtils.getFieldsFromDeserializer(table.getTableName(), getDeserializer());
+      return MetaStoreUtils.getFieldsFromDeserializer(table.getTableName(), getDeserializer());
     } catch (Exception e) {
       LOG.error("Unable to get cols from serde: " +
           tPartition.getSd().getSerdeInfo().getSerializationLib(), e);
     }
 
-    return Collections.emptyList();
+    return new ArrayList<FieldSchema>();
   }
 
   public String getLocation() {
@@ -602,19 +579,4 @@ public class Partition implements Serializable {
       Table.validateColumns(getCols(), table.getPartCols());
     }
   }
-
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(tPartition);
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (obj instanceof Partition) {
-      Partition o = (Partition) obj;
-      return Objects.equals(tPartition, o.tPartition);
-    }
-    return false;
-  }
-
 }

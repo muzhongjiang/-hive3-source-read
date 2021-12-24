@@ -28,10 +28,9 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 import com.google.common.io.Resources;
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.apache.hive.ptest.execution.JIRAService.BuildInfo;
-import org.apache.hive.ptest.execution.conf.Context;
 import org.apache.hive.ptest.execution.conf.TestConfiguration;
 import org.approvaltests.Approvals;
 import org.approvaltests.reporters.JunitReporter;
@@ -51,9 +50,8 @@ public class TestJIRAService extends AbstractTestPhase {
   @Before
   public void setup() throws Exception {
     initialize(getClass().getSimpleName());
-    conf = TestConfiguration.withContext(
-        Context.fromInputStream(
-      Resources.getResource("test-configuration.properties").openStream()), logger);
+    conf = TestConfiguration.fromInputStream(
+      Resources.getResource("test-configuration.properties").openStream(), logger);
     conf.setPatch("https://HIVE-10000.patch");
     jiraService = new JIRAService(logger, conf, "tag-10");
   }

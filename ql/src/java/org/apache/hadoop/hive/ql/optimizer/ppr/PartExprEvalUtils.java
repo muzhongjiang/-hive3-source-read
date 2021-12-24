@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hadoop.hive.common.ObjectPair;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.apache.hadoop.hive.ql.exec.ExprNodeEvaluator;
 import org.apache.hadoop.hive.ql.exec.ExprNodeEvaluatorFactory;
@@ -47,11 +47,12 @@ public class PartExprEvalUtils {
    * Evaluate expression with partition columns
    *
    * @param expr
+   * @param partSpec
    * @param rowObjectInspector
    * @return value returned by the expression
    * @throws HiveException
    */
-  static public Object evalExprWithPart(ExprNodeDesc expr,
+  static synchronized public Object evalExprWithPart(ExprNodeDesc expr,
       Partition p, List<VirtualColumn> vcs,
       StructObjectInspector rowObjectInspector) throws HiveException {
     LinkedHashMap<String, String> partSpec = p.getSpec();
@@ -60,7 +61,7 @@ public class PartExprEvalUtils {
     String[] partKeyTypes = pcolTypes.trim().split(":");
 
     if (partSpec.size() != partKeyTypes.length) {
-        throw new HiveException("Internal error : Partition Spec size, " + partSpec.size() +
+        throw new HiveException("Internal error : Partition Spec size, " + partProps.size() +
                 " doesn't match partition key definition size, " + partKeyTypes.length);
     }
     boolean hasVC = vcs != null && !vcs.isEmpty();
@@ -102,7 +103,7 @@ public class PartExprEvalUtils {
         .getPrimitiveJavaObject(evaluateResultO);
   }
 
-  public static Pair<PrimitiveObjectInspector, ExprNodeEvaluator> prepareExpr(
+  static synchronized public ObjectPair<PrimitiveObjectInspector, ExprNodeEvaluator> prepareExpr(
       ExprNodeGenericFuncDesc expr, List<String> partColumnNames,
       List<PrimitiveTypeInfo> partColumnTypeInfos) throws HiveException {
     // Create the row object
@@ -116,12 +117,12 @@ public class PartExprEvalUtils {
 
     ExprNodeEvaluator evaluator = ExprNodeEvaluatorFactory.get(expr);
     ObjectInspector evaluateResultOI = evaluator.initialize(objectInspector);
-    return Pair.of((PrimitiveObjectInspector)evaluateResultOI, evaluator);
+    return ObjectPair.create((PrimitiveObjectInspector)evaluateResultOI, evaluator);
   }
 
-  static public Object evaluateExprOnPart(
-      Pair<PrimitiveObjectInspector, ExprNodeEvaluator> pair, Object partColValues)
+  static synchronized public Object evaluateExprOnPart(
+      ObjectPair<PrimitiveObjectInspector, ExprNodeEvaluator> pair, Object partColValues)
           throws HiveException {
-    return pair.getLeft().getPrimitiveJavaObject(pair.getRight().evaluate(partColValues));
+    return pair.getFirst().getPrimitiveJavaObject(pair.getSecond().evaluate(partColValues));
   }
 }

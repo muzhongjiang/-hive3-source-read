@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,26 +18,17 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
 
-import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
-import org.apache.hadoop.hive.ql.exec.persistence.MatchTracker;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashTable;
-import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinNonMatchedIterator;
 
 public abstract class VectorMapJoinFastHashTable implements VectorMapJoinHashTable {
   public static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinFastHashTable.class);
 
-  // when rehashing, jump directly to 1M items
-  public static final int FIRST_SIZE_UP = 1048576;
-
-  protected final boolean isFullOuter;
-
   protected int logicalHashBucketCount;
   protected int logicalHashBucketMask;
 
-  protected final float loadFactor;
+  protected float loadFactor;
   protected final int writeBuffersSize;
 
   protected long estimatedKeyCount;
@@ -55,7 +46,7 @@ public abstract class VectorMapJoinFastHashTable implements VectorMapJoinHashTab
   public static final int ONE_SIXTH_LIMIT = HIGHEST_INT_POWER_OF_2 / 6;
 
   public void throwExpandError(int limit, String dataTypeName) {
-    throw new MapJoinMemoryExhaustionError(
+    throw new RuntimeException(
         "Vector MapJoin " + dataTypeName + " Hash Table cannot grow any more -- use a smaller container size. " +
         "Current logical size is " + logicalHashBucketCount + " and " +
         "the limit is " + limit + ". " +
@@ -76,10 +67,7 @@ public abstract class VectorMapJoinFastHashTable implements VectorMapJoinHashTab
   }
 
   public VectorMapJoinFastHashTable(
-      boolean isFullOuter,
-      int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount) {
-
-    this.isFullOuter = isFullOuter;
+        int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount) {
 
     initialCapacity = (Long.bitCount(initialCapacity) == 1)
         ? initialCapacity : nextHighestPowerOfTwo(initialCapacity);
@@ -99,37 +87,5 @@ public abstract class VectorMapJoinFastHashTable implements VectorMapJoinHashTab
   @Override
   public int size() {
     return keysAssigned;
-  }
-
-  protected final boolean checkResize() {
-    // resize small hashtables up to a higher width (4096 items), but when there are collisions
-    return (resizeThreshold <= keysAssigned)
-        || (logicalHashBucketCount <= FIRST_SIZE_UP && largestNumberOfSteps > 1);
-  }
-
-  @Override
-  public long getEstimatedMemorySize() {
-    int size = 0;
-    JavaDataModel jdm = JavaDataModel.get();
-    size += JavaDataModel.alignUp(10L * jdm.primitive1() + jdm.primitive2(), jdm.memoryAlign());
-    if (isFullOuter) {
-      size += MatchTracker.calculateEstimatedMemorySize(logicalHashBucketCount);
-    }
-    return size;
-  }
-
-  @Override
-  public MatchTracker createMatchTracker() {
-    return MatchTracker.create(logicalHashBucketCount);
-  }
-
-  @Override
-  public VectorMapJoinNonMatchedIterator createNonMatchedIterator(MatchTracker matchTracker) {
-    throw new RuntimeException("Not implemented");
-  }
-
-  @Override
-  public int spillPartitionId() {
-    throw new RuntimeException("Not implemented");
   }
 }

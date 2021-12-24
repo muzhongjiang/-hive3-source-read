@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,7 @@ import org.apache.commons.httpclient.methods.DeleteMethod;
 import org.apache.commons.httpclient.methods.GetMethod;
 import org.apache.commons.httpclient.methods.PutMethod;
 import org.apache.commons.httpclient.methods.StringRequestEntity;
-import org.apache.hadoop.hive.metastore.MetaStoreTestUtils;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
@@ -43,7 +43,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import org.junit.Assert;
+import junit.framework.Assert;
 
 /**
  * A set of tests exercising e2e WebHCat DDL APIs.  These tests are somewhat
@@ -75,15 +75,13 @@ public class TestWebHCatE2e {
     int webhcatPort = 0;
     boolean webhcatStarted = false;
 
-    for (int tryCount = 0; tryCount < MetaStoreTestUtils.RETRY_COUNT; tryCount++) {
+    for (int tryCount = 0; tryCount < MetaStoreUtils.RETRY_COUNT; tryCount++) {
       try {
-        if (tryCount == MetaStoreTestUtils.RETRY_COUNT - 1) {
-          /* Last try to get a port.  Just use default 50111.  */
+        if (tryCount == MetaStoreUtils.RETRY_COUNT - 1) {
+          // down to the last try.  try default port 50111
           webhcatPort = 50111;
-          LOG.warn("Unable to find free port; using default: " + webhcatPort);
-        }
-        else {
-          webhcatPort = MetaStoreTestUtils.findFreePort();
+        } else {
+          webhcatPort = MetaStoreUtils.findFreePort();
         }
         templetonBaseUrl = templetonBaseUrl.replace("50111", Integer.toString(webhcatPort));
         templetonServer = new Main(new String[] { "-D" + AppConfig.UNIT_TEST_MODE + "=true",
@@ -255,7 +253,7 @@ public class TestWebHCatE2e {
     Map<String, Object> props = JsonBuilder.jsonToMap(p.responseBody);
     Assert.assertEquals("hadoop", props.get("module"));
     Assert.assertTrue(p.getAssertMsg(),
-        ((String)props.get("version")).matches("[1-3].[0-9]+.[0-9]+.*"));
+        ((String)props.get("version")).matches("[1-2].[0-9]+.[0-9]+.*"));
   }
 
   @Test

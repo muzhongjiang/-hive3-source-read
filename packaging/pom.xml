@@ -19,7 +19,7 @@
   <parent>
     <groupId>org.apache.hive</groupId>
     <artifactId>hive</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>2.3.9</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -37,7 +37,7 @@
       <id>dist</id>
       <build>
         <plugins>
-    <!-- plugins are always listed in sorted order by groupId, artifactId -->
+    <!-- plugins are always listed in sorted order by groupId, artifectId -->
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
@@ -54,25 +54,10 @@
                     <descriptor>src/main/assembly/bin.xml</descriptor>
                     <descriptor>src/main/assembly/src.xml</descriptor>
                   </descriptors>
-                  <tarLongFileMode>posix</tarLongFileMode>
+                  <tarLongFileMode>gnu</tarLongFileMode>
                 </configuration>
               </execution>
-              <execution>
-                <id>assemble-beeline</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>single</goal>
-                </goals>
-                <configuration>
-                  <finalName>apache-hive-beeline-${project.version}</finalName>
-                  <appendAssemblyId>false</appendAssemblyId>
-                  <descriptors>
-                    <descriptor>src/main/assembly/beeline.xml</descriptor>
-                  </descriptors>
-                  <tarLongFileMode>posix</tarLongFileMode>
-                </configuration>
-                </execution>
-              </executions>
+            </executions>
           </plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
@@ -147,22 +132,11 @@
         </plugins>
       </build>
     </profile>
-    <!-- Add iceberg dependencies only with iceberg build -->
-    <profile>
-      <id>iceberg</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hive</groupId>
-          <artifactId>hive-iceberg-handler</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
   </profiles>
 
 
   <dependencies>
-    <!-- dependencies are always listed in sorted order by groupId, artifactId -->
+    <!-- dependencies are always listed in sorted order by groupId, artifectId -->
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-common</artifactId>
@@ -241,11 +215,6 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
-      <artifactId>kafka-handler</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hive</groupId>
       <artifactId>hive-jdbc-handler</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -289,8 +258,8 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
-      <artifactId>hive-streaming</artifactId>
+      <groupId>org.apache.hive.hcatalog</groupId>
+      <artifactId>hive-hcatalog-streaming</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -316,32 +285,6 @@
     <dependency>
       <groupId>org.apache.hive.hcatalog</groupId>
       <artifactId>hive-webhcat-java-client</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hive</groupId>
-      <artifactId>hive-kryo-registrator</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs-client</artifactId>
-      <version>${hadoop.version}</version>
-      <optional>true</optional>
-      <exclusions>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-log4j12</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hive</groupId>
-      <artifactId>hive-kudu-handler</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>

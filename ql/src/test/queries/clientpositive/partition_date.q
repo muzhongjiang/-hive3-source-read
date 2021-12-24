@@ -1,4 +1,3 @@
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 drop table partition_date_1;
 
@@ -16,7 +15,7 @@ insert overwrite table partition_date_1 partition(dt='2013-08-08', region= '10')
   select * from src tablesample (11 rows);
 
 
-select distinct dt from partition_date_1 order by dt;
+select distinct dt from partition_date_1;
 select * from partition_date_1 where dt = '2000-01-01' and region = '2' order by key,value;
 
 -- 15

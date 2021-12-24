@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.optimizer;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,7 @@ import org.apache.hadoop.hive.ql.exec.SMBMapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.optimizer.GenMRProcContext.GenMapRedCtx;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -76,7 +77,7 @@ public final class MapJoinFactory {
    * may be performed as a bucketized map-side join (or sort-merge join), the map join operator
    * is enhanced to contain the bucketing info. when it is encountered.
    */
-  private static class TableScanMapJoinProcessor implements SemanticNodeProcessor {
+  private static class TableScanMapJoinProcessor implements NodeProcessor {
 
     public static void setupBucketMapJoinInfo(MapWork plan,
         AbstractMapJoinOperator<? extends MapJoinDesc> currMapJoinOp) {
@@ -145,7 +146,7 @@ public final class MapJoinFactory {
      *          position of the parent
      */
     private static void initMapJoinPlan(AbstractMapJoinOperator<? extends MapJoinDesc> op,
-        Task<?> currTask,
+        Task<? extends Serializable> currTask,
         GenMRProcContext opProcCtx, boolean local)
         throws SemanticException {
 
@@ -170,7 +171,7 @@ public final class MapJoinFactory {
      * @param pos
      *          position of the parent in the stack
      */
-    private static void joinMapJoinPlan(Task<?> oldTask,
+    private static void joinMapJoinPlan(Task<? extends Serializable> oldTask,
         GenMRProcContext opProcCtx, boolean local)
         throws SemanticException {
       TableScanOperator currTopOp = opProcCtx.getCurrTopOp();
@@ -198,12 +199,12 @@ public final class MapJoinFactory {
       Map<Operator<? extends OperatorDesc>, GenMapRedCtx> mapCurrCtx = ctx
           .getMapCurrCtx();
       GenMapRedCtx mapredCtx = mapCurrCtx.get(mapJoin.getParentOperators().get(pos));
-      Task<?> currTask = mapredCtx.getCurrTask();
+      Task<? extends Serializable> currTask = mapredCtx.getCurrTask();
       MapredWork currPlan = (MapredWork) currTask.getWork();
       String currAliasId = mapredCtx.getCurrAliasId();
-      HashMap<Operator<? extends OperatorDesc>, Task<?>> opTaskMap =
+      HashMap<Operator<? extends OperatorDesc>, Task<? extends Serializable>> opTaskMap =
           ctx.getOpTaskMap();
-      Task<?> oldTask = opTaskMap.get(mapJoin);
+      Task<? extends Serializable> oldTask = opTaskMap.get(mapJoin);
 
       ctx.setCurrAliasId(currAliasId);
       ctx.setCurrTask(currTask);
@@ -232,7 +233,7 @@ public final class MapJoinFactory {
     }
   }
 
-  public static SemanticNodeProcessor getTableScanMapJoin() {
+  public static NodeProcessor getTableScanMapJoin() {
     return new TableScanMapJoinProcessor();
   }
 

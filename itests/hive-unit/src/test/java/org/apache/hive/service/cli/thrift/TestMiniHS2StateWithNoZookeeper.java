@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -50,14 +50,11 @@ public class TestMiniHS2StateWithNoZookeeper {
   private static HiveConf hiveConf = null;
 
   @BeforeClass
-  public static void beforeTest() throws Exception   {
-    MiniHS2.cleanupLocalDir();
+  public static void beforeTest() throws Exception   { 
     hiveConf = new HiveConf();
     hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY, true);
     hiveConf.setIntVar(ConfVars.HIVE_ZOOKEEPER_CONNECTION_MAX_RETRIES, 0);
     hiveConf.setTimeVar(ConfVars.HIVE_ZOOKEEPER_CONNECTION_BASESLEEPTIME, 0, TimeUnit.MILLISECONDS);
-    // Disable killquery, this way only HS2 start will fail, not the SessionManager service
-    hiveConf.setBoolVar(ConfVars.HIVE_ZOOKEEPER_KILLQUERY_ENABLE, false);
     miniHS2 = new MiniHS2(hiveConf);
     Map<String, String> confOverlay = new HashMap<String, String>();
     try {

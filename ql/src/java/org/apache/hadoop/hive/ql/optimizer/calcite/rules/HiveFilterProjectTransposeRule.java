@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,11 +23,9 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelOptRuleOperand;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
-import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.rules.FilterProjectTransposeRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -40,27 +38,15 @@ import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveCalciteUtil;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelFactories;
-import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelOptUtil;
-import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelOptUtil.RewritablePKFKJoinInfo;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
 
 public class HiveFilterProjectTransposeRule extends FilterProjectTransposeRule {
 
-  public static final HiveFilterProjectTransposeRule DETERMINISTIC_WINDOWING_ON_NON_FILTERING_JOIN =
-      new HiveFilterProjectTransposeRule(
-          operand(Filter.class, operand(Project.class, operand(Join.class, any()))),
-          HiveRelFactories.HIVE_BUILDER, true, true);
-
-  public static final HiveFilterProjectTransposeRule DETERMINISTIC_WINDOWING =
+  public static final HiveFilterProjectTransposeRule INSTANCE_DETERMINISTIC_WINDOWING =
           new HiveFilterProjectTransposeRule(Filter.class, HiveProject.class,
                   HiveRelFactories.HIVE_BUILDER, true, true);
 
-  public static final HiveFilterProjectTransposeRule DETERMINISTIC_ON_NON_FILTERING_JOIN =
-      new HiveFilterProjectTransposeRule(
-          operand(Filter.class, operand(Project.class, operand(Join.class, any()))),
-          HiveRelFactories.HIVE_BUILDER, true, false);
-
-  public static final HiveFilterProjectTransposeRule DETERMINISTIC =
+  public static final HiveFilterProjectTransposeRule INSTANCE_DETERMINISTIC =
           new HiveFilterProjectTransposeRule(Filter.class, HiveProject.class,
                   HiveRelFactories.HIVE_BUILDER, true, false);
 
@@ -80,35 +66,12 @@ public class HiveFilterProjectTransposeRule extends FilterProjectTransposeRule {
     this.pushThroughWindowing = pushThroughWindowing;
   }
 
-  private HiveFilterProjectTransposeRule(RelOptRuleOperand operand,
-      RelBuilderFactory relBuilderFactory,
-      boolean onlyDeterministic, boolean pushThroughWindowing) {
-    super(operand, false, false, relBuilderFactory);
-    this.onlyDeterministic = onlyDeterministic;
-    this.pushThroughWindowing = pushThroughWindowing;
-  }
-
   @Override
   public boolean matches(RelOptRuleCall call) {
     final Filter filterRel = call.rel(0);
-
-    // The condition fetched here can reference a udf that is not deterministic, but defined
-    // as part of the select list when a view is in play.  But the condition after the pushdown
-    // will resolve to using the udf from select list.  The check here for deterministic filters
-    // should be based on the resolved expression.  Refer to test case cbo_ppd_non_deterministic.q.
-    RexNode condition = RelOptUtil.pushPastProject(filterRel.getCondition(), call.rel(1));
-
+    RexNode condition = filterRel.getCondition();
     if (this.onlyDeterministic && !HiveCalciteUtil.isDeterministic(condition)) {
       return false;
-    }
-
-    if (call.rels.length > 2) {
-      final Join joinRel = call.rel(2);
-      RewritablePKFKJoinInfo joinInfo = HiveRelOptUtil.isRewritablePKFKJoin(
-          joinRel, joinRel.getLeft(), joinRel.getRight(), call.getMetadataQuery());
-      if (!joinInfo.rewritable) {
-        return false;
-      }
     }
 
     return super.matches(call);

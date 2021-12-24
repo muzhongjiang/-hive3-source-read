@@ -27,7 +27,6 @@ set -x
 #   LLAP_DAEMON_LOGGER - default is console
 #   LLAP_DAEMON_LOG_DIR - defaults to /tmp
 #   LLAP_DAEMON_TMP_DIR - defaults to /tmp
-#   LLAP_LOG4J2_PROPERTIES_FILE_NAME - defaults to llap-daemon-log4j2.properties
 #   LLAP_DAEMON_LOG_FILE - 
 #   LLAP_DAEMON_CONF_DIR
 
@@ -52,12 +51,7 @@ shift
 JAVA=$JAVA_HOME/bin/java
 LOG_LEVEL_DEFAULT="INFO"
 LOGGER_DEFAULT="console"
-JAVA_VERSION=$($JAVA -version 2>&1 | grep -i version | cut -d'"' -f2 | cut -d'.' -f1) # returns "1", "9", "11" for jdk 8,9,11 respectively
-JAVA_GC_OPTS="-XX:+PrintGCDetails -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=4 -XX:GCLogFileSize=100M -XX:+PrintGCDateStamps"
-if [ "$JAVA_VERSION" -gt "1" ]; then # from java9+, -Xlog argument should be used
-  JAVA_GC_OPTS="-Xlog:gc*,safepoint:gc.log:time,uptime:filecount=4,filesize=100M"
-fi
-JAVA_OPTS_BASE="-server -Djava.net.preferIPv4Stack=true -XX:+UseNUMA -verbose:gc $JAVA_GC_OPTS"
+JAVA_OPTS_BASE="-server -Djava.net.preferIPv4Stack=true -XX:NewRatio=8 -XX:+UseNUMA -XX:+PrintGCDetails -verbose:gc -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=4 -XX:GCLogFileSize=100M -XX:+PrintGCDateStamps"
 
 if [ ! -d "${LLAP_DAEMON_HOME}" ]; then
   echo No LLAP_DAEMON_HOME set, or is not a directory. 
@@ -96,10 +90,6 @@ if [ "$LLAP_DAEMON_LOGFILE" = "" ]; then
   LLAP_DAEMON_LOG_FILE='llapdaemon.log'
 fi
 
-if [ "LLAP_LOG4J2_PROPERTIES_FILE_NAME" = "" ]; then
-  LLAP_LOG4J2_PROPERTIES_FILE_NAME='llap-daemon-log4j2.properties'
-fi
-
 if [ "$LLAP_DAEMON_HEAPSIZE" = "" ]; then
   LLAP_DAEMON_HEAPSIZE=4096
 fi
@@ -117,7 +107,7 @@ elif [ "$COMMAND" = "run" ] ; then
   CLASS='org.apache.hadoop.hive.llap.daemon.impl.LlapDaemon'
 fi
 
-JAVA_OPTS_BASE="${JAVA_OPTS_BASE} -Xloggc:${LLAP_DAEMON_LOG_DIR}/gc_$(date +%Y-%m-%d-%H).log"
+JAVA_OPTS_BASE="${JAVA_OPTS_BASE} -Xloggc:${LLAP_DAEMON_LOG_DIR}/gc.log"
 LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} ${JAVA_OPTS_BASE}"
 
 # Set the default GC option if none set
@@ -131,14 +121,12 @@ if [ -n "$LLAP_DAEMON_TMP_DIR" ]; then
   export LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} -Djava.io.tmpdir=$LLAP_DAEMON_TMP_DIR"
 fi
 
-LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} -Dlog4j.configurationFile=${LLAP_LOG4J2_PROPERTIES_FILE_NAME}"
+LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} -Dlog4j.configurationFile=llap-daemon-log4j2.properties"
 LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} -Dllap.daemon.log.dir=${LLAP_DAEMON_LOG_DIR}"
 LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} -Dllap.daemon.log.file=${LLAP_DAEMON_LOG_FILE}"
 LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} -Dllap.daemon.root.logger=${LLAP_DAEMON_LOGGER}"
 LLAP_DAEMON_OPTS="${LLAP_DAEMON_OPTS} -Dllap.daemon.log.level=${LLAP_DAEMON_LOG_LEVEL}"
 
-export MALLOC_ARENA_MAX=4
+exec "$JAVA" -Dproc_llapdaemon -Xms${LLAP_DAEMON_HEAPSIZE}m -Xmx${LLAP_DAEMON_HEAPSIZE}m ${LLAP_DAEMON_OPTS} -classpath "$CLASSPATH" $CLASS "$@"
 
-export JVM_PID="$$"
-exec "$JAVA" -Dproc_llapdaemon -Xms$(( ${LLAP_DAEMON_HEAPSIZE} / 2 ))m -Xmx${LLAP_DAEMON_HEAPSIZE}m ${LLAP_DAEMON_OPTS} -classpath "$CLASSPATH" $CLASS "$@"
 

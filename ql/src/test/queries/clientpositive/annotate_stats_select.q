@@ -1,4 +1,3 @@
-SET hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
 set hive.stats.fetch.column.stats=true;
 

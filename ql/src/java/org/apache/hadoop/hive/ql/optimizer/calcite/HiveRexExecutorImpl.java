@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,11 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.hadoop.hive.ql.optimizer.calcite;
 
 import java.util.HashSet;
 import java.util.List;
 
+import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexExecutorImpl;
 import org.apache.calcite.rex.RexNode;
@@ -33,25 +35,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-/**
- * Executor for {@link RexNode} based on Hive semantics.
- */
+
 public class HiveRexExecutorImpl extends RexExecutorImpl {
 
   private static final Logger LOG = LoggerFactory.getLogger(HiveRexExecutorImpl.class);
 
+  private final RelOptCluster cluster;
 
-  public HiveRexExecutorImpl() {
+  public HiveRexExecutorImpl(RelOptCluster cluster) {
     super(null);
+    this.cluster = cluster;
   }
 
   @Override
   public void reduce(RexBuilder rexBuilder, List<RexNode> constExps, List<RexNode> reducedValues) {
-    RexNodeConverter rexNodeConverter = new RexNodeConverter(rexBuilder, rexBuilder.getTypeFactory());
+    RexNodeConverter rexNodeConverter = new RexNodeConverter(cluster);
     for (RexNode rexNode : constExps) {
       // initialize the converter
       ExprNodeConverter converter = new ExprNodeConverter("", null, null, null,
-          new HashSet<>(), rexBuilder);
+          new HashSet<Integer>(), cluster.getTypeFactory());
       // convert RexNode to ExprNodeGenericFuncDesc
       ExprNodeDesc expr = rexNode.accept(converter);
       if (expr instanceof ExprNodeGenericFuncDesc) {
@@ -59,26 +61,19 @@ public class HiveRexExecutorImpl extends RexExecutorImpl {
         ExprNodeDesc constant = ConstantPropagateProcFactory
             .foldExpr((ExprNodeGenericFuncDesc) expr);
         if (constant != null) {
-          addExpressionToList(constant, rexNode, rexNodeConverter, reducedValues);
+          try {
+            // convert constant back to RexNode
+            reducedValues.add(rexNodeConverter.convert((ExprNodeConstantDesc) constant));
+          } catch (Exception e) {
+            LOG.warn(e.getMessage());
+            reducedValues.add(rexNode);
+          }
         } else {
           reducedValues.add(rexNode);
         }
-      } else if (expr instanceof ExprNodeConstantDesc) {
-        addExpressionToList(expr, rexNode, rexNodeConverter, reducedValues);
       } else {
         reducedValues.add(rexNode);
       }
-    }
-  }
-
-  private void addExpressionToList(ExprNodeDesc reducedExpr, RexNode originalExpr,
-      RexNodeConverter rexNodeConverter, List<RexNode> reducedValues) {
-    try {
-      // convert constant back to RexNode
-      reducedValues.add(rexNodeConverter.convert(reducedExpr));
-    } catch (Exception e) {
-      LOG.warn(e.getMessage());
-      reducedValues.add(originalExpr);
     }
   }
 

@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hive.ql.security.authorization.plugin.fallback;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider;
@@ -37,21 +39,19 @@ import org.apache.hadoop.hive.ql.security.authorization.plugin.SettableConfigUpd
 import org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.Operation2Privilege;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLAuthorizationUtils;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLPrivTypeGrant;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class FallbackHiveAuthorizer extends AbstractHiveAuthorizer {
-  private static final Logger LOG = LoggerFactory.getLogger(FallbackHiveAuthorizer.class);
+  private static final Log LOG = LogFactory.getLog(FallbackHiveAuthorizer.class);
 
   private final HiveAuthzSessionContext sessionCtx;
   private final HiveAuthenticationProvider authenticator;
   private String[] admins = null;
 
-  public FallbackHiveAuthorizer(HiveConf hiveConf, HiveAuthenticationProvider hiveAuthenticator,
+  FallbackHiveAuthorizer(HiveConf hiveConf, HiveAuthenticationProvider hiveAuthenticator,
                                 HiveAuthzSessionContext ctx) {
     this.authenticator = hiveAuthenticator;
     this.sessionCtx = applyTestSettings(ctx, hiveConf);
@@ -154,7 +154,13 @@ public class FallbackHiveAuthorizer extends AbstractHiveAuthorizer {
     if (hiveObjects == null) {
       return;
     }
-    if (admins != null && Arrays.stream(admins).parallel().anyMatch(n -> n.equals(userName))) {
+
+    boolean isAdmin = false;
+    if (admins != null && admins.length > 0) {
+      isAdmin = Arrays.asList(admins).contains(userName);
+    }
+
+    if (isAdmin) {
       return; // Skip rest of checks if user is admin
     }
 

@@ -1,5 +1,3 @@
---! qt:dataset:src
---! qt:dataset:part
 
 
 set hive.exec.infer.bucket.sort=true;

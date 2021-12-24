@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.spark;
 
-import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.spark.api.java.JavaPairRDD;
 
@@ -29,7 +28,7 @@ public interface SparkTran<KI extends WritableComparable, VI, KO extends Writabl
 
   public String getName();
 
-  public BaseWork getBaseWork();
+  public void setName(String name);
 
   public Boolean isCacheEnable();
 }

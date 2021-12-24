@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,23 +23,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.commons.collections.Bag;
-import org.apache.commons.collections.bag.TreeBag;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.ImmutableSortedMultiset;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf.StrictChecks;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
-import org.apache.hadoop.hive.ql.exec.UDF;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
-import org.apache.hadoop.hive.ql.udf.UDFType;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBaseCompare;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBridge;
@@ -145,9 +138,7 @@ public class ExprNodeGenericFuncDesc extends ExprNodeDesc implements
     if (genericUDF instanceof GenericUDFBridge) {
       GenericUDFBridge genericUDFBridge = (GenericUDFBridge) genericUDF;
       sb.append(" ==> ");
-      String udfName = genericUDFBridge.getUdfName();
-      Class<? extends UDF> udfClass = genericUDFBridge.getUdfClass();
-      sb.append(udfName != null ? udfName : (udfClass != null ? udfClass.getSimpleName() : "null"));
+      sb.append(genericUDFBridge.getUdfName());
       sb.append(" ");
     }
     sb.append("(");
@@ -172,23 +163,6 @@ public class ExprNodeGenericFuncDesc extends ExprNodeDesc implements
     }
 
     return genericUDF.getDisplayString(childrenExprStrings);
-  }
-
-  @Override
-  public String getExprString(boolean sortChildren) {
-    if (sortChildren) {
-      UDFType udfType = genericUDF.getClass().getAnnotation(UDFType.class);
-      if (udfType.commutative()) {
-        // Get the sorted children expr strings
-        String[] childrenExprStrings = new String[chidren.size()];
-        for (int i = 0; i < childrenExprStrings.length; i++) {
-          childrenExprStrings[i] = chidren.get(i).getExprString();
-        }
-        return genericUDF.getDisplayString(
-            ImmutableSortedMultiset.copyOf(childrenExprStrings).toArray(new String[childrenExprStrings.length]));
-      }
-    }
-    return getExprString();
   }
 
   @Override
@@ -226,10 +200,37 @@ public class ExprNodeGenericFuncDesc extends ExprNodeDesc implements
    * @throws UDFArgumentException
    */
   public static ExprNodeGenericFuncDesc newInstance(GenericUDF genericUDF,
-      String funcText, List<ExprNodeDesc> children) throws UDFArgumentException {
+      String funcText,
+      List<ExprNodeDesc> children) throws UDFArgumentException {
     ObjectInspector[] childrenOIs = new ObjectInspector[children.size()];
     for (int i = 0; i < childrenOIs.length; i++) {
       childrenOIs[i] = children.get(i).getWritableObjectInspector();
+    }
+
+    // Check if a bigint is implicitely cast to a double as part of a comparison
+    // Perform the check here instead of in GenericUDFBaseCompare to guarantee it is only run once per operator
+    if (genericUDF instanceof GenericUDFBaseCompare && children.size() == 2) {
+
+      TypeInfo oiTypeInfo0 = children.get(0).getTypeInfo();
+      TypeInfo oiTypeInfo1 = children.get(1).getTypeInfo();
+
+      SessionState ss = SessionState.get();
+      Configuration conf = (ss != null) ? ss.getConf() : new Configuration();
+
+      LogHelper console = new LogHelper(LOG);
+
+      // For now, if a bigint is going to be cast to a double throw an error or warning
+      if ((oiTypeInfo0.equals(TypeInfoFactory.stringTypeInfo) && oiTypeInfo1.equals(TypeInfoFactory.longTypeInfo)) ||
+          (oiTypeInfo0.equals(TypeInfoFactory.longTypeInfo) && oiTypeInfo1.equals(TypeInfoFactory.stringTypeInfo))) {
+        String error = StrictChecks.checkTypeSafety(conf);
+        if (error != null) throw new UDFArgumentException(error);
+        console.printError("WARNING: Comparing a bigint and a string may result in a loss of precision.");
+      } else if ((oiTypeInfo0.equals(TypeInfoFactory.doubleTypeInfo) && oiTypeInfo1.equals(TypeInfoFactory.longTypeInfo)) ||
+          (oiTypeInfo0.equals(TypeInfoFactory.longTypeInfo) && oiTypeInfo1.equals(TypeInfoFactory.doubleTypeInfo))) {
+        String error = StrictChecks.checkTypeSafety(conf);
+        if (error != null) throw new UDFArgumentException(error);
+        console.printError("WARNING: Comparing a bigint and a double may result in a loss of precision.");
+      }
     }
 
     ObjectInspector oi = genericUDF.initializeAndFoldConstants(childrenOIs);

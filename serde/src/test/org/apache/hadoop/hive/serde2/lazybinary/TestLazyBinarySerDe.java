@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
@@ -58,15 +58,12 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableBinaryObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.BytesWritable;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import org.junit.Test;
 
 /**
  * TestLazyBinarySerDe.
  *
  */
-public class TestLazyBinarySerDe {
+public class TestLazyBinarySerDe extends TestCase {
 
   /**
    * Generate a random struct array.
@@ -96,13 +93,13 @@ public class TestLazyBinarySerDe {
    * @return the initialized LazyBinarySerDe
    * @throws Throwable
    */
-  protected AbstractSerDe getSerDe(String fieldNames, String fieldTypes) throws Throwable {
+  protected static AbstractSerDe getSerDe(String fieldNames, String fieldTypes) throws Throwable {
     Properties schema = new Properties();
     schema.setProperty(serdeConstants.LIST_COLUMNS, fieldNames);
     schema.setProperty(serdeConstants.LIST_COLUMN_TYPES, fieldTypes);
 
     LazyBinarySerDe serde = new LazyBinarySerDe();
-    serde.initialize(new Configuration(), schema, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), schema, null);
     return serde;
   }
 
@@ -427,7 +424,6 @@ public class TestLazyBinarySerDe {
    *
    * @throws Throwable
    */
-  @Test
   public void testLazyBinarySerDe() throws Throwable {
     try {
 
@@ -485,7 +481,6 @@ public class TestLazyBinarySerDe {
    * JavaBinaryObjectInspector from input BytesWritable
    * @throws Throwable
    */
-  @Test
   public void testJavaBinaryObjectInspector() throws Throwable {
     BytesWritable bW = getInputBytesWritable();
 
@@ -506,7 +501,6 @@ public class TestLazyBinarySerDe {
    * WritableBinaryObjectInspector from input BytesWritable
    * @throws Throwable
    */
-  @Test
   public void testWritableBinaryObjectInspector() throws Throwable {
     BytesWritable bW = getInputBytesWritable();
 
@@ -526,7 +520,6 @@ public class TestLazyBinarySerDe {
    * LazyBinaryObjectInspector from input BytesWritable
    * @throws Throwable
    */
-  @Test
   public void testLazyBinaryObjectInspector() throws Throwable {
 
     //create input ByteArrayRef

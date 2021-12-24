@@ -1,5 +1,3 @@
-set hive.vectorized.execution.enabled=false;
-
 -- this test creates a Parquet table with an array of optional structs
 
 CREATE TABLE parquet_array_of_optional_elements (

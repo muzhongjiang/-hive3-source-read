@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,23 +21,22 @@ package org.apache.hive.hcatalog.pig;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.common.type.Date;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
@@ -245,6 +244,7 @@ abstract class HCatBaseStorer extends StoreFunc implements StoreMetadata {
       return new HCatFieldSchema(fSchema.alias, TypeInfoFactory.decimalTypeInfo, null);
     case DataType.BAG:
       Schema bagSchema = fSchema.schema;
+      List<HCatFieldSchema> arrFields = new ArrayList<HCatFieldSchema>(1);
       FieldSchema field;
       // Find out if we need to throw away the tuple or not.
       if (removeTupleFromBag(hcatFieldSchema, fSchema)) {
@@ -252,8 +252,8 @@ abstract class HCatBaseStorer extends StoreFunc implements StoreMetadata {
       } else {
         field = bagSchema.getField(0);
       }
-      List<HCatFieldSchema> arrFields = Collections.singletonList(getHCatFSFromPigFS(field,
-          hcatFieldSchema == null ? null : hcatFieldSchema.getArrayElementSchema().get(0), pigSchema, tableSchema));
+      arrFields.add(getHCatFSFromPigFS(field, hcatFieldSchema == null ? null : hcatFieldSchema
+              .getArrayElementSchema().get(0), pigSchema, tableSchema));
       return new HCatFieldSchema(fSchema.alias, Type.ARRAY, new HCatSchema(arrFields), "");
     case DataType.TUPLE:
       List<HCatFieldSchema> hcatFSs = new ArrayList<HCatFieldSchema>();
@@ -269,14 +269,17 @@ abstract class HCatBaseStorer extends StoreFunc implements StoreMetadata {
       // values. So, if its a new column assume <string,string> if its existing
       // return whatever is contained in the existing column.
 
+      HCatFieldSchema valFS;
+      List<HCatFieldSchema> valFSList = new ArrayList<HCatFieldSchema>(1);
+
       if (hcatFieldSchema != null) {
         return HCatFieldSchema.createMapTypeFieldSchema(fSchema.alias, hcatFieldSchema.getMapKeyTypeInfo(), 
           hcatFieldSchema.getMapValueSchema(), "");
       }
 
       // Column not found in target table. Its a new column. Its schema is map<string,string>
-      List<HCatFieldSchema> valFSList =
-          Collections.singletonList(new HCatFieldSchema(fSchema.alias, TypeInfoFactory.stringTypeInfo, ""));
+      valFS = new HCatFieldSchema(fSchema.alias, TypeInfoFactory.stringTypeInfo, "");
+      valFSList.add(valFS);
       return HCatFieldSchema.createMapTypeFieldSchema(fSchema.alias,
         TypeInfoFactory.stringTypeInfo, new HCatSchema(valFSList), "");
     }
@@ -350,7 +353,7 @@ abstract class HCatBaseStorer extends StoreFunc implements StoreMetadata {
         return bagContents;
       case MAP:
         Map<?, ?> pigMap = (Map<?, ?>) pigObj;
-        Map<Object, Object> typeMap = new LinkedHashMap<Object, Object>();
+        Map<Object, Object> typeMap = new HashMap<Object, Object>();
         for (Entry<?, ?> entry : pigMap.entrySet()) {
           // the value has a schema and not a FieldSchema
           typeMap.put(
@@ -415,7 +418,7 @@ abstract class HCatBaseStorer extends StoreFunc implements StoreMetadata {
         return new HiveVarchar(varcharVal, vti.getLength());
       case TIMESTAMP:
         DateTime dt = (DateTime)pigObj;
-        return Timestamp.ofEpochMilli(dt.getMillis());//toEpochMilli() returns UTC time regardless of TZ
+        return new Timestamp(dt.getMillis());//getMillis() returns UTC time regardless of TZ
       case DATE:
         /**
          * We ignore any TZ setting on Pig value since java.sql.Date doesn't have it (in any
@@ -433,7 +436,7 @@ abstract class HCatBaseStorer extends StoreFunc implements StoreMetadata {
           for local timezone.  Date.valueOf() also uses local timezone (as does Date(int,int,int).
           Also see PigHCatUtil#extractPigObject() for corresponding read op.  This way a DATETIME from Pig,
           when stored into Hive and read back comes back with the same value.*/
-        return Date.of(dateTime.getYear(), dateTime.getMonthOfYear(), dateTime.getDayOfMonth());
+        return new Date(dateTime.getYear() - 1900, dateTime.getMonthOfYear() - 1, dateTime.getDayOfMonth());
       default:
         throw new BackendException("Unexpected HCat type " + type + " for value " + pigObj
           + " of class " + pigObj.getClass().getName(), PigHCatUtil.PIG_EXCEPTION_CODE);

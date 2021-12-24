@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,18 +22,12 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.google.common.collect.Multimap;
-import com.google.common.collect.MultimapBuilder;
-import com.google.common.collect.Multimaps;
-import com.google.common.collect.SetMultimap;
 import org.apache.hadoop.hive.common.metrics.common.Metrics;
 import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
 import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
@@ -41,9 +35,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
-import org.apache.hadoop.hive.ql.QueryInfo;
-import org.apache.hadoop.hive.ql.log.LogDivertAppender;
-import org.apache.hadoop.hive.ql.log.LogDivertAppenderForTest;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.AbstractService;
 import org.apache.hive.service.cli.FetchOrientation;
@@ -55,6 +46,11 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,15 +62,11 @@ public class OperationManager extends AbstractService {
   private final Logger LOG = LoggerFactory.getLogger(OperationManager.class.getName());
   private final ConcurrentHashMap<OperationHandle, Operation> handleToOperation =
       new ConcurrentHashMap<OperationHandle, Operation>();
-  private final ConcurrentHashMap<String, Operation> queryIdOperation =
-      new ConcurrentHashMap<String, Operation>();
-  private final SetMultimap<String, String> queryTagToIdMap =
-          Multimaps.synchronizedSetMultimap(MultimapBuilder.hashKeys().hashSetValues().build());
 
   //Following fields for displaying queries on WebUI
   private Object webuiLock = new Object();
-  private QueryInfoCache historicalQueryInfos;
-  private Map<String, QueryInfo> liveQueryInfos = new LinkedHashMap<>();
+  private SQLOperationDisplayCache historicSqlOperations;
+  private Map<String, SQLOperationDisplay> liveSqlOperations = new LinkedHashMap<String, SQLOperationDisplay>();
 
   public OperationManager() {
     super(OperationManager.class.getSimpleName());
@@ -82,11 +74,14 @@ public class OperationManager extends AbstractService {
 
   @Override
   public synchronized void init(HiveConf hiveConf) {
-    LogDivertAppender.registerRoutingAppender(hiveConf);
-    LogDivertAppenderForTest.registerRoutingAppenderIfInTest(hiveConf);
-
+    if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      initOperationLogCapture(hiveConf.getVar(
+        HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LEVEL));
+    } else {
+      LOG.debug("Operation level logging is turned off");
+    }
     if (hiveConf.isWebUiQueryInfoCacheEnabled()) {
-      historicalQueryInfos = new QueryInfoCache(
+      historicSqlOperations = new SQLOperationDisplayCache(
         hiveConf.getIntVar(ConfVars.HIVE_SERVER2_WEBUI_MAX_HISTORIC_QUERIES));
     }
     super.init(hiveConf);
@@ -100,6 +95,17 @@ public class OperationManager extends AbstractService {
   @Override
   public synchronized void stop() {
     super.stop();
+  }
+
+  private void initOperationLogCapture(String loggingMode) {
+    // Register another Appender (with the same layout) that talks to us.
+    Appender ap = LogDivertAppender.createInstance(this, OperationLog.getLoggingLevel(loggingMode));
+    LoggerContext context = (LoggerContext) LogManager.getContext(false);
+    Configuration configuration = context.getConfiguration();
+    LoggerConfig loggerConfig = configuration.getLoggerConfig(LoggerFactory.getLogger(getClass()).getName());
+    loggerConfig.addAppender(ap, null, null);
+    context.updateLoggers();
+    ap.start();
   }
 
   public ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
@@ -193,46 +199,21 @@ public class OperationManager extends AbstractService {
     return handleToOperation.get(operationHandle);
   }
 
-  private String getQueryId(Operation operation) {
-    return operation.getQueryId();
-  }
-
   private void addOperation(Operation operation) {
-    LOG.info("Adding operation: {} {}", operation.getHandle(),
-        operation.getParentSession().getSessionHandle());
-    queryIdOperation.put(getQueryId(operation), operation);
+    LOG.info("Adding operation: " + operation.getHandle());
     handleToOperation.put(operation.getHandle(), operation);
     if (operation instanceof SQLOperation) {
       synchronized (webuiLock) {
-        liveQueryInfos.put(operation.getHandle().getHandleIdentifier().toString(),
-          ((SQLOperation) operation).getQueryInfo());
+        liveSqlOperations.put(operation.getHandle().getHandleIdentifier().toString(),
+          ((SQLOperation) operation).getSQLOperationDisplay());
       }
     }
   }
 
-  public void updateQueryTag(String queryId, String queryTag) {
-    Operation operation = queryIdOperation.get(queryId);
-    if (operation != null) {
-      queryTagToIdMap.put(queryTag, queryId);
-      return;
-    }
-    LOG.info("Query id is missing during query tag updation");
-  }
-
   private Operation removeOperation(OperationHandle opHandle) {
     Operation operation = handleToOperation.remove(opHandle);
-    if (operation == null) {
-      throw new RuntimeException("Operation does not exist: " + opHandle);
-    }
-    String queryId = getQueryId(operation);
-    queryIdOperation.remove(queryId);
-    String queryTag = operation.getQueryTag();
-    if (queryTag != null) {
-      queryTagToIdMap.remove(queryTag, queryId);
-    }
-    LOG.info("Removed queryId: {} corresponding to operation: {} with tag: {}", queryId, opHandle, queryTag);
     if (operation instanceof SQLOperation) {
-      removeSafeQueryInfo(opHandle);
+      removeSaveSqlOperationDisplay(opHandle);
     }
     return operation;
   }
@@ -250,22 +231,26 @@ public class OperationManager extends AbstractService {
         }
       }
 
-      return removeOperation(operationHandle);
+      handleToOperation.remove(operationHandle, operation);
+      if (operation instanceof SQLOperation) {
+        removeSaveSqlOperationDisplay(operationHandle);
+      }
+      return operation;
     }
     return null;
   }
 
-  private void removeSafeQueryInfo(OperationHandle operationHandle) {
+  private void removeSaveSqlOperationDisplay(OperationHandle operationHandle) {
     synchronized (webuiLock) {
       String opKey = operationHandle.getHandleIdentifier().toString();
       // remove from list of live operations
-      QueryInfo display = liveQueryInfos.remove(opKey);
+      SQLOperationDisplay display = liveSqlOperations.remove(opKey);
       if (display == null) {
         LOG.debug("Unexpected display object value of null for operation {}",
             opKey);
-      } else if (historicalQueryInfos != null) {
+      } else if (historicSqlOperations != null) {
         // add to list of saved historic operations
-        historicalQueryInfos.put(opKey, display);
+        historicSqlOperations.put(opKey, display);
       }
     }
   }
@@ -277,39 +262,30 @@ public class OperationManager extends AbstractService {
 
   /**
    * Cancel the running operation unless it is already in a terminal state
-   * @param opHandle operation handle
-   * @param errMsg error message
+   * @param opHandle
    * @throws HiveSQLException
    */
-  public void cancelOperation(OperationHandle opHandle, String errMsg) throws HiveSQLException {
+  public void cancelOperation(OperationHandle opHandle) throws HiveSQLException {
     Operation operation = getOperation(opHandle);
-    OperationState opState = operation.getState();
+    OperationState opState = operation.getStatus().getState();
     if (opState.isTerminal()) {
       // Cancel should be a no-op in either cases
       LOG.debug(opHandle + ": Operation is already aborted in state - " + opState);
     } else {
       LOG.debug(opHandle + ": Attempting to cancel from state - " + opState);
-      OperationState operationState = OperationState.CANCELED;
-      operationState.setErrorMessage(errMsg);
-      operation.cancel(operationState);
+      operation.cancel(OperationState.CANCELED);
       if (operation instanceof SQLOperation) {
-        removeSafeQueryInfo(opHandle);
+        removeSaveSqlOperationDisplay(opHandle);
       }
     }
-  }
-
-  /**
-   * Cancel the running operation unless it is already in a terminal state
-   * @param opHandle
-   * @throws HiveSQLException
-   */
-  public void cancelOperation(OperationHandle opHandle) throws HiveSQLException {
-    cancelOperation(opHandle, "");
   }
 
   public void closeOperation(OperationHandle opHandle) throws HiveSQLException {
     LOG.info("Closing operation: " + opHandle);
     Operation operation = removeOperation(opHandle);
+    if (operation == null) {
+      throw new HiveSQLException("Operation does not exist: " + opHandle);
+    }
     Metrics metrics = MetricsFactory.getInstance();
     if (metrics != null) {
       try {
@@ -385,6 +361,11 @@ public class OperationManager extends AbstractService {
     return Collections.unmodifiableCollection(handleToOperation.values());
   }
 
+
+  public OperationLog getOperationLogByThread() {
+    return OperationLog.getCurrentOperationLog();
+  }
+
   public List<Operation> removeExpiredOperations(OperationHandle[] handles) {
     List<Operation> removed = new ArrayList<Operation>();
     for (OperationHandle handle : handles) {
@@ -401,11 +382,11 @@ public class OperationManager extends AbstractService {
    * @return displays representing a number of historical SQLOperations, at max number of
    * hive.server2.webui.max.historic.queries. Newest items will be first.
    */
-  public List<QueryInfo> getHistoricalQueryInfos() {
-    List<QueryInfo> result = new LinkedList<>();
+  public List<SQLOperationDisplay> getHistoricalSQLOperations() {
+    List<SQLOperationDisplay> result = new LinkedList<>();
     synchronized (webuiLock) {
-      if (historicalQueryInfos != null) {
-        result.addAll(historicalQueryInfos.values());
+      if (historicSqlOperations != null) {
+        result.addAll(historicSqlOperations.values());
         Collections.reverse(result);
       }
     }
@@ -415,10 +396,10 @@ public class OperationManager extends AbstractService {
   /**
    * @return displays representing live SQLOperations
    */
-  public List<QueryInfo> getLiveQueryInfos() {
-    List<QueryInfo> result = new LinkedList<>();
+  public List<SQLOperationDisplay> getLiveSqlOperations() {
+    List<SQLOperationDisplay> result = new LinkedList<>();
     synchronized (webuiLock) {
-      result.addAll(liveQueryInfos.values());
+      result.addAll(liveSqlOperations.values());
     }
     return result;
   }
@@ -427,47 +408,17 @@ public class OperationManager extends AbstractService {
    * @param handle handle of SQLOperation.
    * @return display representing a particular SQLOperation.
    */
-  public QueryInfo getQueryInfo(String handle) {
+  public SQLOperationDisplay getSQLOperationDisplay(String handle) {
     synchronized (webuiLock) {
-      QueryInfo result = liveQueryInfos.get(handle);
+      if (historicSqlOperations == null) {
+        return null;
+      }
+
+      SQLOperationDisplay result = liveSqlOperations.get(handle);
       if (result != null) {
         return result;
       }
-      if (historicalQueryInfos == null) {
-        return null;
-      }
-      return historicalQueryInfos.get(handle);
+      return historicSqlOperations.get(handle);
     }
-  }
-
-  public Operation getOperationByQueryId(String queryId) {
-    return queryIdOperation.get(queryId);
-  }
-
-  public Set<Operation> getOperationsByQueryTag(String queryTag) {
-    Set<String> queryIds = queryTagToIdMap.get(queryTag);
-    Set<Operation> result = new HashSet<Operation>();
-    for (String queryId : queryIds) {
-      if (queryId != null && getOperationByQueryId(queryId) != null) {
-        result.add(getOperationByQueryId(queryId));
-      }
-    }
-    return result;
-  }
-
-  public boolean canShowDrilldownLink(OperationHandle operationHandle) {
-    try {
-      if (!getHiveConf().isWebUiEnabled()) {
-        return false;
-      }
-      Operation operation = getOperation(operationHandle);
-      if (operation instanceof SQLOperation) {
-        HiveConf hiveConf = ((SQLOperation)operation).queryState.getConf();
-        return hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_SHOW_OPERATION_DRILLDOWN_LINK);
-      }
-    } catch (HiveSQLException e) {
-      // The operation not found, disable showing it
-    }
-    return false;
   }
 }

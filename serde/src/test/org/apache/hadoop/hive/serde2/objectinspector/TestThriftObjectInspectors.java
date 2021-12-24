@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,19 +30,14 @@ import org.apache.hadoop.hive.serde2.thrift.test.IntString;
 import org.apache.hadoop.hive.serde2.thrift.test.PropValueUnion;
 import org.apache.hadoop.hive.serde2.thrift.test.SetIntString;
 
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertNotNull;
-import org.junit.Test;
+import junit.framework.TestCase;
 
 /**
  * TestThriftObjectInspectors.
  *
  */
-public class TestThriftObjectInspectors {
+public class TestThriftObjectInspectors extends TestCase {
 
-  @Test
   public void testThriftObjectInspectors() throws Throwable {
 
     try {
@@ -134,7 +129,6 @@ public class TestThriftObjectInspectors {
   }
 
   @SuppressWarnings("unchecked")
-  @Test
   public void testThriftSetObjectInspector() throws Throwable {
 
     try {

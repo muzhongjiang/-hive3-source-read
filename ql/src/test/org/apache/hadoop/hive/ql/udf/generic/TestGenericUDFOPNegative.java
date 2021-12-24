@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -45,8 +45,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class TestGenericUDFOPNegative {
-
-  private static final double EPSILON = 1E-6;
 
   @Test
   public void testByte() throws HiveException {
@@ -135,7 +133,7 @@ public class TestGenericUDFOPNegative {
     PrimitiveObjectInspector oi = (PrimitiveObjectInspector) udf.initialize(inputOIs);
     Assert.assertEquals(TypeInfoFactory.floatTypeInfo, oi.getTypeInfo());
     FloatWritable res = (FloatWritable) udf.evaluate(args);
-    Assert.assertEquals(-323.4747f, res.get(), EPSILON);
+    Assert.assertEquals(new Float(-323.4747f), new Float(res.get()));
   }
 
   @Test
@@ -153,7 +151,7 @@ public class TestGenericUDFOPNegative {
     PrimitiveObjectInspector oi = (PrimitiveObjectInspector) udf.initialize(inputOIs);
     Assert.assertEquals(TypeInfoFactory.doubleTypeInfo, oi.getTypeInfo());
     DoubleWritable res = (DoubleWritable) udf.evaluate(args);
-    Assert.assertEquals(-32300.004747, res.get(), EPSILON);
+    Assert.assertEquals(new Double(-32300.004747), new Double(res.get()));
   }
 
   @Test
@@ -190,7 +188,7 @@ public class TestGenericUDFOPNegative {
     PrimitiveObjectInspector oi = (PrimitiveObjectInspector) udf.initialize(inputOIs);
     Assert.assertEquals(TypeInfoFactory.doubleTypeInfo, oi.getTypeInfo());
     DoubleWritable res = (DoubleWritable) udf.evaluate(args);
-    Assert.assertEquals(-32300.004747, res.get(), EPSILON);
+    Assert.assertEquals(new Double(-32300.004747), new Double(res.get()));
   }
 
   @Test
@@ -210,7 +208,7 @@ public class TestGenericUDFOPNegative {
     PrimitiveObjectInspector oi = (PrimitiveObjectInspector) udf.initialize(inputOIs);
     Assert.assertEquals(TypeInfoFactory.doubleTypeInfo, oi.getTypeInfo());
     DoubleWritable res = (DoubleWritable) udf.evaluate(args);
-    Assert.assertEquals(-32300.004747, res.get(), EPSILON);
+    Assert.assertEquals(new Double(-32300.004747), new Double(res.get()));
   }
 
   @Test
@@ -230,7 +228,7 @@ public class TestGenericUDFOPNegative {
     PrimitiveObjectInspector oi = (PrimitiveObjectInspector) udf.initialize(inputOIs);
     Assert.assertEquals(TypeInfoFactory.doubleTypeInfo, oi.getTypeInfo());
     DoubleWritable res = (DoubleWritable) udf.evaluate(args);
-    Assert.assertEquals(-32300.004747, res.get(), EPSILON);
+    Assert.assertEquals(new Double(-32300.004747), new Double(res.get()));
   }
 
 }

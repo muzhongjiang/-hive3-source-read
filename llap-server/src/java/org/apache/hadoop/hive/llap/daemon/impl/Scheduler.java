@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -43,18 +43,9 @@ public interface Scheduler<T> {
    */
   void killFragment(String fragmentId);
 
-  Set<String> getExecutorsStatusForReporting();
+  Set<String> getExecutorsStatus();
 
-  int getNumActiveForReporting();
+  int getNumActive();
 
   QueryIdentifier findQueryByFragment(String fragmentId);
-
-  boolean updateFragment(String fragmentId, boolean isGuaranteed);
-
-  /**
-   * Sets the scheduler executor and queue size.
-   * @param newExecutors New number of executors
-   * @param newWaitQueueSize New size of the queue
-   */
-  void setCapacity(int newExecutors, int newWaitQueueSize);
 }

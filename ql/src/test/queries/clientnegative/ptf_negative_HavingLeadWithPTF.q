@@ -1,4 +1,3 @@
---! qt:dataset:part
 -- testHavingLeadWithPTF
 select  p_mfgr,p_name, p_size 
 from noop(on part 

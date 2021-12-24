@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,13 +22,10 @@ import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.Pair;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.optimizer.calcite.RelOptHiveTable;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveFilter;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableScan;
-
-import java.util.Collections;
 
 public class HivePartitionPruneRule extends RelOptRule {
 
@@ -48,26 +45,13 @@ public class HivePartitionPruneRule extends RelOptRule {
 
   protected void perform(RelOptRuleCall call, Filter filter,
       HiveTableScan tScan) {
-    // Original table
+
     RelOptHiveTable hiveTable = (RelOptHiveTable) tScan.getTable();
-
-    // Copy original table scan and table
-    HiveTableScan tScanCopy = tScan.copyIncludingTable(tScan.getRowType());
-    RelOptHiveTable hiveTableCopy = (RelOptHiveTable) tScanCopy.getTable();
-
-    // Execute partition pruning
     RexNode predicate = filter.getCondition();
+
     Pair<RexNode, RexNode> predicates = PartitionPrune
-        .extractPartitionPredicates(filter.getCluster(), hiveTableCopy, predicate);
+        .extractPartitionPredicates(filter.getCluster(), hiveTable, predicate);
     RexNode partColExpr = predicates.left;
-    hiveTableCopy.computePartitionList(conf, partColExpr, tScanCopy.getPartOrVirtualCols());
-
-    if (StringUtils.equals(hiveTableCopy.getPartitionListKey(), hiveTable.getPartitionListKey())) {
-      // Nothing changed, we do not need to produce a new expression
-      return;
-    }
-
-    call.transformTo(filter.copy(
-        filter.getTraitSet(), Collections.singletonList(tScanCopy)));
+    hiveTable.computePartitionList(conf, partColExpr, tScan.getPartOrVirtualCols());
   }
 }

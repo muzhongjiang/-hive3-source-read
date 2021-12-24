@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,8 +21,6 @@ package org.apache.hadoop.hive.serde2;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
-import org.apache.hadoop.hive.common.MemoryEstimate;
-import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hadoop.hive.serde2.ByteStream.RandomAccessOutput;
 import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils;
 import org.apache.hadoop.io.WritableUtils;
@@ -33,7 +31,7 @@ import org.apache.hive.common.util.HashCodeUtil;
  * The structure storing arbitrary amount of data as a set of fixed-size byte buffers.
  * Maintains read and write pointers for convenient single-threaded writing/reading.
  */
-public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
+public final class WriteBuffers implements RandomAccessOutput {
   private final ArrayList<byte[]> writeBuffers = new ArrayList<byte[]>(1);
   /** Buffer size in writeBuffers */
   private final int wbSize;
@@ -41,26 +39,13 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   private final long offsetMask;
   private final long maxSize;
 
-  public static class Position implements MemoryEstimate {
+  public static class Position {
     private byte[] buffer = null;
     private int bufferIndex = 0;
     private int offset = 0;
     public void clear() {
       buffer = null;
       bufferIndex = offset = -1;
-    }
-
-    @Override
-    public long getEstimatedMemorySize() {
-      JavaDataModel jdm = JavaDataModel.get();
-      long memSize = buffer == null ? 0 : jdm.lengthForByteArrayOfSize(buffer.length);
-      memSize += (2 * jdm.primitive1());
-      return memSize;
-    }
-    public void set(Position pos) {
-      buffer = pos.buffer;
-      bufferIndex = pos.bufferIndex;
-      offset = pos.offset;
     }
   }
 
@@ -145,11 +130,11 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
   public int unsafeHashCode(long offset, int length) {
-    setReadPoint(offset, unsafeReadPos);
-    return hashCode(length, unsafeReadPos);
+    return hashCode(offset, length, unsafeReadPos);
   }
 
-  public int hashCode(int length, Position readPos) {
+  public int hashCode(long offset, int length, Position readPos) {
+    setReadPoint(offset, readPos);
     if (isAllInOneReadBuffer(length, readPos)) {
       int result = HashCodeUtil.murmurHash(readPos.buffer, readPos.offset, length);
       readPos.offset += length;
@@ -557,21 +542,6 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
     return v;
   }
 
-  public long readNByteLong(int bytes, Position readPos) {
-    long v = 0;
-    if (isAllInOneReadBuffer(bytes, readPos)) {
-      for (int i = 0; i < bytes; ++i) {
-        v = (v << 8) + (readPos.buffer[readPos.offset + i] & 0xff);
-      }
-      readPos.offset += bytes;
-    } else {
-      for (int i = 0; i < bytes; ++i) {
-        v = (v << 8) + (readNextByte(readPos) & 0xff);
-      }
-    }
-    return v;
-  }
-
   public void writeFiveByteULong(long offset, long v) {
     int prevIndex = writePos.bufferIndex, prevOffset = writePos.offset;
     setWritePoint(offset);
@@ -594,41 +564,8 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
     writePos.offset = prevOffset;
   }
 
-  public void writeFiveByteULong(long v) {
-    if (isAllInOneWriteBuffer(5)) {
-      writePos.buffer[writePos.offset] = (byte)(v >>> 32);
-      writePos.buffer[writePos.offset + 1] = (byte)(v >>> 24);
-      writePos.buffer[writePos.offset + 2] = (byte)(v >>> 16);
-      writePos.buffer[writePos.offset + 3] = (byte)(v >>> 8);
-      writePos.buffer[writePos.offset + 4] = (byte)(v);
-      writePos.offset += 5;
-    } else {
-      write((byte)(v >>> 32));
-      write((byte)(v >>> 24));
-      write((byte)(v >>> 16));
-      write((byte)(v >>> 8));
-      write((byte)(v));
-    }
-  }
-
   public int readInt(long offset) {
     return (int)unsafeReadNByteLong(offset, 4);
-  }
-
-  public int readInt(long offset, Position readPos) {
-    setReadPoint(offset, readPos);
-    long v = 0;
-    if (isAllInOneReadBuffer(4, readPos)) {
-      for (int i = 0; i < 4; ++i) {
-        v = (v << 8) + (readPos.buffer[readPos.offset + i] & 0xff);
-      }
-      readPos.offset += 4;
-    } else {
-      for (int i = 0; i < 4; ++i) {
-        v = (v << 8) + (readNextByte(readPos) & 0xff);
-      }
-    }
-    return (int) v;
   }
 
   @Override
@@ -671,17 +608,6 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
    */
   public long size() {
     return writeBuffers.size() * (long) wbSize;
-  }
-
-  @Override
-  public long getEstimatedMemorySize() {
-    JavaDataModel jdm = JavaDataModel.get();
-    long size = 0;
-    size += writeBuffers == null ? 0 : jdm.arrayList() + (writeBuffers.size() * jdm.lengthForByteArrayOfSize(wbSize));
-    size += (3 * jdm.primitive2());
-    size += writePos == null ? 0 : writePos.getEstimatedMemorySize();
-    size += unsafeReadPos == null ? 0 : unsafeReadPos.getEstimatedMemorySize();
-    return size;
   }
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */

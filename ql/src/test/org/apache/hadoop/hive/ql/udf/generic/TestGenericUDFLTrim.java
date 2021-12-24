@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,16 +26,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.io.Text;
 
+import junit.framework.TestCase;
 
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
+public class TestGenericUDFLTrim extends TestCase {
 
-/**
- * TestGenericUDFLTrim.
- */
-public class TestGenericUDFLTrim {
-
-  @Test
   public void testTrim() throws HiveException {
     GenericUDFLTrim udf = new GenericUDFLTrim();
     ObjectInspector valueOI = PrimitiveObjectInspectorFactory.writableStringObjectInspector;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,69 +19,29 @@ package org.apache.hadoop.hive.ql.io.orc;
 
 import java.util.List;
 
-import org.apache.hadoop.hive.ql.io.AcidInputFormat.AcidRecordReader;
-import org.apache.hadoop.hive.ql.io.RecordIdentifier.Field;
-import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.ql.io.BatchToRowReader;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
-import org.apache.hadoop.io.BooleanWritable;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.RecordReader;
 
-import static java.util.Arrays.asList;
-
 /** BatchToRowReader that returns the rows readable by ORC IOs. */
-public class OrcOiBatchToRowReader extends BatchToRowReader<OrcStruct, OrcUnion>
-    implements AcidRecordReader<NullWritable, Object> {
-
-  private final OrcRawRecordMerger.ReaderKey recordIdentifier;
-  private boolean isNull;
-
+public class OrcOiBatchToRowReader extends BatchToRowReader<OrcStruct, OrcUnion> {
   public OrcOiBatchToRowReader(RecordReader<NullWritable, VectorizedRowBatch> vrbReader,
       VectorizedRowBatchCtx vrbCtx, List<Integer> includedCols) {
     super(vrbReader, vrbCtx, includedCols);
-    this.recordIdentifier = new OrcRawRecordMerger.ReaderKey();
-    this.isNull = true;
-  }
-
-  @Override
-  protected List<VirtualColumnHandler> requestedVirtualColumns() {
-    return asList(
-            new VirtualColumnHandler(VirtualColumn.ROWID, (value) -> {
-              OrcStruct rowId = (OrcStruct) value;
-              if (value == null) {
-                isNull = true;
-                return;
-              }
-              recordIdentifier.setValues(((LongWritable) rowId.getFieldValue(Field.writeId.ordinal())).get(),
-                      ((IntWritable) rowId.getFieldValue(Field.bucketId.ordinal())).get(),
-                      ((LongWritable) rowId.getFieldValue(Field.rowId.ordinal())).get());
-              isNull = false;
-            }),
-            new VirtualColumnHandler(VirtualColumn.ROWISDELETED, (value) -> {
-              BooleanWritable deleted = (BooleanWritable) value;
-              recordIdentifier.setDeleteEvent(deleted != null && deleted.get());
-            }));
   }
 
   @Override
   protected OrcStruct createStructObject(Object previous, List<TypeInfo> childrenTypes) {
     int numChildren = childrenTypes.size();
-    if (previous == null || !(previous instanceof OrcStruct)) {
+    if (!(previous instanceof OrcStruct)) {
       return new OrcStruct(numChildren);
     }
     OrcStruct result = (OrcStruct) previous;
     result.setNumFields(numChildren);
     return result;
-  }
-
-  @Override
-  protected int getStructLength(OrcStruct structObj) {
-    return structObj.getNumFields();
   }
 
   @Override
@@ -107,10 +67,5 @@ public class OrcOiBatchToRowReader extends BatchToRowReader<OrcStruct, OrcUnion>
   @Override
   protected void setUnion(OrcUnion unionObj, byte tag, Object object) {
     unionObj.set(tag, object);
-  }
-
-  @Override
-  public OrcRawRecordMerger.ReaderKey getRecordIdentifier() {
-    return this.isNull ? null : recordIdentifier;
   }
 }

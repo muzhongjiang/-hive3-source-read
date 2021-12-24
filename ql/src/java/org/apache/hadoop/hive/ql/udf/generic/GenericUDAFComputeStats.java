@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,40 +20,29 @@ package org.apache.hadoop.hive.ql.udf.generic;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.hive.common.classification.InterfaceAudience;
-import org.apache.hadoop.hive.common.ndv.NumDistinctValueEstimator;
-import org.apache.hadoop.hive.common.ndv.NumDistinctValueEstimatorFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.BinaryObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.DoubleObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.LongObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorUtils;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableLongObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.*;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.hadoop.util.StringUtils;
 
 /**
  * GenericUDAFComputeStats
@@ -61,17 +50,16 @@ import org.slf4j.LoggerFactory;
  */
 @Description(name = "compute_stats",
       value = "_FUNC_(x) - Returns the statistical summary of a set of primitive type values.")
-@Deprecated
 public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
 
   static final Logger LOG = LoggerFactory.getLogger(GenericUDAFComputeStats.class.getName());
-  
+
   @Override
   public GenericUDAFEvaluator getEvaluator(TypeInfo[] parameters)
       throws SemanticException {
-    if (parameters.length < 2 ) {
+    if (parameters.length != 2 ) {
       throw new UDFArgumentTypeException(parameters.length - 1,
-          "Exactly 2 (col + hll) or 3 (col + fm + #bitvectors) arguments are expected.");
+          "Exactly two arguments are expected.");
     }
 
     if (parameters[0].getCategory() != ObjectInspector.Category.PRIMITIVE) {
@@ -86,7 +74,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     case SHORT:
     case INT:
     case LONG:
-    case TIMESTAMPLOCALTZ:
+    case TIMESTAMP:
       return new GenericUDAFLongStatsEvaluator();
     case FLOAT:
     case DOUBLE:
@@ -101,8 +89,6 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       return new GenericUDAFDecimalStatsEvaluator();
     case DATE:
       return new GenericUDAFDateStatsEvaluator();
-    case TIMESTAMP:
-      return new GenericUDAFTimestampStatsEvaluator();
     default:
       throw new UDFArgumentTypeException(0,
           "Only integer/long/timestamp/date/float/double/string/binary/boolean/decimal type argument " +
@@ -205,7 +191,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       @Override
       public int estimate() {
         JavaDataModel model = JavaDataModel.get();
-        return (int) (model.primitive2() * 3 + model.lengthFor(columnType));
+        return model.primitive2() * 3 + model.lengthFor(columnType);
       }
     };
 
@@ -249,12 +235,23 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       if (!emptyTable) {
         if (p == null) {
           myagg.countNulls++;
-        } else {
-          boolean v = PrimitiveObjectInspectorUtils.getBoolean(p, inputOI);
-          if (v == false) {
-            myagg.countFalses++;
-          } else if (v == true) {
-            myagg.countTrues++;
+        }
+        else {
+          try {
+            boolean v = PrimitiveObjectInspectorUtils.getBoolean(p, inputOI);
+            if (v == false) {
+              myagg.countFalses++;
+            } else if (v == true){
+              myagg.countTrues++;
+            }
+          } catch (NumberFormatException e) {
+            if (!warned) {
+              warned = true;
+              LOG.warn(getClass().getSimpleName() + " "
+                  + StringUtils.stringifyException(e));
+              LOG.warn(getClass().getSimpleName()
+                  + " ignoring similar exceptions.");
+            }
           }
         }
       }
@@ -305,7 +302,6 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     /* Object Inspector corresponding to the input parameter.
      */
     protected transient PrimitiveObjectInspector inputOI;
-    protected transient PrimitiveObjectInspector funcOI;
     protected transient PrimitiveObjectInspector numVectorsOI;
 
 
@@ -324,7 +320,10 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     protected transient LongObjectInspector countNullsFieldOI;
 
     protected transient StructField ndvField;
-    protected transient BinaryObjectInspector ndvFieldOI;
+    protected transient StringObjectInspector ndvFieldOI;
+
+    protected transient StructField numBitVectorsField;
+    protected transient IntObjectInspector numBitVectorsFieldOI;
 
     /* Partial aggregation result returned by TerminatePartial. Partial result is a struct
      * containing a long field named "count".
@@ -334,6 +333,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     /* Output of final result of the aggregation
      */
     protected transient Object[] result;
+
+    protected transient boolean warned;
 
     protected abstract OI getValueObjectInspector();
     
@@ -346,10 +347,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       // initialize input
       if (mode == Mode.PARTIAL1 || mode == Mode.COMPLETE) {
         inputOI = (PrimitiveObjectInspector) parameters[0];
-        funcOI = (PrimitiveObjectInspector) parameters[1];
-        if (parameters.length > 2) {
-          numVectorsOI = (PrimitiveObjectInspector) parameters[2];
-        }
+        numVectorsOI = (PrimitiveObjectInspector) parameters[1];
       } else {
         soi = (StructObjectInspector) parameters[0];
 
@@ -363,8 +361,11 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         countNullsFieldOI = (LongObjectInspector) countNullsField.getFieldObjectInspector();
 
         ndvField = soi.getStructFieldRef("bitvector");
-        ndvFieldOI = (BinaryObjectInspector) ndvField.getFieldObjectInspector();
+        ndvFieldOI = (StringObjectInspector) ndvField.getFieldObjectInspector();
 
+        numBitVectorsField = soi.getStructFieldRef("numbitvectors");
+        numBitVectorsFieldOI = (IntObjectInspector)
+            numBitVectorsField.getFieldObjectInspector();
       }
 
       // initialize output
@@ -374,7 +375,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         foi.add(getValueObjectInspector(inputOI.getTypeInfo()));
         foi.add(getValueObjectInspector(inputOI.getTypeInfo()));
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
-        foi.add(PrimitiveObjectInspectorFactory.writableBinaryObjectInspector);
+        foi.add(PrimitiveObjectInspectorFactory.writableStringObjectInspector);
+        foi.add(PrimitiveObjectInspectorFactory.writableIntObjectInspector);
 
         List<String> fname = new ArrayList<String>();
         fname.add("columnType");
@@ -382,13 +384,13 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         fname.add("max");
         fname.add("countnulls");
         fname.add("bitvector");
+        fname.add("numbitvectors");
 
         partialResult = new Object[6];
         partialResult[0] = new Text();
-        partialResult[1] = null;
-        partialResult[2] = null;
         partialResult[3] = new LongWritable(0);
-        partialResult[4] = new BytesWritable();
+        partialResult[4] = new Text();
+        partialResult[5] = new IntWritable(0);
 
         return ObjectInspectorFactory.getStandardStructObjectInspector(fname,
             foi);
@@ -399,7 +401,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         foi.add(maxFieldOI != null ? getValueObjectInspector(maxFieldOI.getTypeInfo()) : getValueObjectInspector());
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
-        foi.add(PrimitiveObjectInspectorFactory.writableBinaryObjectInspector);
+        foi.add(PrimitiveObjectInspectorFactory.writableStringObjectInspector);
 
         List<String> fname = new ArrayList<String>();
         fname.add("columnType");
@@ -411,11 +413,9 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
 
         result = new Object[6];
         result[0] = new Text();
-        result[1] = null;
-        result[2] = null;
         result[3] = new LongWritable(0);
         result[4] = new LongWritable(0);
-        result[5] = new BytesWritable();
+        result[5] = new Text();
 
         return ObjectInspectorFactory.getStandardStructObjectInspector(fname,
             foi);
@@ -433,16 +433,15 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       @Override
       public int estimate() {
         JavaDataModel model = JavaDataModel.get();
-        return (int) (model.lengthFor(columnType)
-                    + model.primitive1()
-                    + model.primitive2()
-                    + ((numDV == null) ? lengthFor(model, null) :
-                                         numDV.lengthFor(model)));
+        return model.lengthFor(columnType)
+            + model.primitive1()
+            + model.primitive2()
+            + ((numDV == null) ? NumDistinctValueEstimator.lengthFor(model, null) :
+                                 numDV.lengthFor(model));
       }
 
-      protected void initNDVEstimator(String func, int numBitVectors) {
-        numDV = NumDistinctValueEstimatorFactory.getEmptyNumDistinctValueEstimator(func,
-            numBitVectors);
+      protected void initNDVEstimator(int numBitVectors) {
+        numDV = new NumDistinctValueEstimator(numBitVectors);
       }
 
       protected abstract void update(Object p, PrimitiveObjectInspector inputOI);
@@ -456,9 +455,9 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         long dv = numDV != null ? numDV.estimateNumDistinctValues() : 0;
         ((LongWritable) result[4]).set(dv);
         if (numDV != null) {
-          byte[] buf = numDV.serialize();
-          ((BytesWritable) result[5]).set(buf, 0, buf.length);
+          ((Text) result[5]).set(numDV.serialize());
         }
+
         return result;
       }
 
@@ -466,11 +465,11 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         // Serialize the rest of the values in the AggBuffer
         serializeCommon(result);
 
-        if (numDV != null) {
-          // Serialize numDistinctValue Estimator
-          byte[] buf = numDV.serialize();
-          ((BytesWritable) result[4]).set(buf, 0, buf.length);
-        }
+        // Serialize numDistinctValue Estimator
+        Text t = numDV.serialize();
+        ((Text) result[4]).set(t);
+        ((IntWritable) result[5]).set(numDV.getnumBitVectors());
+
         return result;
       }
 
@@ -496,29 +495,30 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       NumericStatsAgg myagg = (NumericStatsAgg) agg;
 
       if (myagg.numDV == null) {
-        String func = null;
-        int numVectors = 0;
-        // func may be null when GBY op is closing.
-        // see mvn test -Dtest=TestMiniTezCliDriver -Dqfile=explainuser_3.q
-        // original behavior is to create FMSketch
-        func = parameters[1] == null ? "fm" : PrimitiveObjectInspectorUtils.getString(
-            parameters[1], funcOI);
-        if (parameters.length == 3) {
-          numVectors = parameters[2] == null ? 0 : PrimitiveObjectInspectorUtils.getInt(
-              parameters[2], numVectorsOI);
-          if (numVectors > MAX_BIT_VECTORS) {
-            throw new HiveException("The maximum allowed value for number of bit vectors " + " is "
-                + MAX_BIT_VECTORS + ", but was passed " + numVectors + " bit vectors");
-          }
+        int numVectors = parameters[1] == null ? 0 :
+            PrimitiveObjectInspectorUtils.getInt(parameters[1], numVectorsOI);
+        if (numVectors > MAX_BIT_VECTORS) {
+          throw new HiveException("The maximum allowed value for number of bit vectors " +
+              " is " + MAX_BIT_VECTORS + ", but was passed " + numVectors + " bit vectors");
         }
-        myagg.initNDVEstimator(func, numVectors);
+        myagg.initNDVEstimator(numVectors);
       }
 
-      // Update null counter if a null value is seen
+      //Update null counter if a null value is seen
       if (parameters[0] == null) {
         myagg.countNulls++;
       } else {
-        myagg.update(parameters[0], inputOI);
+        try {
+          myagg.update(parameters[0], inputOI);
+        } catch (NumberFormatException e) {
+          if (!warned) {
+            warned = true;
+            LOG.warn(getClass().getSimpleName() + " "
+                + StringUtils.stringifyException(e));
+            LOG.warn(getClass().getSimpleName()
+                + " ignoring similar exceptions.");
+          }
+        }
       }
     }
 
@@ -537,6 +537,15 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       if (partial != null) {
         NumericStatsAgg myagg = (NumericStatsAgg) agg;
 
+        if (myagg.numDV == null) {
+          Object partialValue = soi.getStructFieldData(partial, numBitVectorsField);
+          int numVectors = numBitVectorsFieldOI.get(partialValue);
+          if (numVectors <= 0) {
+            return;
+          }
+          myagg.initNDVEstimator(numVectors);
+        }
+
         // Update min if min is lesser than the smallest value seen so far
         Object minValue = soi.getStructFieldData(partial, minField);
         myagg.updateMin(minValue, minFieldOI);
@@ -551,16 +560,10 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
 
         // Merge numDistinctValue Estimators
         Object numDistinct = soi.getStructFieldData(partial, ndvField);
-        byte[] buf = ndvFieldOI.getPrimitiveJavaObject(numDistinct);
-        
-        if (buf != null && buf.length != 0) {
-          if (myagg.numDV == null) {
-            myagg.numDV = NumDistinctValueEstimatorFactory.getNumDistinctValueEstimator(buf);
-          } else {
-            myagg.numDV.mergeEstimators(NumDistinctValueEstimatorFactory
-                .getNumDistinctValueEstimator(buf));
-          }
-        }
+        String v = ndvFieldOI.getPrimitiveJavaObject(numDistinct);
+        NumDistinctValueEstimator o =
+            new NumDistinctValueEstimator(v, myagg.numDV.getnumBitVectors());
+        myagg.numDV.mergeEstimators(o);
       }
     }
   }
@@ -710,7 +713,6 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     /* Object Inspector corresponding to the input parameter.
      */
     private transient PrimitiveObjectInspector inputOI;
-    private transient PrimitiveObjectInspector funcOI;
     private transient PrimitiveObjectInspector numVectorsOI;
     private final static int MAX_BIT_VECTORS = 1024;
 
@@ -737,7 +739,10 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     private transient LongObjectInspector countNullsFieldOI;
 
     private transient StructField ndvField;
-    private transient BinaryObjectInspector ndvFieldOI;
+    private transient StringObjectInspector ndvFieldOI;
+
+    private transient StructField numBitVectorsField;
+    private transient IntObjectInspector numBitVectorsFieldOI;
 
     /* Output of final result of the aggregation
      */
@@ -750,10 +755,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       // initialize input
       if (mode == Mode.PARTIAL1 || mode == Mode.COMPLETE) {
         inputOI = (PrimitiveObjectInspector) parameters[0];
-        funcOI = (PrimitiveObjectInspector) parameters[1];
-        if (parameters.length > 2) {
-          numVectorsOI = (PrimitiveObjectInspector) parameters[2];
-        }
+        numVectorsOI = (PrimitiveObjectInspector) parameters[1];
       } else {
         soi = (StructObjectInspector) parameters[0];
 
@@ -770,8 +772,11 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         countNullsFieldOI = (LongObjectInspector) countNullsField.getFieldObjectInspector();
 
         ndvField = soi.getStructFieldRef("bitvector");
-        ndvFieldOI = (BinaryObjectInspector) ndvField.getFieldObjectInspector();
+        ndvFieldOI = (StringObjectInspector) ndvField.getFieldObjectInspector();
 
+        numBitVectorsField = soi.getStructFieldRef("numbitvectors");
+        numBitVectorsFieldOI = (IntObjectInspector)
+                                  numBitVectorsField.getFieldObjectInspector();
       }
 
       // initialize output
@@ -782,7 +787,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
-        foi.add(PrimitiveObjectInspectorFactory.writableBinaryObjectInspector);
+        foi.add(PrimitiveObjectInspectorFactory.writableStringObjectInspector);
+        foi.add(PrimitiveObjectInspectorFactory.writableIntObjectInspector);
 
         List<String> fname = new ArrayList<String>();
         fname.add("columntype");
@@ -791,6 +797,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         fname.add("count");
         fname.add("countnulls");
         fname.add("bitvector");
+        fname.add("numbitvectors");
 
         partialResult = new Object[7];
         partialResult[0] = new Text();
@@ -798,7 +805,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         partialResult[2] = new LongWritable(0);
         partialResult[3] = new LongWritable(0);
         partialResult[4] = new LongWritable(0);
-        partialResult[5] = new BytesWritable();
+        partialResult[5] = new Text();
+        partialResult[6] = new IntWritable(0);
 
         return ObjectInspectorFactory.getStandardStructObjectInspector(fname,
           foi);
@@ -809,7 +817,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         foi.add(PrimitiveObjectInspectorFactory.writableDoubleObjectInspector);
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
         foi.add(PrimitiveObjectInspectorFactory.writableLongObjectInspector);
-        foi.add(PrimitiveObjectInspectorFactory.writableBinaryObjectInspector);
+        foi.add(PrimitiveObjectInspectorFactory.writableStringObjectInspector);
 
         List<String> fname = new ArrayList<String>();
         fname.add("columntype");
@@ -825,7 +833,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         result[2] = new DoubleWritable(0);
         result[3] = new LongWritable(0);
         result[4] = new LongWritable(0);
-        result[5] = new BytesWritable();
+        result[5] = new Text();
 
         return ObjectInspectorFactory.getStandardStructObjectInspector(fname,
             foi);
@@ -839,15 +847,16 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       public long sumLength;             /* Sum of lengths of all values seen so far */
       public long count;                          /* Count of all values seen so far */
       public long countNulls;          /* Count of number of null values seen so far */
-      public NumDistinctValueEstimator numDV;      /* Distinct value estimator */
+      public StringNumDistinctValueEstimator numDV;      /* Distinct value estimator */
+      public int numBitVectors;
       public boolean firstItem;
       @Override
       public int estimate() {
         JavaDataModel model = JavaDataModel.get();
-        return (int) (model.primitive1() * 2 + model.primitive2() * 4 +
-                    model.lengthFor(columnType) +
-                    ((numDV == null) ? lengthFor(model, null) :
-                                       numDV.lengthFor(model)));
+        return model.primitive1() * 2 + model.primitive2() * 4 +
+            model.lengthFor(columnType) +
+            ((numDV == null) ? NumDistinctValueEstimator.lengthFor(model, null) :
+                               numDV.lengthFor(model));
 
       }
     };
@@ -859,9 +868,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       return result;
     }
 
-    public void initNDVEstimator(StringStatsAgg aggBuffer, String func, int numBitVectors) {
-      aggBuffer.numDV = NumDistinctValueEstimatorFactory.getEmptyNumDistinctValueEstimator(func,
-          numBitVectors);
+    public void initNDVEstimator(StringStatsAgg aggBuffer, int numBitVectors) {
+      aggBuffer.numDV = new StringNumDistinctValueEstimator(numBitVectors);
       aggBuffer.numDV.reset();
     }
 
@@ -882,60 +890,83 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     public void iterate(AggregationBuffer agg, Object[] parameters) throws HiveException {
       Object p = parameters[0];
       StringStatsAgg myagg = (StringStatsAgg) agg;
+      boolean emptyTable = false;
+
+      if (parameters[1] == null) {
+        emptyTable = true;
+      }
 
       if (myagg.firstItem) {
         int numVectors = 0;
-        String func = parameters[1] == null ? "fm" : PrimitiveObjectInspectorUtils.getString(
-            parameters[1], funcOI);
-        if (parameters.length > 2) {
-          numVectors = PrimitiveObjectInspectorUtils.getInt(parameters[2], numVectorsOI);
-          if (numVectors > MAX_BIT_VECTORS) {
-            throw new HiveException("The maximum allowed value for number of bit vectors " + " is "
-                + MAX_BIT_VECTORS + " , but was passed " + numVectors + " bit vectors");
-          }
+        if (!emptyTable) {
+          numVectors = PrimitiveObjectInspectorUtils.getInt(parameters[1], numVectorsOI);
         }
 
-        initNDVEstimator(myagg, func, numVectors);
+        if (numVectors > MAX_BIT_VECTORS) {
+          throw new HiveException("The maximum allowed value for number of bit vectors " +
+            " is " + MAX_BIT_VECTORS + " , but was passed " + numVectors + " bit vectors");
+        }
+
+        initNDVEstimator(myagg, numVectors);
         myagg.firstItem = false;
+        myagg.numBitVectors = numVectors;
       }
 
-      // Update null counter if a null value is seen
-      String v = PrimitiveObjectInspectorUtils.getString(p, inputOI);
-      if (v == null) {
-        myagg.countNulls++;
-      } else {
-        // Update max length if new length is greater than the ones seen so
-        // far
-        int len = v.length();
-        if (len > myagg.maxLength) {
-          myagg.maxLength = len;
+      if (!emptyTable) {
+
+        // Update null counter if a null value is seen
+        if (p == null) {
+          myagg.countNulls++;
         }
+        else {
+          try {
 
-        // Update sum length with the new length
-        myagg.sumLength += len;
+            String v = PrimitiveObjectInspectorUtils.getString(p, inputOI);
 
-        // Increment count of values seen so far
-        myagg.count++;
+            // Update max length if new length is greater than the ones seen so far
+            int len = v.length();
+            if (len > myagg.maxLength) {
+              myagg.maxLength = len;
+            }
 
-        // Add string value to NumDistinctValue Estimator
-        myagg.numDV.addToEstimator(v);
+            // Update sum length with the new length
+            myagg.sumLength += len;
+
+            // Increment count of values seen so far
+            myagg.count++;
+
+            // Add string value to NumDistinctValue Estimator
+            myagg.numDV.addToEstimator(v);
+
+          } catch (NumberFormatException e) {
+            if (!warned) {
+              warned = true;
+              LOG.warn(getClass().getSimpleName() + " "
+                  + StringUtils.stringifyException(e));
+              LOG.warn(getClass().getSimpleName()
+                  + " ignoring similar exceptions.");
+            }
+          }
+        }
       }
     }
 
     @Override
     public Object terminatePartial(AggregationBuffer agg) throws HiveException {
       StringStatsAgg myagg = (StringStatsAgg) agg;
+
+      // Serialize numDistinctValue Estimator
+      Text t = myagg.numDV.serialize();
+
       // Serialize the rest of the values in the AggBuffer
       ((Text) partialResult[0]).set(myagg.columnType);
       ((LongWritable) partialResult[1]).set(myagg.maxLength);
       ((LongWritable) partialResult[2]).set(myagg.sumLength);
       ((LongWritable) partialResult[3]).set(myagg.count);
       ((LongWritable) partialResult[4]).set(myagg.countNulls);
-      // Serialize numDistinctValue Estimator
-      if (myagg.numDV != null) {
-        byte[] buf = myagg.numDV.serialize();
-        ((BytesWritable) partialResult[5]).set(buf, 0, buf.length);
-      }
+      ((Text) partialResult[5]).set(t);
+      ((IntWritable) partialResult[6]).set(myagg.numBitVectors);
+
       return partialResult;
     }
 
@@ -943,6 +974,17 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     public void merge(AggregationBuffer agg, Object partial) throws HiveException {
       if (partial != null) {
         StringStatsAgg myagg = (StringStatsAgg) agg;
+
+        if (myagg.firstItem) {
+          Object partialValue = soi.getStructFieldData(partial, numBitVectorsField);
+          int numVectors = numBitVectorsFieldOI.get(partialValue);
+          if (numVectors <= 0) {
+            return;
+          }
+          initNDVEstimator(myagg, numVectors);
+          myagg.firstItem = false;
+          myagg.numBitVectors = numVectors;
+        }
 
         // Update maxLength if length is greater than the largest value seen so far
         Object partialValue = soi.getStructFieldData(partial, maxLengthField);
@@ -964,16 +1006,9 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
 
         // Merge numDistinctValue Estimators
         partialValue = soi.getStructFieldData(partial, ndvField);
-        byte[] buf = ndvFieldOI.getPrimitiveJavaObject(partialValue);
-
-        if (buf != null && buf.length != 0) {
-          if (myagg.numDV == null) {
-            myagg.numDV = NumDistinctValueEstimatorFactory.getNumDistinctValueEstimator(buf);
-          } else {
-            myagg.numDV.mergeEstimators(NumDistinctValueEstimatorFactory
-                .getNumDistinctValueEstimator(buf));
-          }
-        }
+        String v = ndvFieldOI.getPrimitiveJavaObject(partialValue);
+        NumDistinctValueEstimator o = new NumDistinctValueEstimator(v, myagg.numBitVectors);
+        myagg.numDV.mergeEstimators(o);
       }
     }
 
@@ -981,12 +1016,16 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     public Object terminate(AggregationBuffer agg) throws HiveException {
       StringStatsAgg myagg = (StringStatsAgg) agg;
 
-      long numDV = myagg.numDV == null ? 0 : myagg.numDV.estimateNumDistinctValues();
+      long numDV = 0;
       double avgLength = 0.0;
       long total = myagg.count + myagg.countNulls;
 
+      if (myagg.numBitVectors != 0) {
+        numDV = myagg.numDV.estimateNumDistinctValues();
+      }
+
       if (total != 0) {
-        avgLength = myagg.sumLength / (1.0 * total);
+         avgLength = myagg.sumLength / (1.0 * total);
       }
 
       // Serialize the result struct
@@ -995,9 +1034,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       ((DoubleWritable) result[2]).set(avgLength);
       ((LongWritable) result[3]).set(myagg.countNulls);
       ((LongWritable) result[4]).set(numDV);
-      if (myagg.numDV != null) {
-        byte[] buf = myagg.numDV.serialize();
-        ((BytesWritable) result[5]).set(buf, 0, buf.length);
+      if (myagg.numBitVectors != 0) {
+        ((Text) result[5]).set(myagg.numDV.serialize());
       }
       return result;
     }
@@ -1122,7 +1160,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       @Override
       public int estimate() {
         JavaDataModel model = JavaDataModel.get();
-        return (int) (model.primitive2() * 4 + model.lengthFor(columnType));
+        return model.primitive2() * 4 + model.lengthFor(columnType);
       }
     };
 
@@ -1143,6 +1181,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       myagg.countNulls = 0;
     }
 
+    boolean warned = false;
+
     @Override
     public void iterate(AggregationBuffer agg, Object[] parameters) throws HiveException {
       Object p = parameters[0];
@@ -1157,21 +1197,32 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
         // Update null counter if a null value is seen
         if (p == null) {
           myagg.countNulls++;
-        } else {
-          BytesWritable v = PrimitiveObjectInspectorUtils.getBinary(p, inputOI);
+        }
+        else {
+          try {
+            BytesWritable v = PrimitiveObjectInspectorUtils.getBinary(p, inputOI);
 
-          // Update max length if new length is greater than the ones seen so
-          // far
-          int len = v.getLength();
-          if (len > myagg.maxLength) {
-            myagg.maxLength = len;
+            // Update max length if new length is greater than the ones seen so far
+            int len = v.getLength();
+            if (len > myagg.maxLength) {
+              myagg.maxLength = len;
+            }
+
+            // Update sum length with the new length
+            myagg.sumLength += len;
+
+            // Increment count of values seen so far
+            myagg.count++;
+
+          } catch (NumberFormatException e) {
+            if (!warned) {
+              warned = true;
+              LOG.warn(getClass().getSimpleName() + " "
+                  + StringUtils.stringifyException(e));
+              LOG.warn(getClass().getSimpleName()
+                  + " ignoring similar exceptions.");
+            }
           }
-
-          // Update sum length with the new length
-          myagg.sumLength += len;
-
-          // Increment count of values seen so far
-          myagg.count++;
         }
       }
     }
@@ -1306,7 +1357,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
    * High/low value will be saved in stats DB as long value representing days since epoch.
    */
   public static class GenericUDAFDateStatsEvaluator
-      extends GenericUDAFNumericStatsEvaluator<DateWritableV2, DateObjectInspector> {
+      extends GenericUDAFNumericStatsEvaluator<DateWritable, DateObjectInspector> {
 
     @Override
     protected DateObjectInspector getValueObjectInspector() {
@@ -1328,8 +1379,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
 
       @Override
       protected void update(Object p, PrimitiveObjectInspector inputOI) {
-        // DateWritableV2 is mutable, DateStatsAgg needs its own copy
-        DateWritableV2 v = new DateWritableV2((DateWritableV2) inputOI.getPrimitiveWritableObject(p));
+        // DateWritable is mutable, DateStatsAgg needs its own copy
+        DateWritable v = new DateWritable((DateWritable) inputOI.getPrimitiveWritableObject(p));
 
         //Update min counter if new value is less than min seen so far
         if (min == null || v.compareTo(min) < 0) {
@@ -1347,8 +1398,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       protected void updateMin(Object minValue, DateObjectInspector minFieldOI) {
         if ((minValue != null) && (min == null ||
             min.compareTo(minFieldOI.getPrimitiveWritableObject(minValue)) > 0)) {
-          // DateWritableV2 is mutable, DateStatsAgg needs its own copy
-          min = new DateWritableV2(minFieldOI.getPrimitiveWritableObject(minValue));
+          // DateWritable is mutable, DateStatsAgg needs its own copy
+          min = new DateWritable(minFieldOI.getPrimitiveWritableObject(minValue));
         }
       }
 
@@ -1356,8 +1407,8 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       protected void updateMax(Object maxValue, DateObjectInspector maxFieldOI) {
         if ((maxValue != null) && (max == null ||
             max.compareTo(maxFieldOI.getPrimitiveWritableObject(maxValue)) < 0)) {
-          // DateWritableV2 is mutable, DateStatsAgg needs its own copy
-          max = new DateWritableV2(maxFieldOI.getPrimitiveWritableObject(maxValue));
+          // DateWritable is mutable, DateStatsAgg needs its own copy
+          max = new DateWritable(maxFieldOI.getPrimitiveWritableObject(maxValue));
         }
       }
     };
@@ -1373,100 +1424,5 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
     public void reset(AggregationBuffer agg) throws HiveException {
       ((NumericStatsAgg)agg).reset("Date");
     }
-  }
-
-  /**
-   * GenericUDAFTimestampStatsEvaluator
-   * High/low value will be saved in stats DB as long value representing seconds since epoch.
-   */
-  public static class GenericUDAFTimestampStatsEvaluator
-      extends GenericUDAFNumericStatsEvaluator<TimestampWritableV2, TimestampObjectInspector> {
-
-    @Override
-    protected TimestampObjectInspector getValueObjectInspector() {
-      return PrimitiveObjectInspectorFactory.writableTimestampObjectInspector;
-    }
-
-    @Override
-    protected TimestampObjectInspector getValueObjectInspector(PrimitiveTypeInfo typeInfo) {
-      return getValueObjectInspector();
-    }
-
-    @AggregationType(estimable = true)
-    public class TimestampStatsAgg extends NumericStatsAgg {
-      @Override
-      public int estimate() {
-        JavaDataModel model = JavaDataModel.get();
-        return super.estimate() + model.primitive2() * 2;
-      }
-
-      @Override
-      protected void update(Object p, PrimitiveObjectInspector inputOI) {
-        // TimestampWritableV2 is mutable, TimestampStatsAgg needs its own copy
-        TimestampWritableV2 v = new TimestampWritableV2((TimestampWritableV2) inputOI.getPrimitiveWritableObject(p));
-
-        //Update min counter if new value is less than min seen so far
-        if (min == null || v.compareTo(min) < 0) {
-          min = v;
-        }
-        //Update max counter if new value is greater than max seen so far
-        if (max == null || v.compareTo(max) > 0) {
-          max = v;
-        }
-        // Add value to NumDistinctValue Estimator
-        numDV.addToEstimator(v.getSeconds());
-      }
-
-      @Override
-      protected void updateMin(Object minValue, TimestampObjectInspector minFieldOI) {
-        if ((minValue != null) && (min == null ||
-            min.compareTo(minFieldOI.getPrimitiveWritableObject(minValue)) > 0)) {
-          // TimestampWritableV2 is mutable, TimestampStatsAgg needs its own copy
-          min = new TimestampWritableV2(minFieldOI.getPrimitiveWritableObject(minValue));
-        }
-      }
-
-      @Override
-      protected void updateMax(Object maxValue, TimestampObjectInspector maxFieldOI) {
-        if ((maxValue != null) && (max == null ||
-            max.compareTo(maxFieldOI.getPrimitiveWritableObject(maxValue)) < 0)) {
-          // TimestampWritableV2 is mutable, TimestampStatsAgg needs its own copy
-          max = new TimestampWritableV2(maxFieldOI.getPrimitiveWritableObject(maxValue));
-        }
-      }
-    };
-
-    @Override
-    public AggregationBuffer getNewAggregationBuffer() throws HiveException {
-      AggregationBuffer result = new TimestampStatsAgg();
-      reset(result);
-      return result;
-    }
-
-    @Override
-    public void reset(AggregationBuffer agg) throws HiveException {
-      ((NumericStatsAgg)agg).reset("Timestamp");
-    }
-  }
-  
-  @InterfaceAudience.LimitedPrivate(value = { "Hive" })
-  static int lengthFor(JavaDataModel model, Integer numVector) {
-    int length = model.object();
-    length += model.primitive1() * 2; // two int
-    length += model.primitive2(); // one double
-    length += model.lengthForRandom() * 2; // two Random
-
-    if (numVector == null) {
-      numVector = 16; // HiveConf hive.stats.ndv.error default produces 16
-                      // vectors
-    }
-
-    if (numVector > 0) {
-      length += model.array() * 3; // three array
-      length += model.primitive1() * numVector * 2; // two int array
-      length += (model.object() + model.array() + model.primitive1() + model.primitive2())
-          * numVector; // bitset array
-    }
-    return length;
   }
 }

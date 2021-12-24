@@ -18,14 +18,14 @@
  */
 package org.apache.hive.ptest.execution.context;
 
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Collections;
 import java.util.Set;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.apache.hive.ptest.execution.MockSSHCommandExecutor;
 import org.apache.hive.ptest.execution.conf.Host;

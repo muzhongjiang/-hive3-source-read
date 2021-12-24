@@ -1,10 +1,8 @@
---! qt:dataset:srcpart
---! qt:dataset:src1
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 -- Hybrid Grace Hash Join
-SELECT 'Test n-way join';
+-- Test n-way join
+SELECT 1;
 
 set hive.auto.convert.join=true;
 set hive.auto.convert.join.noconditionaltask=true;
@@ -12,7 +10,8 @@ set hive.auto.convert.join.noconditionaltask.size=10000000;
 set hive.cbo.enable=false;
 
 
-SELECT '3-way mapjoin (1 big table, 2 small tables)';
+-- 3-way mapjoin (1 big table, 2 small tables)
+SELECT 1;
 
 set hive.mapjoin.hybridgrace.hashtable=false;
 
@@ -32,17 +31,13 @@ SELECT COUNT(*)
 FROM src1 x JOIN srcpart z ON (x.key = z.key)
 JOIN src y ON (y.key = x.key);
 
-EXPLAIN  ANALYZE SELECT COUNT(*)
-FROM src1 x JOIN srcpart z ON (x.key = z.key)
-JOIN srcpart w ON (x.key = w.key)
-JOIN src y ON (y.key = x.key);
-
 SELECT COUNT(*)
 FROM src1 x JOIN srcpart z ON (x.key = z.key)
 JOIN src y ON (y.key = x.key);
 
 
-SELECT '4-way mapjoin (1 big table, 3 small tables)';
+-- 4-way mapjoin (1 big table, 3 small tables)
+SELECT 1;
 
 set hive.mapjoin.hybridgrace.hashtable=false;
 
@@ -52,7 +47,7 @@ FROM src1 x JOIN srcpart z ON (x.key = z.key)
 JOIN srcpart w ON (x.key = w.key)
 JOIN src y ON (y.key = x.key);
 
-SELECT assert_true(5680 = COUNT(*))
+SELECT COUNT(*)
 FROM src1 x JOIN srcpart z ON (x.key = z.key)
 JOIN srcpart w ON (x.key = w.key)
 JOIN src y ON (y.key = x.key);
@@ -65,13 +60,14 @@ FROM src1 x JOIN srcpart z ON (x.key = z.key)
 JOIN srcpart w ON (x.key = w.key)
 JOIN src y ON (y.key = x.key);
 
-SELECT assert_true(5680 = COUNT(*))
+SELECT COUNT(*)
 FROM src1 x JOIN srcpart z ON (x.key = z.key)
 JOIN srcpart w ON (x.key = w.key)
 JOIN src y ON (y.key = x.key);
 
 
-SELECT '2 sets of 3-way mapjoin under 2 different tasks';
+-- 2 sets of 3-way mapjoin under 2 different tasks
+SELECT 1;
 
 set hive.mapjoin.hybridgrace.hashtable=false;
 
@@ -112,7 +108,8 @@ FROM src1 x JOIN srcpart z ON (x.value = z.value)
 JOIN src y ON (y.value = x.value);
 
 
-SELECT 'A chain of 2 sets of 3-way mapjoin under the same task';
+-- A chain of 2 sets of 3-way mapjoin under the same task
+SELECT 1;
 
 set hive.mapjoin.hybridgrace.hashtable=false;
 

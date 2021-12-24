@@ -4,20 +4,12 @@ JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcpart
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM srcpart c
 JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcpart
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -32,7 +24,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -45,7 +36,6 @@ STAGE PLANS:
                         keys:
                           0 _col0 (type: string)
                           1 _col0 (type: string)
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -60,7 +50,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -81,21 +70,17 @@ STAGE PLANS:
                         Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                         Group By Operator
                           keys: _col1 (type: string)
-                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0
                           Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                           Reduce Output Operator
                             key expressions: _col0 (type: string)
-                            null sort order: z
                             sort order: +
                             Map-reduce partition columns: rand() (type: double)
                             Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 keys: KEY._col0 (type: string)
@@ -104,12 +89,10 @@ STAGE PLANS:
                 Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col0 (type: string)
-                  null sort order: z
                   sort order: +
                   Map-reduce partition columns: _col0 (type: string)
                   Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
         Reducer 3 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 keys: KEY._col0 (type: string)
@@ -164,20 +147,12 @@ JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcpart
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM srcpart c
 JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcpart
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -192,7 +167,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -205,7 +179,6 @@ STAGE PLANS:
                         keys:
                           0 _col0 (type: string)
                           1 _col0 (type: string)
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -219,7 +192,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -240,21 +212,17 @@ STAGE PLANS:
                         Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                         Group By Operator
                           keys: _col1 (type: string)
-                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0
                           Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                           Reduce Output Operator
                             key expressions: _col0 (type: string)
-                            null sort order: z
                             sort order: +
                             Map-reduce partition columns: _col0 (type: string)
                             Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 keys: KEY._col0 (type: string)
@@ -309,20 +277,12 @@ JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcpart
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM srcpart c
 JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcpart
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -337,7 +297,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -350,7 +309,6 @@ STAGE PLANS:
                         keys:
                           0 _col0 (type: string)
                           1 _col0 (type: string)
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -365,7 +323,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -386,15 +343,12 @@ STAGE PLANS:
                         Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
                           key expressions: _col1 (type: string)
-                          null sort order: z
                           sort order: +
                           Map-reduce partition columns: rand() (type: double)
                           Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 keys: KEY._col0 (type: string)
@@ -403,12 +357,10 @@ STAGE PLANS:
                 Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col0 (type: string)
-                  null sort order: z
                   sort order: +
                   Map-reduce partition columns: _col0 (type: string)
                   Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
         Reducer 3 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 keys: KEY._col0 (type: string)
@@ -463,20 +415,12 @@ JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcpart
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM srcpart c
 JOIN srcpart d
 ON ( c.key=d.key AND c.ds='2008-04-08' AND d.ds='2008-04-08')
 SELECT /*+ MAPJOIN(d) */ DISTINCT c.value
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcpart
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart@ds=2008-04-08/hr=12
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -491,7 +435,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -504,7 +447,6 @@ STAGE PLANS:
                         keys:
                           0 _col0 (type: string)
                           1 _col0 (type: string)
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -518,7 +460,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
-                  filterExpr: (key is not null and (ds = '2008-04-08')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -539,15 +480,12 @@ STAGE PLANS:
                         Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
                           key expressions: _col1 (type: string)
-                          null sort order: z
                           sort order: +
                           Map-reduce partition columns: _col1 (type: string)
                           Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
-            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 keys: KEY._col0 (type: string)

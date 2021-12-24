@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.processors;
 
 import java.io.PrintStream;
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -31,7 +30,6 @@ import org.apache.hadoop.hive.conf.HiveVariableSource;
 import org.apache.hadoop.hive.conf.VariableSubstitution;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
@@ -42,8 +40,8 @@ import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
  */
 public class DfsProcessor implements CommandProcessor {
 
-  private static final Logger LOG = LoggerFactory.getLogger(DfsProcessor.class.getName());
-  private static final LogHelper console = new LogHelper(LOG);
+  public static final Logger LOG = LoggerFactory.getLogger(DfsProcessor.class.getName());
+  public static final LogHelper console = new LogHelper(LOG);
   public static final String DFS_RESULT_HEADER = "DFS Output";
 
   private final FsShell dfs;
@@ -60,7 +58,11 @@ public class DfsProcessor implements CommandProcessor {
   }
 
   @Override
-  public CommandProcessorResponse run(String command) throws CommandProcessorException {
+  public void init() {
+  }
+
+  @Override
+  public CommandProcessorResponse run(String command) {
 
 
     try {
@@ -72,7 +74,7 @@ public class DfsProcessor implements CommandProcessor {
         }
       }).substitute(ss.getConf(), command);
 
-      String[] tokens = splitCmd(command);
+      String[] tokens = command.split("\\s+");
       CommandProcessorResponse authErrResp =
           CommandUtil.authorizeCommand(ss, HiveOperationType.DFS, Arrays.asList(tokens));
       if(authErrResp != null){
@@ -87,80 +89,19 @@ public class DfsProcessor implements CommandProcessor {
       }
 
       int ret = dfs.run(tokens);
-      System.setOut(oldOut);
       if (ret != 0) {
         console.printError("Command " + command + " failed with exit code = " + ret);
-        throw new CommandProcessorException(ret);
       }
-      return new CommandProcessorResponse(dfsSchema, null);
-    } catch (CommandProcessorException e) {
-      throw e;
+
+      System.setOut(oldOut);
+      return new CommandProcessorResponse(ret, null, null, dfsSchema);
+
     } catch (Exception e) {
       console.printError("Exception raised from DFSShell.run "
           + e.getLocalizedMessage(), org.apache.hadoop.util.StringUtils
           .stringifyException(e));
-      throw new CommandProcessorException(1);
+      return new CommandProcessorResponse(1);
     }
   }
 
-  private String[] splitCmd(String command) throws HiveException {
-
-    ArrayList<String> paras = new ArrayList<String>();
-    int cmdLng = command.length();
-    char y = 0;
-    int start = 0;
-
-    for (int i = 0; i < cmdLng; i++) {
-      char x = command.charAt(i);
-
-      switch(x) {
-        case ' ':
-          if (y == 0) {
-            String str = command.substring(start, i).trim();
-            if (!str.equals("")) {
-              paras.add(str);
-              start = i + 1;
-            }
-          }
-          break;
-        case '"':
-          if (y == 0) {
-            y = x;
-            start = i + 1;
-          } else if ('"' == y) {
-            paras.add(command.substring(start, i).trim());
-            y = 0;
-            start = i + 1;
-          }
-          break;
-        case '\'':
-          if (y == 0) {
-            y = x;
-            start = i + 1;
-          } else if ('\'' == y) {
-            paras.add(command.substring(start, i).trim());
-            y = 0;
-            start = i + 1;
-          }
-          break;
-        default:
-          if (i == cmdLng-1 && start < cmdLng) {
-            paras.add(command.substring(start, cmdLng).trim());
-          }
-          break;
-      }
-    }
-
-    if (y != 0) {
-      String message = "Syntax error on hadoop options: dfs " + command;
-      console.printError(message);
-      throw new HiveException(message);
-    }
-
-    return paras.toArray(new String[paras.size()]);
-  }
-
-  @Override
-  public void close() throws Exception {
-  }
 }

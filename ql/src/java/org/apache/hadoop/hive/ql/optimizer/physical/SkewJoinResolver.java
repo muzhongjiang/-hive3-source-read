@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.optimizer.physical;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,19 +29,16 @@ import org.apache.hadoop.hive.ql.exec.ConditionalTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
-import org.apache.hadoop.hive.ql.plan.LoadFileDesc;
-import org.apache.hadoop.hive.ql.plan.LoadTableDesc;
 import org.apache.hadoop.hive.ql.plan.MapredWork;
-import org.slf4j.Logger;
 
 /**
  * An implementation of PhysicalPlanResolver. It iterator each task with a rule
@@ -48,12 +46,10 @@ import org.slf4j.Logger;
  * it will try to add a conditional task associated a list of skew join tasks.
  */
 public class SkewJoinResolver implements PhysicalPlanResolver {
-  private final static Logger LOG = org.slf4j.LoggerFactory.getLogger(SkewJoinResolver.class);
-
   @Override
   public PhysicalContext resolve(PhysicalContext pctx) throws SemanticException {
-    SemanticDispatcher disp = new SkewJoinTaskDispatcher(pctx);
-    SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+    Dispatcher disp = new SkewJoinTaskDispatcher(pctx);
+    GraphWalker ogw = new DefaultGraphWalker(disp);
     ArrayList<Node> topNodes = new ArrayList<Node>();
     topNodes.addAll(pctx.getRootTasks());
     ogw.startWalking(topNodes, null);
@@ -63,7 +59,7 @@ public class SkewJoinResolver implements PhysicalPlanResolver {
   /**
    * Iterator a task with a rule dispatcher for its reducer operator tree.
    */
-  class SkewJoinTaskDispatcher implements SemanticDispatcher {
+  class SkewJoinTaskDispatcher implements Dispatcher {
 
     private PhysicalContext physicalContext;
 
@@ -75,47 +71,26 @@ public class SkewJoinResolver implements PhysicalPlanResolver {
     @Override
     public Object dispatch(Node nd, Stack<Node> stack, Object... nodeOutputs)
         throws SemanticException {
-      Task<?> task = (Task<?>) nd;
+      Task<? extends Serializable> task = (Task<? extends Serializable>) nd;
 
       if (!task.isMapRedTask() || task instanceof ConditionalTask
           || ((MapredWork) task.getWork()).getReduceWork() == null) {
         return null;
       }
 
-      ParseContext pc = physicalContext.getParseContext();
-      if (pc.getLoadTableWork() != null) {
-        for (LoadTableDesc ltd : pc.getLoadTableWork()) {
-          if (!ltd.isMmTable()) {
-            continue;
-          }
-          // See the path in FSOP that calls fs.exists on finalPath.
-          LOG.debug("Not using skew join because the destination table "
-              + ltd.getTable().getTableName() + " is an insert_only table");
-          return null;
-        }
-      }
-      if (pc.getLoadFileWork() != null) {
-        for (LoadFileDesc lfd : pc.getLoadFileWork()) {
-          if (!lfd.isMmCtas()) {
-            continue;
-          }
-          LOG.debug("Not using skew join because the destination table is an insert_only table");
-          return null;
-        }
-      }
+      SkewJoinProcCtx skewJoinProcContext = new SkewJoinProcCtx(task,
+          physicalContext.getParseContext());
 
-      SkewJoinProcCtx skewJoinProcContext = new SkewJoinProcCtx(task, pc);
-
-      Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+      Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
       opRules.put(new RuleRegExp("R1",
         CommonJoinOperator.getOperatorName() + "%"),
         SkewJoinProcFactory.getJoinProc());
 
       // The dispatcher fires the processor corresponding to the closest
       // matching rule and passes the context along
-      SemanticDispatcher disp = new DefaultRuleDispatcher(SkewJoinProcFactory
+      Dispatcher disp = new DefaultRuleDispatcher(SkewJoinProcFactory
           .getDefaultProc(), opRules, skewJoinProcContext);
-      SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+      GraphWalker ogw = new DefaultGraphWalker(disp);
 
       // iterator the reducer operator tree
       ArrayList<Node> topNodes = new ArrayList<Node>();
@@ -139,20 +114,20 @@ public class SkewJoinResolver implements PhysicalPlanResolver {
    * A container of current task and parse context.
    */
   public static class SkewJoinProcCtx implements NodeProcessorCtx {
-    private Task<?> currentTask;
+    private Task<? extends Serializable> currentTask;
     private ParseContext parseCtx;
 
-    public SkewJoinProcCtx(Task<?> task,
+    public SkewJoinProcCtx(Task<? extends Serializable> task,
         ParseContext parseCtx) {
       currentTask = task;
       this.parseCtx = parseCtx;
     }
 
-    public Task<?> getCurrentTask() {
+    public Task<? extends Serializable> getCurrentTask() {
       return currentTask;
     }
 
-    public void setCurrentTask(Task<?> currentTask) {
+    public void setCurrentTask(Task<? extends Serializable> currentTask) {
       this.currentTask = currentTask;
     }
 

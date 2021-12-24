@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.JoinUtil;
@@ -43,30 +42,9 @@ public class VectorMapJoinFastLongHashMultiSet
 
   public static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinFastLongHashMultiSet.class);
 
-  private long fullOuterNullKeyValueCount;
-
   @Override
   public VectorMapJoinHashMultiSetResult createHashMultiSetResult() {
     return new VectorMapJoinFastHashMultiSet.HashMultiSetResult();
-  }
-
-  @Override
-  public void putRow(BytesWritable currentKey, BytesWritable currentValue)
-      throws HiveException, IOException {
-
-    if (!adaptPutRow(currentKey, currentValue)) {
-
-      // Ignore NULL keys, except for FULL OUTER.
-      if (isFullOuter) {
-        fullOuterNullKeyValueCount++;
-      }
-
-    }
-  }
-
-  @Override
-  public boolean containsLongKey(long currentKey) {
-    return containsKey(currentKey);
   }
 
   /*
@@ -102,19 +80,12 @@ public class VectorMapJoinFastLongHashMultiSet
     optimizedHashMultiSetResult.forget();
 
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    int pairIndex = findReadSlot(key, hashCode);
+    long count = findReadSlot(key, hashCode);
     JoinUtil.JoinResult joinResult;
-    if (pairIndex == -1) {
+    if (count == -1) {
       joinResult = JoinUtil.JoinResult.NOMATCH;
     } else {
-      /*
-       * NOTE: Support for trackMatched not needed yet for Set.
-
-      if (matchTracker != null) {
-        matchTracker.trackMatch(pairIndex / 2);
-      }
-      */
-      optimizedHashMultiSetResult.set(slotPairs[pairIndex]);
+      optimizedHashMultiSetResult.set(count);
       joinResult = JoinUtil.JoinResult.MATCH;
     }
 
@@ -124,19 +95,9 @@ public class VectorMapJoinFastLongHashMultiSet
   }
 
   public VectorMapJoinFastLongHashMultiSet(
-      boolean isFullOuter,
-      boolean minMaxEnabled,
-      HashTableKeyType hashTableKeyType,
-      int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, TableDesc tableDesc) {
-    super(
-        isFullOuter,
-        minMaxEnabled, hashTableKeyType,
-        initialCapacity, loadFactor, writeBuffersSize, estimatedKeyCount, tableDesc);
-    fullOuterNullKeyValueCount = 0;
-  }
-
-  @Override
-  public long getEstimatedMemorySize() {
-    return super.getEstimatedMemorySize();
+      boolean minMaxEnabled, boolean isOuterJoin, HashTableKeyType hashTableKeyType,
+      int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount) {
+    super(minMaxEnabled, isOuterJoin, hashTableKeyType,
+        initialCapacity, loadFactor, writeBuffersSize, estimatedKeyCount);
   }
 }

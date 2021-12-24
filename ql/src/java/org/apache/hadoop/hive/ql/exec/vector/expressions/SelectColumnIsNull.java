@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,31 +21,26 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * This expression selects a row if the given column is null.
  */
 public class SelectColumnIsNull extends VectorExpression {
-
   private static final long serialVersionUID = 1L;
-
-  private final int colNum;
+  private int colNum;
 
   public SelectColumnIsNull(int colNum) {
-    super();
+    this();
     this.colNum = colNum;
   }
 
   public SelectColumnIsNull() {
     super();
-
-    // Dummy final assignments.
-    colNum = -1;
   }
 
+
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
@@ -93,8 +88,26 @@ public class SelectColumnIsNull extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return -1;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
+  public int getColNum() {
+    return colNum;
+  }
+
+  public void setColNum(int colNum) {
+    this.colNum = colNum;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, colNum);
+    return "col " + colNum;
   }
 
   @Override

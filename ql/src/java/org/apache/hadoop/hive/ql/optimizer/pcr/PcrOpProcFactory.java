@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.ql.exec.FilterOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
@@ -56,7 +56,7 @@ public final class PcrOpProcFactory {
    * Remove partition condition in a filter operator when possible. This is
    * called only when the filter follows a table scan operator.
    */
-  public static class FilterPCR implements SemanticNodeProcessor {
+  public static class FilterPCR implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -110,7 +110,7 @@ public final class PcrOpProcFactory {
         prunedPartList = pctx.getPrunedPartitions(alias, top);
       } catch (HiveException e) {
         // Has to use full name to make sure it does not conflict with
-        // org.apache.commons.lang3.StringUtils
+        // org.apache.commons.lang.StringUtils
         throw new SemanticException(e.getMessage(), e);
       }
 
@@ -158,7 +158,7 @@ public final class PcrOpProcFactory {
   /**
    * Default processor which does nothing
    */
-  public static class DefaultPCR implements SemanticNodeProcessor {
+  public static class DefaultPCR implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -168,11 +168,11 @@ public final class PcrOpProcFactory {
     }
   }
 
-  public static SemanticNodeProcessor getFilterProc() {
+  public static NodeProcessor getFilterProc() {
     return new FilterPCR();
   }
 
-  public static SemanticNodeProcessor getDefaultProc() {
+  public static NodeProcessor getDefaultProc() {
     return new DefaultPCR();
   }
 

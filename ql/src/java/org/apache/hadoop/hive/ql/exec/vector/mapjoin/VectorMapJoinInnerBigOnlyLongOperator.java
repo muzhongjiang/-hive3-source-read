@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHash
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
 // Single-Column Long hash table import.
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinLongHashMultiSet;
 
@@ -92,9 +91,9 @@ public class VectorMapJoinInnerBigOnlyLongOperator extends VectorMapJoinInnerBig
     super(ctx);
   }
 
-  public VectorMapJoinInnerBigOnlyLongOperator(CompilationOpContext ctx, OperatorDesc conf,
-      VectorizationContext vContext, VectorDesc vectorDesc) throws HiveException {
-    super(ctx, conf, vContext, vectorDesc);
+  public VectorMapJoinInnerBigOnlyLongOperator(CompilationOpContext ctx,
+      VectorizationContext vContext, OperatorDesc conf) throws HiveException {
+    super(ctx, vContext, conf);
   }
 
   //---------------------------------------------------------------------------
@@ -102,36 +101,45 @@ public class VectorMapJoinInnerBigOnlyLongOperator extends VectorMapJoinInnerBig
   //
 
   @Override
-  protected void commonSetup() throws HiveException {
-    super.commonSetup();
-
-    /*
-     * Initialize Single-Column Long members for this specialized class.
-     */
-
-    singleJoinColumn = bigTableKeyColumnMap[0];
-  }
-
-  @Override
-  public void hashTableSetup() throws HiveException {
-    super.hashTableSetup();
-
-    /*
-     * Get our Single-Column Long hash multi-set information for this specialized class.
-     */
-
-    hashMultiSet = (VectorMapJoinLongHashMultiSet) vectorMapJoinHashTable;
-    useMinMax = hashMultiSet.useMinMax();
-    if (useMinMax) {
-      min = hashMultiSet.min();
-      max = hashMultiSet.max();
-    }
-  }
-
-  @Override
-  public void processBatch(VectorizedRowBatch batch) throws HiveException {
+  public void process(Object row, int tag) throws HiveException {
 
     try {
+      VectorizedRowBatch batch = (VectorizedRowBatch) row;
+
+      alias = (byte) tag;
+
+      if (needCommonSetup) {
+        // Our one time process method initialization.
+        commonSetup(batch);
+
+        /*
+         * Initialize Single-Column Long members for this specialized class.
+         */
+
+        singleJoinColumn = bigTableKeyColumnMap[0];
+
+        needCommonSetup = false;
+      }
+
+      if (needHashTableSetup) {
+        // Setup our hash table specialization.  It will be the first time the process
+        // method is called, or after a Hybrid Grace reload.
+
+        /*
+         * Get our Single-Column Long hash multi-set information for this specialized class.
+         */
+
+        hashMultiSet = (VectorMapJoinLongHashMultiSet) vectorMapJoinHashTable;
+        useMinMax = hashMultiSet.useMinMax();
+        if (useMinMax) {
+          min = hashMultiSet.min();
+          max = hashMultiSet.max();
+        }
+
+        needHashTableSetup = false;
+      }
+
+      batchCounter++;
 
       // Do the per-batch setup for an inner big-only join.
 
@@ -144,7 +152,11 @@ public class VectorMapJoinInnerBigOnlyLongOperator extends VectorMapJoinInnerBig
       }
 
       final int inputLogicalSize = batch.size;
+
       if (inputLogicalSize == 0) {
+        if (isLogDebugEnabled) {
+          LOG.debug(CLASS_NAME + " batch #" + batchCounter + " empty");
+        }
         return;
       }
 
@@ -200,7 +212,7 @@ public class VectorMapJoinInnerBigOnlyLongOperator extends VectorMapJoinInnerBig
          * Common repeated join result processing.
          */
 
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug(CLASS_NAME + " batch #" + batchCounter + " repeated joinResult " + joinResult.name());
         }
         finishInnerBigOnlyRepeated(batch, joinResult, hashMultiSetResults[0]);
@@ -210,7 +222,7 @@ public class VectorMapJoinInnerBigOnlyLongOperator extends VectorMapJoinInnerBig
          * NOT Repeating.
          */
 
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug(CLASS_NAME + " batch #" + batchCounter + " non-repeated");
         }
 
@@ -365,7 +377,7 @@ public class VectorMapJoinInnerBigOnlyLongOperator extends VectorMapJoinInnerBig
           }
         }
 
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug(CLASS_NAME +
               " allMatchs " + intArrayToRangesString(allMatchs, allMatchCount) +
               " equalKeySeriesValueCounts " + longArrayToRangesString(equalKeySeriesValueCounts, equalKeySeriesCount) +

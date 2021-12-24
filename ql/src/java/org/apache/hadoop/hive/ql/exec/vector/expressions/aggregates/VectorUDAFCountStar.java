@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,14 +19,15 @@
 package org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates;
 
 import org.apache.hadoop.hive.ql.exec.Description;
-import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
-import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorAggregationBufferRow;
-import org.apache.hadoop.hive.ql.exec.vector.VectorAggregationDesc;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.Mode;
+import org.apache.hadoop.hive.ql.plan.AggregationDesc;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
+import org.apache.hadoop.io.LongWritable;
 
 /**
  * VectorUDAFCountStar. Vectorized implementation for COUNT(*) aggregates.
@@ -56,17 +57,22 @@ public class VectorUDAFCountStar extends VectorAggregateExpression {
       }
     }
 
-    // This constructor is used to momentarily create the object so match can be called.
+
+    @Override
+    public VectorExpression inputExpression() {
+      // None.
+      return null;
+    }
+
+    transient private final LongWritable result;
+
+    public VectorUDAFCountStar(VectorExpression inputExpression) {
+      this();
+    }
+
     public VectorUDAFCountStar() {
       super();
-    }
-
-    public VectorUDAFCountStar(VectorAggregationDesc vecAggrDesc) {
-      super(vecAggrDesc);
-      init();
-    }
-
-    private void init() {
+      result = new LongWritable(0);
     }
 
     private Aggregation getCurrentAggregationBuffer(
@@ -124,7 +130,19 @@ public class VectorUDAFCountStar extends VectorAggregateExpression {
     }
 
     @Override
-    public long getAggregationBufferFixedSize() {
+    public Object evaluateOutput(AggregationBuffer agg) throws HiveException {
+      Aggregation myagg = (Aggregation) agg;
+      result.set (myagg.count);
+      return result;
+    }
+
+    @Override
+    public ObjectInspector getOutputObjectInspector() {
+      return PrimitiveObjectInspectorFactory.writableLongObjectInspector;
+    }
+
+    @Override
+    public int getAggregationBufferFixedSize() {
       JavaDataModel model = JavaDataModel.get();
       return JavaDataModel.alignUp(
         model.object() +
@@ -133,29 +151,9 @@ public class VectorUDAFCountStar extends VectorAggregateExpression {
         model.memoryAlign());
     }
 
-  @Override
-  public boolean matches(String name, ColumnVector.Type inputColVectorType,
-      ColumnVector.Type outputColVectorType, Mode mode) {
-
-    /*
-     * Count null input which is for COUNT(*) and output is LONG.
-     *
-     * Just modes (PARTIAL1, COMPLETE).
-     */
-    return
-        name.equals("count") &&
-        inputColVectorType == null &&
-        outputColVectorType == ColumnVector.Type.LONG &&
-        (mode == Mode.PARTIAL1 || mode == Mode.COMPLETE);
-  }
-
-  @Override
-  public void assignRowColumn(VectorizedRowBatch batch, int batchIndex, int columnNum,
-      AggregationBuffer agg) throws HiveException {
-
-    LongColumnVector outputColVector = (LongColumnVector) batch.cols[columnNum];
-    Aggregation myagg = (Aggregation) agg;
-    outputColVector.isNull[batchIndex] = false;
-    outputColVector.vector[batchIndex] = myagg.count;
-  }
+    @Override
+    public void init(AggregationDesc desc) throws HiveException {
+      // No-op
+    }
 }
+

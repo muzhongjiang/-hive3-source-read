@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,11 +16,12 @@
  * limitations under the License.
  */
 package org.apache.hadoop.hive.ql.exec.tez;
+
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.Callable;
 
 import org.apache.hadoop.hive.ql.exec.ObjectCache;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -39,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 
 /**
  * Process input from tez LogicalInput and write output
@@ -51,8 +53,11 @@ public abstract class RecordProcessor extends InterruptibleProcessing {
   protected Map<String, OutputCollector> outMap;
   protected final ProcessorContext processorContext;
 
-  private static final Logger LOG = LoggerFactory.getLogger(RecordProcessor.class);
+  public static final Logger l4j = LoggerFactory.getLogger(RecordProcessor.class);
 
+  // used to log memory usage periodically
+  protected boolean isLogInfoEnabled = false;
+  protected boolean isLogTraceEnabled = false;
   protected MRTaskReporter reporter;
 
   protected PerfLogger perfLogger = SessionState.getPerfLogger();
@@ -76,8 +81,11 @@ public abstract class RecordProcessor extends InterruptibleProcessing {
     this.inputs = inputs;
     this.outputs = outputs;
 
+    isLogInfoEnabled = l4j.isInfoEnabled();
+    isLogTraceEnabled = l4j.isTraceEnabled();
+
     checkAbortCondition();
-    Utilities.tryLoggingClassPaths(jconf, LOG);
+    Utilities.tryLoggingClassPaths(jconf, l4j);
   }
 
   /**
@@ -90,7 +98,7 @@ public abstract class RecordProcessor extends InterruptibleProcessing {
 
   protected void createOutputMap() {
     Preconditions.checkState(outMap == null, "Outputs should only be setup once");
-    outMap = new HashMap<>();
+    outMap = Maps.newHashMap();
     for (Entry<String, LogicalOutput> entry : outputs.entrySet()) {
       TezKVOutputCollector collector = new TezKVOutputCollector(entry.getValue());
       outMap.put(entry.getKey(), collector);
@@ -101,17 +109,22 @@ public abstract class RecordProcessor extends InterruptibleProcessing {
       ObjectCache cache, List<String> cacheKeys) throws HiveException {
     String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
     if (prefixes != null) {
-      List<BaseWork> mergeWorkList = new ArrayList<>();
+      List<BaseWork> mergeWorkList = new ArrayList<BaseWork>();
 
       for (final String prefix : prefixes.split(",")) {
-        if (prefix.isEmpty()) {
+        if (prefix == null || prefix.isEmpty()) {
           continue;
         }
 
         key = prefix;
         cacheKeys.add(key);
 
-        mergeWorkList.add(cache.retrieve(key, () -> Utilities.getMergeWork(jconf, prefix)));
+        mergeWorkList.add((BaseWork) cache.retrieve(key, new Callable<Object>() {
+          @Override
+          public Object call() {
+            return Utilities.getMergeWork(jconf, prefix);
+          }
+        }));
       }
 
       return mergeWorkList;

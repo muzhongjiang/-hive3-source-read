@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -158,7 +158,7 @@ public class HiveJoin extends Join implements HiveRelNode {
   }
 
   public MapJoinStreamingRelation getStreamingSide() {
-    RelMetadataQuery mq = left.getCluster().getMetadataQuery();
+    RelMetadataQuery mq = RelMetadataQuery.instance();
     Double leftInputSize = mq.memory(left);
     Double rightInputSize = mq.memory(right);
     if (leftInputSize == null && rightInputSize == null) {
@@ -200,10 +200,9 @@ public class HiveJoin extends Join implements HiveRelNode {
             ImmutableIntList.copyOf(
                     joinPredInfo.getProjsFromRightPartOfJoinKeysInChildSchema()));
 
-    final RelMetadataQuery mq = this.left.getCluster().getMetadataQuery();
     for (int i=0; i<this.getInputs().size(); i++) {
       boolean correctOrderFound = RelCollations.contains(
-          mq.collations(this.getInputs().get(i)),
+          RelMetadataQuery.instance().collations(this.getInputs().get(i)),
           joinKeysInChildren.get(i));
       if (correctOrderFound) {
         sortedInputsBuilder.set(i);
@@ -220,9 +219,9 @@ public class HiveJoin extends Join implements HiveRelNode {
   public RelWriter explainTerms(RelWriter pw) {
     return super.explainTerms(pw)
         .item("algorithm", joinAlgorithm == null ?
-                "none" : joinAlgorithm.toString())
+                "none" : joinAlgorithm)
         .item("cost", joinCost == null ?
-                "not available" : joinCost.toString());
+                "not available" : joinCost);
   }
 
   //required for HiveRelDecorrelator

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,12 +27,10 @@ import java.io.IOException;
  * Read a stream from an external process 
  */
 public class StreamGobbler extends Thread {
-  private final Console console;
-  private final InputStream is;
+  InputStream is;
   
-  StreamGobbler(InputStream is, Console console) {
+  StreamGobbler(InputStream is) {
     this.is = is;
-    this.console = console;
   }
   
   public void run() {
@@ -44,7 +42,7 @@ public class StreamGobbler extends Thread {
         if(line == null) {
           break;
         }        
-        console.printLine(line);
+        System.out.println(line);
       }
     } catch (IOException ioe) {
       ioe.printStackTrace();  

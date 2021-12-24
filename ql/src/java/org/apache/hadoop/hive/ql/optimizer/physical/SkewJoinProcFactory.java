@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,12 +18,13 @@
 
 package org.apache.hadoop.hive.ql.optimizer.physical;
 
+import java.io.Serializable;
 import java.util.Stack;
 
 import org.apache.hadoop.hive.ql.exec.JoinOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.optimizer.physical.SkewJoinResolver.SkewJoinProcCtx;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
@@ -34,11 +35,11 @@ import org.apache.hadoop.hive.ql.parse.SemanticException;
  */
 public final class SkewJoinProcFactory {
 
-  public static SemanticNodeProcessor getDefaultProc() {
+  public static NodeProcessor getDefaultProc() {
     return new SkewJoinDefaultProcessor();
   }
 
-  public static SemanticNodeProcessor getJoinProc() {
+  public static NodeProcessor getJoinProc() {
     return new SkewJoinJoinProcessor();
   }
 
@@ -46,7 +47,7 @@ public final class SkewJoinProcFactory {
    * SkewJoinJoinProcessor.
    *
    */
-  public static class SkewJoinJoinProcessor implements SemanticNodeProcessor {
+  public static class SkewJoinJoinProcessor implements NodeProcessor {
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx ctx,
         Object... nodeOutputs) throws SemanticException {
       SkewJoinProcCtx context = (SkewJoinProcCtx) ctx;
@@ -55,7 +56,7 @@ public final class SkewJoinProcFactory {
         return null;
       }
       ParseContext parseContext = context.getParseCtx();
-      Task<?> currentTsk = context.getCurrentTask();
+      Task<? extends Serializable> currentTsk = context.getCurrentTask();
       GenMRSkewJoinProcessor.processSkewJoin(op, currentTsk, parseContext);
       return null;
     }
@@ -65,7 +66,7 @@ public final class SkewJoinProcFactory {
    * SkewJoinDefaultProcessor.
    *
    */
-  public static class SkewJoinDefaultProcessor implements SemanticNodeProcessor {
+  public static class SkewJoinDefaultProcessor implements NodeProcessor {
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx ctx,
         Object... nodeOutputs) throws SemanticException {
       return null;

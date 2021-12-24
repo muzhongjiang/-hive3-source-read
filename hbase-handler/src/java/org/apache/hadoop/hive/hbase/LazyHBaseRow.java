@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.hbase.ColumnMappings.ColumnMapping;
 import org.apache.hadoop.hive.hbase.struct.HBaseValueFactory;
 import org.apache.hadoop.hive.serde2.SerDeException;
@@ -162,8 +161,7 @@ public class LazyHBaseRow extends LazyStruct {
         }
         LazyObjectBase lz = fields[fieldID];
         if (lz instanceof LazyTimestamp) {
-          ((LazyTimestamp) lz).getWritableObject().set(
-              Timestamp.ofEpochMilli(timestamp));
+          ((LazyTimestamp) lz).getWritableObject().setTime(timestamp);
         } else {
           ((LazyLong) lz).getWritableObject().set(timestamp);
         }

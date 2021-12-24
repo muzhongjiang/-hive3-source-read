@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,7 +17,6 @@
  */
 package org.apache.hive.beeline.hs2connection;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.io.ByteArrayOutputStream;
@@ -47,13 +46,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
-/**
- * BeelineWithHS2ConnectionFileTestBase test.
- */
-@RunWith(Parameterized.class)
 public abstract class BeelineWithHS2ConnectionFileTestBase {
   protected MiniHS2 miniHS2;
   protected HiveConf hiveConf = new HiveConf();
@@ -70,10 +63,6 @@ public abstract class BeelineWithHS2ConnectionFileTestBase {
   protected static final String JAVA_TRUST_STORE_PASS_PROP = "javax.net.ssl.trustStorePassword";
 
   protected Map<String, String> confOverlay = new HashMap<>();
-
-  @Parameterized.Parameter
-  public String transportMode =  null;
-
 
   protected class TestBeeLine extends BeeLine {
     UserHS2ConnectionFileParser testHs2ConfigFileManager;
@@ -100,7 +89,7 @@ public abstract class BeelineWithHS2ConnectionFileTestBase {
     }
 
     @Override
-    public UserHS2ConnectionFileParser getUserHS2ConnFileParser() {
+    public HS2ConnectionFileParser getUserHS2ConnFileParser() {
       return testHs2ConfigFileManager;
     }
 
@@ -173,8 +162,7 @@ public abstract class BeelineWithHS2ConnectionFileTestBase {
     miniHS2 = getNewMiniHS2();
     confOverlay = new HashMap<String, String>();
     confOverlay.put(ConfVars.HIVE_SUPPORT_CONCURRENCY.varname, "false");
-    confOverlay.put(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, transportMode);
-    confOverlay.put(ConfVars.HIVE_SERVER2_USE_SSL.varname, "false");
+    confOverlay.put(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, "binary");
   }
 
   protected MiniHS2 getNewMiniHS2() throws Exception {
@@ -203,28 +191,8 @@ public abstract class BeelineWithHS2ConnectionFileTestBase {
     assertFalse(rowSet.numRows() == 0);
   }
 
-  protected void assertBeelineOutputContains(String path, String[] beelineArgs,
-      String expectedOutput) throws Exception {
-    BeelineResult res = getBeelineOutput(path, beelineArgs);
-    assertEquals(0, res.exitCode);
-    Assert.assertNotNull(res.output);
-    Assert.assertTrue("Output " + res.output + " does not contain " + expectedOutput,
-        res.output.toLowerCase().contains(expectedOutput.toLowerCase()));
-  }
-
-  static class BeelineResult {
-
-    public final String output;
-    public final int exitCode;
-
-    public BeelineResult(String output, int exitCode) {
-      this.output = output;
-      this.exitCode = exitCode;
-    }
-
-  }
-
-  protected BeelineResult getBeelineOutput(String path, String[] beelineArgs) throws Exception {
+  protected String testBeeLineConnection(String path, String[] beelineArgs,
+      String expectedOutput) throws IOException {
     TestBeeLine beeLine = null;
     try {
       if(path != null) {
@@ -234,10 +202,13 @@ public abstract class BeelineWithHS2ConnectionFileTestBase {
       } else {
         beeLine = new TestBeeLine();
       }
-      int exitCode = beeLine.begin(beelineArgs, null);
+      beeLine.begin(beelineArgs, null);
       String output = beeLine.getOutput();
       System.out.println(output);
-      return new BeelineResult(output, exitCode);
+      Assert.assertNotNull(output);
+      Assert.assertTrue("Output " + output + " does not contain " + expectedOutput,
+          output.toLowerCase().contains(expectedOutput.toLowerCase()));
+      return output;
     } finally {
       if (beeLine != null) {
         beeLine.close();

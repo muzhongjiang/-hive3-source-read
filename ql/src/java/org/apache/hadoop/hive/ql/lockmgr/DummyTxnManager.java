@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,21 +17,17 @@
  */
 package org.apache.hadoop.hive.ql.lockmgr;
 
-import org.apache.hadoop.hive.common.FileUtils;
-import org.apache.hadoop.hive.common.ValidTxnWriteIdList;
-import org.apache.hadoop.hive.metastore.api.CommitTxnRequest;
-import org.apache.hadoop.hive.metastore.api.GetOpenTxnsResponse;
-import org.apache.hadoop.hive.metastore.api.TxnToWriteId;
-import org.apache.hadoop.hive.metastore.api.TxnType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidReadTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.Driver.DriverState;
+import org.apache.hadoop.hive.ql.Driver.LockedDriverState;
 import org.apache.hadoop.hive.ql.ErrorMsg;
-import org.apache.hadoop.hive.ql.DriverState;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.hooks.ReadEntity;
 import org.apache.hadoop.hive.ql.hooks.WriteEntity;
@@ -39,6 +35,7 @@ import org.apache.hadoop.hive.ql.metadata.DummyPartition;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
+import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.util.ReflectionUtils;
 
 import java.util.*;
@@ -53,24 +50,11 @@ class DummyTxnManager extends HiveTxnManagerImpl {
 
   private HiveLockManager lockMgr;
 
-  private HiveLockManagerCtx lockManagerCtx;
-
-  @Override
-  public long openTxn(Context ctx, String user, TxnType txnType) throws LockException {
-    // No-op
-    return 0L;
-  }
-
   @Override
   public long openTxn(Context ctx, String user) throws LockException {
     // No-op
     return 0L;
   }
-  @Override
-  public List<Long> replOpenTxn(String replPolicy, List<Long> srcTxnIds, String user)  throws LockException {
-    return null;
-  }
-
   @Override
   public boolean isTxnOpen() {
     return false;
@@ -79,34 +63,10 @@ class DummyTxnManager extends HiveTxnManagerImpl {
   public long getCurrentTxnId() {
     return 0L;
   }
+
   @Override
-  public int getStmtIdAndIncrement() {
+  public int getWriteIdAndIncrement() {
     return 0;
-  }
-  @Override
-  public int getCurrentStmtId() {
-    return  0;
-  }
-
-  @Override
-  public long getLatestTxnIdInConflict() throws LockException {
-    return 0;
-  }
-
-  @Override
-  public long getTableWriteId(String dbName, String tableName) throws LockException {
-    return 0L;
-  }
-
-  @Override
-  public long getAllocatedTableWriteId(String dbName, String tableName) throws LockException {
-    return 0L;
-  }
-
-  @Override
-  public void replAllocateTableWriteIdsBatch(String dbName, String tableName, String replPolicy,
-                                             List<TxnToWriteId> srcTxnToWriteIdList) throws LockException {
-    return;
   }
   @Override
   public HiveLockManager getLockManager() throws LockException {
@@ -124,8 +84,7 @@ class DummyTxnManager extends HiveTxnManagerImpl {
           LOG.info("Creating lock manager of type " + lockMgrName);
           lockMgr = (HiveLockManager)ReflectionUtils.newInstance(
               conf.getClassByName(lockMgrName), conf);
-          lockManagerCtx = new HiveLockManagerCtx(conf);
-          lockMgr.setContext(lockManagerCtx);
+          lockMgr.setContext(new HiveLockManagerCtx(conf));
         } catch (Exception e) {
           // set hiveLockMgr to null just in case this invalid manager got set to
           // next query's ctx.
@@ -147,7 +106,6 @@ class DummyTxnManager extends HiveTxnManagerImpl {
     }
     // Force a re-read of the configuration file.  This is done because
     // different queries in the session may be using the same lock manager.
-    lockManagerCtx.setConf(conf);
     lockMgr.refresh();
     return lockMgr;
   }
@@ -158,15 +116,13 @@ class DummyTxnManager extends HiveTxnManagerImpl {
   }
 
   @Override
-  public void acquireLocks(QueryPlan plan, Context ctx, String username, DriverState driverState) throws LockException {
+  public void acquireLocks(QueryPlan plan, Context ctx, String username, LockedDriverState lDrvState) throws LockException {
     // Make sure we've built the lock manager
     getLockManager();
 
     // If the lock manager is still null, then it means we aren't using a
     // lock manager
-    if (lockMgr == null) {
-      return;
-    }
+    if (lockMgr == null) return;
 
     List<HiveLockObj> lockObjects = new ArrayList<HiveLockObj>();
 
@@ -222,7 +178,7 @@ class DummyTxnManager extends HiveTxnManagerImpl {
     }
 
     dedupLockObjects(lockObjects);
-    List<HiveLock> hiveLocks = lockMgr.lock(lockObjects, false, driverState);
+    List<HiveLock> hiveLocks = lockMgr.lock(lockObjects, false, lDrvState);
 
     if (hiveLocks == null) {
       throw new LockException(ErrorMsg.LOCK_CANNOT_BE_ACQUIRED.getMsg());
@@ -246,23 +202,7 @@ class DummyTxnManager extends HiveTxnManagerImpl {
   }
 
   @Override
-  public void replCommitTxn(CommitTxnRequest rqst) throws LockException {
-    // No-op
-  }
-
-  @Override
   public void rollbackTxn() throws LockException {
-    // No-op
-  }
-
-  @Override
-  public void replRollbackTxn(String replPolicy, long srcTxnId) throws LockException {
-    // No-op
-  }
-
-  @Override
-  public void replTableWriteIdState(String validWriteIdList, String dbName, String tableName, List<String> partNames)
-          throws LockException {
     // No-op
   }
 
@@ -272,24 +212,8 @@ class DummyTxnManager extends HiveTxnManagerImpl {
   }
 
   @Override
-  public GetOpenTxnsResponse getOpenTxns() throws LockException {
-    return new GetOpenTxnsResponse();
-  }
-
-  @Override
   public ValidTxnList getValidTxns() throws LockException {
     return new ValidReadTxnList();
-  }
-
-  @Override
-  public ValidTxnList getValidTxns(List<TxnType> excludeTxnTypes) throws LockException {
-    return new ValidReadTxnList();
-  }
-
-  @Override
-  public ValidTxnWriteIdList getValidWriteIds(List<String> tableList,
-                                              String validTxnList) throws LockException {
-    return new ValidTxnWriteIdList(getCurrentTxnId());
   }
 
   @Override
@@ -313,7 +237,6 @@ class DummyTxnManager extends HiveTxnManagerImpl {
   }
 
 
-  @Override
   protected void destruct() {
     if (lockMgr != null) {
       try {
@@ -378,8 +301,7 @@ class DummyTxnManager extends HiveTxnManagerImpl {
       new HiveLockObject.HiveLockObjectData(plan.getQueryId(),
                              String.valueOf(System.currentTimeMillis()),
                              "IMPLICIT",
-                             plan.getQueryStr(),
-                             conf);
+                             plan.getQueryStr());
 
     if (db != null) {
       locks.add(new HiveLockObj(new HiveLockObject(db.getName(), lockData),
@@ -422,9 +344,9 @@ class DummyTxnManager extends HiveTxnManagerImpl {
         try {
           locks.add(new HiveLockObj(
                       new HiveLockObject(new DummyPartition(p.getTable(), p.getTable().getDbName()
-                          + "/" + FileUtils.escapePathName(p.getTable().getTableName()).toLowerCase()
-                          + "/" + partialName,
-                          partialSpec), lockData), mode));
+                                                            + "/" + MetaStoreUtils.encodeTableName(p.getTable().getTableName())
+                                                            + "/" + partialName,
+                                                              partialSpec), lockData), mode));
           partialName += "/";
         } catch (HiveException e) {
           throw new LockException(e.getMessage());
@@ -437,8 +359,5 @@ class DummyTxnManager extends HiveTxnManagerImpl {
     return locks;
   }
 
-  @Override
-  public String getQueryid() {
-    return null;
-  }
+
 }

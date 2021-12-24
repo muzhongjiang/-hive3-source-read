@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,8 @@
 
 package org.apache.hive.service.cli.operation;
 
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.serde2.thrift.Type;
@@ -30,16 +31,12 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * GetTypeInfoOperation.
  *
  */
 public class GetTypeInfoOperation extends MetadataOperation {
-
-  private static final Logger LOG = LoggerFactory.getLogger(GetTypeInfoOperation.class.getName());
 
   private final static TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addPrimitiveColumn("TYPE_NAME", Type.STRING_TYPE,
@@ -84,13 +81,11 @@ public class GetTypeInfoOperation extends MetadataOperation {
   protected GetTypeInfoOperation(HiveSession parentSession) {
     super(parentSession, OperationType.GET_TYPE_INFO);
     rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
-    LOG.info("Starting GetTypeInfoOperation");
   }
 
   @Override
   public void runInternal() throws HiveSQLException {
     setState(OperationState.RUNNING);
-    LOG.info("Fetching type info metadata");
     if (isAuthV2Enabled()) {
       authorizeMetaGets(HiveOperationType.GET_TYPEINFO, null);
     }
@@ -117,28 +112,21 @@ public class GetTypeInfoOperation extends MetadataOperation {
             type.getNumPrecRadix() //NUM_PREC_RADIX
         };
         rowSet.addRow(rowData);
-        if (LOG.isDebugEnabled()) {
-          String debugMessage = getDebugMessage("type info", RESULT_SET_SCHEMA);
-          LOG.debug(debugMessage, rowData);
-        }
-      }
-      if (LOG.isDebugEnabled() && rowSet.numRows() == 0) {
-        LOG.debug("No type info metadata has been returned.");
       }
       setState(OperationState.FINISHED);
-      LOG.info("Fetching type info metadata has been successfully finished");
     } catch (Exception e) {
       setState(OperationState.ERROR);
       throw new HiveSQLException(e);
     }
   }
 
+
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
   public TableSchema getResultSetSchema() throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     return RESULT_SET_SCHEMA;
   }
 
@@ -147,7 +135,7 @@ public class GetTypeInfoOperation extends MetadataOperation {
    */
   @Override
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);

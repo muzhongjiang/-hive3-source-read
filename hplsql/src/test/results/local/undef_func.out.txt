@@ -1,2 +1,0 @@
-Ln:1 PRINT
-Ln:1 identifier 'UNDEF1' must be declared.

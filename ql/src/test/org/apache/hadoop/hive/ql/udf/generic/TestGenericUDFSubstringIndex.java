@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.udf.generic;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredJavaObject;
@@ -27,15 +27,9 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
-/**
- * TestGenericUDFSubstringIndex.
- */
-public class TestGenericUDFSubstringIndex {
+public class TestGenericUDFSubstringIndex extends TestCase {
 
-  @Test
   public void testSubstringIndex() throws HiveException {
     GenericUDFSubstringIndex udf = new GenericUDFSubstringIndex();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;
@@ -68,7 +62,6 @@ public class TestGenericUDFSubstringIndex {
     runAndVerify("www.apache.org", ".", null, null, udf);
   }
 
-  @Test
   public void testSubstringIndexConst() throws HiveException {
     GenericUDFSubstringIndex udf = new GenericUDFSubstringIndex();
     ObjectInspector valueOI0 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;

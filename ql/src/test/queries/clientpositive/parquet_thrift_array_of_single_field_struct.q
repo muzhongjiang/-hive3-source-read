@@ -1,5 +1,3 @@
-set hive.vectorized.execution.enabled=false;
-
 -- this test creates a Parquet table with an array of single-field structs
 -- as written by parquet-thrift
 

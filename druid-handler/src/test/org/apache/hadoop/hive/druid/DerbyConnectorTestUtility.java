@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,11 +18,11 @@
 
 package org.apache.hadoop.hive.druid;
 
+import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
-import org.apache.druid.metadata.MetadataStorageConnectorConfig;
-import org.apache.druid.metadata.MetadataStorageTablesConfig;
-import org.apache.druid.metadata.storage.derby.DerbyConnector;
-import org.apache.druid.metadata.storage.derby.DerbyMetadataStorage;
+import io.druid.metadata.MetadataStorageConnectorConfig;
+import io.druid.metadata.MetadataStorageTablesConfig;
+import io.druid.metadata.storage.derby.DerbyConnector;
 import org.junit.Assert;
 import org.junit.rules.ExternalResource;
 import org.skife.jdbi.v2.DBI;
@@ -30,11 +30,7 @@ import org.skife.jdbi.v2.exceptions.UnableToObtainConnectionException;
 
 import java.sql.SQLException;
 import java.util.UUID;
-import java.util.function.Supplier;
 
-/**
- * Derby test class.
- */
 public class DerbyConnectorTestUtility extends DerbyConnector {
   private final String jdbcUri;
 
@@ -50,7 +46,7 @@ public class DerbyConnectorTestUtility extends DerbyConnector {
           Supplier<MetadataStorageTablesConfig> dbTables,
           String jdbcUri
   ) {
-    super(new DerbyMetadataStorage(config.get()), config::get, dbTables::get, new DBI(jdbcUri + ";create=true"));
+    super(config, dbTables, new DBI(jdbcUri + ";create=true"));
     this.jdbcUri = jdbcUri;
   }
 
@@ -74,9 +70,6 @@ public class DerbyConnectorTestUtility extends DerbyConnector {
     return jdbcUri;
   }
 
-  /**
-   * Derby connector rule.
-   */
   public static class DerbyConnectorRule extends ExternalResource {
     private DerbyConnectorTestUtility connector;
 
@@ -91,7 +84,7 @@ public class DerbyConnectorTestUtility extends DerbyConnector {
     private DerbyConnectorRule(
             final String defaultBase
     ) {
-      this(Suppliers.ofInstance(MetadataStorageTablesConfig.fromBase(defaultBase))::get);
+      this(Suppliers.ofInstance(MetadataStorageTablesConfig.fromBase(defaultBase)));
     }
 
     public DerbyConnectorRule(
@@ -108,7 +101,7 @@ public class DerbyConnectorTestUtility extends DerbyConnector {
 
     @Override
     protected void before() throws Throwable {
-      connector = new DerbyConnectorTestUtility(Suppliers.ofInstance(connectorConfig)::get, dbTables);
+      connector = new DerbyConnectorTestUtility(Suppliers.ofInstance(connectorConfig), dbTables);
       connector.getDBI().open().close(); // create db
     }
 
@@ -119,6 +112,10 @@ public class DerbyConnectorTestUtility extends DerbyConnector {
 
     public DerbyConnectorTestUtility getConnector() {
       return connector;
+    }
+
+    public MetadataStorageConnectorConfig getMetadataConnectorConfig() {
+      return connectorConfig;
     }
 
     public Supplier<MetadataStorageTablesConfig> metadataTablesConfigSupplier() {

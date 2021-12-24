@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -42,10 +42,10 @@ public class LocalSparkJobMonitor extends SparkJobMonitor {
     boolean done = false;
     int rc = 0;
     JobExecutionStatus lastState = null;
-    Map<SparkStage, SparkStageProgress> lastProgressMap = null;
+    Map<String, SparkStageProgress> lastProgressMap = null;
 
-    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.SPARK_RUN_JOB);
-    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.SPARK_SUBMIT_TO_RUNNING);
+    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.SPARK_RUN_JOB);
+    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.SPARK_SUBMIT_TO_RUNNING);
 
     startTime = System.currentTimeMillis();
 
@@ -68,12 +68,12 @@ public class LocalSparkJobMonitor extends SparkJobMonitor {
           }
         } else if (state != lastState || state == JobExecutionStatus.RUNNING) {
           lastState = state;
-          Map<SparkStage, SparkStageProgress> progressMap = sparkJobStatus.getSparkStageProgress();
+          Map<String, SparkStageProgress> progressMap = sparkJobStatus.getSparkStageProgress();
 
           switch (state) {
           case RUNNING:
             if (!running) {
-              perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.SPARK_SUBMIT_TO_RUNNING);
+              perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.SPARK_SUBMIT_TO_RUNNING);
               // print job stages.
               console.printInfo("\nQuery Hive on Spark job["
                 + sparkJobStatus.getJobId() + "] stages:");
@@ -89,11 +89,11 @@ public class LocalSparkJobMonitor extends SparkJobMonitor {
                 + "SucceededTasksCount(+RunningTasksCount-FailedTasksCount)/TotalTasksCount [StageCost]");
             }
 
-            updateFunction.printStatus(progressMap, lastProgressMap);
+            printStatus(progressMap, lastProgressMap);
             lastProgressMap = progressMap;
             break;
           case SUCCEEDED:
-            updateFunction.printStatus(progressMap, lastProgressMap);
+            printStatus(progressMap, lastProgressMap);
             lastProgressMap = progressMap;
             double duration = (System.currentTimeMillis() - startTime) / 1000.0;
             console.printInfo("Status: Finished successfully in "
@@ -123,12 +123,12 @@ public class LocalSparkJobMonitor extends SparkJobMonitor {
         msg = "Failed to monitor Job[ " + sparkJobStatus.getJobId() + "]" + msg;
 
         // Has to use full name to make sure it does not conflict with
-        // org.apache.commons.lang3.StringUtils
+        // org.apache.commons.lang.StringUtils
         LOG.error(msg, e);
         console.printError(msg, "\n" + org.apache.hadoop.util.StringUtils.stringifyException(e));
         rc = 1;
         done = true;
-        sparkJobStatus.setMonitorError(e);
+        sparkJobStatus.setError(e);
       } finally {
         if (done) {
           break;
@@ -136,7 +136,7 @@ public class LocalSparkJobMonitor extends SparkJobMonitor {
       }
     }
 
-    perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.SPARK_RUN_JOB);
+    perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.SPARK_RUN_JOB);
     return rc;
   }
 }

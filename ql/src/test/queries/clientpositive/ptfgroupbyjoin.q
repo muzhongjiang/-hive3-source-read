@@ -1,5 +1,3 @@
--- SORT_QUERY_RESULTS
-
 set hive.mapred.mode=nonstrict;
 create table tlb1 (id int, fkey int, val string);
 create table tlb2 (fid int, name string);

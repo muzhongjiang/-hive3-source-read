@@ -1,6 +1,5 @@
---! qt:dataset:part
 set hive.mapred.mode=nonstrict;
-create table part2_n4( 
+create table part2( 
     p2_partkey INT,
     p2_name STRING,
     p2_mfgr STRING,
@@ -12,7 +11,7 @@ create table part2_n4(
     p2_comment STRING
 );
 
-create table part3_n1( 
+create table part3( 
     p3_partkey INT,
     p3_name STRING,
     p3_mfgr STRING,
@@ -25,10 +24,10 @@ create table part3_n1(
 );
 
 explain select *
-from part p1 join part2_n4 p2 join part3_n1 p3 on p1.p_name = p2_name join part p4 
+from part p1 join part2 p2 join part3 p3 on p1.p_name = p2_name join part p4 
 where p2_name = p3_name and p1.p_name = p4.p_name;
 
 explain select *
-from part p1 join part2_n4 p2 join part3_n1 p3 on p2_name = p1.p_name join part p4 
+from part p1 join part2 p2 join part3 p3 on p2_name = p1.p_name join part p4 
 where p2_name = p3_name and p1.p_partkey = p4.p_partkey 
             and p1.p_partkey = p2_partkey;

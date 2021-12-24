@@ -1,16 +1,12 @@
---! qt:dataset:srcbucket
---! qt:dataset:src
---! qt:dataset:alltypesorc
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 SET hive.vectorized.execution.enabled=true;
-set hive.vectorized.execution.reduce.enabled=true;
 set hive.fetch.task.conversion=none;
 
 -- SORT_QUERY_RESULTS
 
 -- Use ORDER BY clauses to generate 2 stages.
-EXPLAIN VECTORIZATION DETAIL
+EXPLAIN VECTORIZATION EXPRESSION
 SELECT MIN(ctinyint) as c1,
        MAX(ctinyint),
        COUNT(ctinyint),
@@ -25,7 +21,7 @@ SELECT MIN(ctinyint) as c1,
 FROM   alltypesorc
 ORDER BY c1;
 
-EXPLAIN VECTORIZATION DETAIL
+EXPLAIN VECTORIZATION EXPRESSION
 SELECT SUM(ctinyint) as c1
 FROM   alltypesorc
 ORDER BY c1;
@@ -59,7 +55,7 @@ SELECT
 FROM alltypesorc
 ORDER BY c1;
 
-EXPLAIN VECTORIZATION DETAIL
+EXPLAIN VECTORIZATION EXPRESSION
 SELECT MIN(cbigint) as c1,
        MAX(cbigint),
        COUNT(cbigint),
@@ -74,7 +70,7 @@ SELECT MIN(cbigint) as c1,
 FROM   alltypesorc
 ORDER BY c1;
 
-EXPLAIN VECTORIZATION DETAIL
+EXPLAIN VECTORIZATION EXPRESSION
 SELECT SUM(cbigint) as c1
 FROM   alltypesorc
 ORDER BY c1;
@@ -108,7 +104,7 @@ SELECT
 FROM alltypesorc
 ORDER BY c1;
 
-EXPLAIN VECTORIZATION DETAIL
+EXPLAIN VECTORIZATION EXPRESSION
 SELECT MIN(cfloat) as c1,
        MAX(cfloat),
        COUNT(cfloat),
@@ -123,7 +119,7 @@ SELECT MIN(cfloat) as c1,
 FROM   alltypesorc
 ORDER BY c1;
 
-EXPLAIN VECTORIZATION DETAIL
+EXPLAIN VECTORIZATION EXPRESSION
 SELECT SUM(cfloat) as c1
 FROM   alltypesorc
 ORDER BY c1;
@@ -157,7 +153,7 @@ SELECT
 FROM alltypesorc
 ORDER BY c1;
 
-EXPLAIN VECTORIZATION DETAIL
+EXPLAIN VECTORIZATION EXPRESSION
 SELECT AVG(cbigint),
        (-(AVG(cbigint))),
        (-6432 + AVG(cbigint)),
@@ -268,12 +264,12 @@ explain extended select count(*),cstring1 from alltypesorc where cstring1='biolo
                                                     or cstring1='topology' group by cstring1 order by cstring1;
 
 
-drop table if exists cast_string_to_int_1_n0;
-drop table if exists cast_string_to_int_2_n0;
+drop table if exists cast_string_to_int_1;
+drop table if exists cast_string_to_int_2;
 
-create table cast_string_to_int_1_n0 as select CAST(CAST(key as float) as string),value from srcbucket;
-create table cast_string_to_int_2_n0(i int,s string);
-insert overwrite table cast_string_to_int_2_n0 select * from cast_string_to_int_1_n0;
+create table cast_string_to_int_1 as select CAST(CAST(key as float) as string),value from srcbucket;
+create table cast_string_to_int_2(i int,s string);
+insert overwrite table cast_string_to_int_2 select * from cast_string_to_int_1;
 
 --moving ALL_1 system test here
 select all key from src;

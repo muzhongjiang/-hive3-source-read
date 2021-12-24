@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,10 +33,8 @@ public class RuntimeValuesInfo implements Serializable {
   private TableDesc tableDesc;
   private List<String> dynamicValueIDs;
   private List<ExprNodeDesc> colExprs;
-  /**
-   * Column expressions of the (target) table being filtered by the semi-join.
-   */
-  private List<ExprNodeDesc> targetColumns;
+  // Column expression of the table being filtered by the semijoin optimization.
+  private ExprNodeDesc tsColExpr;
 
   // get-set methods
   public TableDesc getTableDesc() {
@@ -63,12 +61,12 @@ public class RuntimeValuesInfo implements Serializable {
     this.colExprs = colExprs;
   }
 
-  public List<ExprNodeDesc> getTargetColumns() {
-    return targetColumns;
+  public ExprNodeDesc getTsColExpr() {
+    return tsColExpr;
   }
 
-  public void setTargetColumns(List<ExprNodeDesc> targetColumns) {
-    this.targetColumns = targetColumns;
+  public void setTsColExpr(ExprNodeDesc tsColExpr) {
+    this.tsColExpr = tsColExpr;
   }
 }
 

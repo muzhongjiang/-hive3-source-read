@@ -1,4 +1,3 @@
-set hive.vectorized.execution.enabled=false;
 set parquet.column.index.access=true;
 
 DROP TABLE IF EXISTS parquet_columnar_access_stage;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
+
 // Single-Column Long hash table import.
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinLongHashMap;
 
@@ -64,7 +64,7 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
   //---------------------------------------------------------------------------
 
   // The hash map for this specialized class.
-  protected transient VectorMapJoinLongHashMap hashMap;
+  private transient VectorMapJoinLongHashMap hashMap;
 
   //---------------------------------------------------------------------------
   // Single-Column Long specific members.
@@ -76,7 +76,7 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
   private transient long max;
 
   // The column number for this one column join specialization.
-  protected transient int singleJoinColumn;
+  private transient int singleJoinColumn;
 
   //---------------------------------------------------------------------------
   // Pass-thru constructors.
@@ -91,9 +91,9 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
     super(ctx);
   }
 
-  public VectorMapJoinOuterLongOperator(CompilationOpContext ctx, OperatorDesc conf,
-      VectorizationContext vContext, VectorDesc vectorDesc) throws HiveException {
-    super(ctx, conf, vContext, vectorDesc);
+  public VectorMapJoinOuterLongOperator(CompilationOpContext ctx,
+      VectorizationContext vContext, OperatorDesc conf) throws HiveException {
+    super(ctx, vContext, conf);
   }
 
   //---------------------------------------------------------------------------
@@ -101,38 +101,54 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
   //
 
   @Override
-  protected void commonSetup() throws HiveException {
-    super.commonSetup();
-
-    /*
-     * Initialize Single-Column Long members for this specialized class.
-     */
-
-    singleJoinColumn = bigTableKeyColumnMap[0];
-  }
-
-  @Override
-  public void hashTableSetup() throws HiveException {
-    super.hashTableSetup();
-
-    /*
-     * Get our Single-Column Long hash map information for this specialized class.
-     */
-
-    hashMap = (VectorMapJoinLongHashMap) vectorMapJoinHashTable;
-    useMinMax = hashMap.useMinMax();
-    if (useMinMax) {
-      min = hashMap.min();
-      max = hashMap.max();
-    }
-  }
-
-  @Override
-  public void processBatch(VectorizedRowBatch batch) throws HiveException {
+  public void process(Object row, int tag) throws HiveException {
 
     try {
+      VectorizedRowBatch batch = (VectorizedRowBatch) row;
+
+      alias = (byte) tag;
+
+      if (needCommonSetup) {
+        // Our one time process method initialization.
+        commonSetup(batch);
+
+        /*
+         * Initialize Single-Column Long members for this specialized class.
+         */
+
+        singleJoinColumn = bigTableKeyColumnMap[0];
+
+        needCommonSetup = false;
+      }
+
+      if (needHashTableSetup) {
+        // Setup our hash table specialization.  It will be the first time the process
+        // method is called, or after a Hybrid Grace reload.
+
+        /*
+         * Get our Single-Column Long hash map information for this specialized class.
+         */
+
+        hashMap = (VectorMapJoinLongHashMap) vectorMapJoinHashTable;
+        useMinMax = hashMap.useMinMax();
+        if (useMinMax) {
+          min = hashMap.min();
+          max = hashMap.max();
+        }
+
+        needHashTableSetup = false;
+      }
+
+      batchCounter++;
 
       final int inputLogicalSize = batch.size;
+
+      if (inputLogicalSize == 0) {
+        if (isLogDebugEnabled) {
+          LOG.debug(CLASS_NAME + " batch #" + batchCounter + " empty");
+        }
+        return;
+      }
 
       // Do the per-batch setup for an outer join.
 
@@ -143,6 +159,9 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
       // later.
       boolean inputSelectedInUse = batch.selectedInUse;
       if (inputSelectedInUse) {
+        // if (!verifyMonotonicallyIncreasing(batch.selected, batch.size)) {
+        //   throw new HiveException("batch.selected is not in sort order and unique");
+        // }
         System.arraycopy(batch.selected, 0, inputSelected, 0, inputLogicalSize);
       }
 
@@ -154,6 +173,19 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
           ve.evaluate(batch);
         }
         someRowsFilteredOut = (batch.size != inputLogicalSize);
+        if (isLogDebugEnabled) {
+          if (batch.selectedInUse) {
+            if (inputSelectedInUse) {
+              LOG.debug(CLASS_NAME +
+                  " inputSelected " + intArrayToRangesString(inputSelected, inputLogicalSize) +
+                  " filtered batch.selected " + intArrayToRangesString(batch.selected, batch.size));
+            } else {
+              LOG.debug(CLASS_NAME +
+                " inputLogicalSize " + inputLogicalSize +
+                " filtered batch.selected " + intArrayToRangesString(batch.selected, batch.size));
+            }
+          }
+        }
       }
 
       // Perform any key expressions.  Results will go into scratch columns.
@@ -201,11 +233,12 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
         } else {
           // Handle *repeated* join key, if found.
           long key = vector[0];
+          // LOG.debug(CLASS_NAME + " repeated key " + key);
           if (useMinMax && (key < min || key > max)) {
             // Out of range for whole batch.
             joinResult = JoinUtil.JoinResult.NOMATCH;
           } else {
-            joinResult = hashMap.lookup(key, hashMapResults[0], matchTracker);
+            joinResult = hashMap.lookup(key, hashMapResults[0]);
           }
         }
 
@@ -213,6 +246,9 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
          * Common repeated join result processing.
          */
 
+        if (isLogDebugEnabled) {
+          LOG.debug(CLASS_NAME + " batch #" + batchCounter + " repeated joinResult " + joinResult.name());
+        }
         finishOuterRepeated(batch, joinResult, hashMapResults[0], someRowsFilteredOut,
             inputSelectedInUse, inputLogicalSize);
       } else {
@@ -220,6 +256,10 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
         /*
          * NOT Repeating.
          */
+
+        if (isLogDebugEnabled) {
+          LOG.debug(CLASS_NAME + " batch #" + batchCounter + " non-repeated");
+        }
 
         int selected[] = batch.selected;
         boolean selectedInUse = batch.selectedInUse;
@@ -245,6 +285,8 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
         for (int logical = 0; logical < batch.size; logical++) {
           int batchIndex = (selectedInUse ? selected[logical] : logical);
 
+          // VectorizedBatchUtil.debugDisplayOneRow(batch, batchIndex, taskName + ", " + getOperatorId() + " candidate " + CLASS_NAME + " batch");
+
           /*
            * Single-Column Long outer null detection.
            */
@@ -262,6 +304,7 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
 
             atLeastOneNonMatch = true;
 
+            // LOG.debug(CLASS_NAME + " logical " + logical + " batchIndex " + batchIndex + " NULL");
           } else {
 
             /*
@@ -310,9 +353,10 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
                 // Key out of range for whole hash table.
                 saveJoinResult = JoinUtil.JoinResult.NOMATCH;
               } else {
-                saveJoinResult = hashMap.lookup(currentKey, hashMapResults[hashMapResultCount],
-                    matchTracker);
+                saveJoinResult = hashMap.lookup(currentKey, hashMapResults[hashMapResultCount]);
               }
+
+              // LOG.debug(CLASS_NAME + " logical " + logical + " batchIndex " + batchIndex + " New Key " + currentKey + " " + saveJoinResult.name());
 
               /*
                * Common outer join result processing.
@@ -325,6 +369,7 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
                 equalKeySeriesIsSingleValue[equalKeySeriesCount] = hashMapResults[hashMapResultCount].isSingleRow();
                 equalKeySeriesDuplicateCounts[equalKeySeriesCount] = 1;
                 allMatchs[allMatchCount++] = batchIndex;
+                // VectorizedBatchUtil.debugDisplayOneRow(batch, batchIndex, CLASS_NAME + " MATCH isSingleValue " + equalKeySeriesIsSingleValue[equalKeySeriesCount] + " currentKey " + currentKey);
                 break;
 
               case SPILL:
@@ -335,9 +380,11 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
 
               case NOMATCH:
                 atLeastOneNonMatch = true;
+                // VectorizedBatchUtil.debugDisplayOneRow(batch, batchIndex, CLASS_NAME + " NOMATCH" + " currentKey " + currentKey);
                 break;
               }
             } else {
+              // LOG.debug(CLASS_NAME + " logical " + logical + " batchIndex " + batchIndex + " Key Continues " + saveKey + " " + saveJoinResult.name());
 
               // Series of equal keys.
 
@@ -345,6 +392,7 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
               case MATCH:
                 equalKeySeriesDuplicateCounts[equalKeySeriesCount]++;
                 allMatchs[allMatchCount++] = batchIndex;
+                // VectorizedBatchUtil.debugDisplayOneRow(batch, batchIndex, CLASS_NAME + " MATCH duplicate");
                 break;
 
               case SPILL:
@@ -354,9 +402,13 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
                 break;
 
               case NOMATCH:
+                // VectorizedBatchUtil.debugDisplayOneRow(batch, batchIndex, CLASS_NAME + " NOMATCH duplicate");
                 break;
               }
             }
+            // if (!verifyMonotonicallyIncreasing(allMatchs, allMatchCount)) {
+            //   throw new HiveException("allMatchs is not in sort order and unique");
+            // }
           }
         }
 
@@ -375,7 +427,7 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
           }
         }
 
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug(CLASS_NAME + " batch #" + batchCounter +
               " allMatchs " + intArrayToRangesString(allMatchs,allMatchCount) +
               " equalKeySeriesHashMapResultIndices " + intArrayToRangesString(equalKeySeriesHashMapResultIndices, equalKeySeriesCount) +
@@ -398,9 +450,7 @@ public class VectorMapJoinOuterLongOperator extends VectorMapJoinOuterGenerateRe
       }
 
       if (batch.size > 0) {
-
-        // Forward any rows in the Big Table batch that had results added (they will be selected).
-        // NOTE: Other result rows may have been generated in the overflowBatch.
+        // Forward any remaining selected rows.
         forwardBigTableBatch(batch);
       }
 

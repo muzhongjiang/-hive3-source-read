@@ -26,26 +26,14 @@ public class MySqlDatabaseAccessor extends GenericJdbcDatabaseAccessor {
       return addLimitToQuery(sql, limit);
     }
     else {
-      if (limit != -1) {
-        return sql + " LIMIT " + offset + "," + limit;
-      } else {
-        return sql;
-      }
+      return sql + " LIMIT " + limit + "," + offset;
     }
   }
 
 
   @Override
   protected String addLimitToQuery(String sql, int limit) {
-    if (limit != -1) {
-      return sql + " LIMIT " + limit;
-    } else {
-      return sql;
-    }
+    return sql + " LIMIT " + limit;
   }
 
-  @Override
-  public boolean needColumnQuote() {
-    return false;
-  }
 }

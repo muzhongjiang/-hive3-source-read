@@ -1,6 +1,6 @@
-SHOW FUNCTIONS LIKE 'concat';
+SHOW FUNCTIONS 'concat';
 
-SHOW FUNCTIONS LIKE concat;
+SHOW FUNCTIONS concat;
 
 DESCRIBE FUNCTION 'concat';
 

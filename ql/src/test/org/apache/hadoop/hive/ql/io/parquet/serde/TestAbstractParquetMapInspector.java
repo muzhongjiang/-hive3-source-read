@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -16,23 +16,16 @@ package org.apache.hadoop.hive.ql.io.parquet.serde;
 import java.util.HashMap;
 import java.util.Map;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertNotNull;
-import org.junit.Before;
 import org.junit.Test;
 
-/**
- * AbstractParquetMapInspector Test.
- */
-public class TestAbstractParquetMapInspector {
+public class TestAbstractParquetMapInspector extends TestCase {
 
   class TestableAbstractParquetMapInspector extends AbstractParquetMapInspector {
 
@@ -47,7 +40,7 @@ public class TestAbstractParquetMapInspector {
   }
   private TestableAbstractParquetMapInspector inspector;
 
-  @Before
+  @Override
   public void setUp() {
     inspector = new TestableAbstractParquetMapInspector(PrimitiveObjectInspectorFactory.javaIntObjectInspector,
             PrimitiveObjectInspectorFactory.javaIntObjectInspector);

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,17 +27,12 @@ import org.apache.hive.common.util.HiveStringUtils;
 
 public abstract class HiveBaseCharWritable {
   protected Text value = new Text();
-  protected int charLength = -1;
 
   public HiveBaseCharWritable() {
   }
 
   public int getCharacterLength() {
-    if (charLength != -1) {
-      return charLength;
-    }
-    charLength = HiveStringUtils.getTextUtfLength(value);
-    return charLength;
+    return HiveStringUtils.getTextUtfLength(value);
   }
 
   /**
@@ -50,7 +45,6 @@ public abstract class HiveBaseCharWritable {
 
   public void readFields(DataInput in) throws IOException {
     value.readFields(in);
-    charLength = -1;
   }
 
   public void write(DataOutput out) throws IOException {

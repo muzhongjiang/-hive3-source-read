@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,6 +17,16 @@
  */
 
 package org.apache.hadoop.hive.ql.parse;
+
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -45,29 +55,20 @@ import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.UnionWork;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  * GenTezProcContext. GenTezProcContext maintains information
  * about the tasks and operators as we walk the operator tree
  * to break them into TezTasks.
  *
  */
-public class GenTezProcContext implements NodeProcessorCtx {
+public class GenTezProcContext implements NodeProcessorCtx{
 
   public final ParseContext parseContext;
   public final HiveConf conf;
   public final List<Task<MoveWork>> moveTask;
 
   // rootTasks is the entry point for all generated tasks
-  public final List<Task<?>> rootTasks;
+  public final List<Task<? extends Serializable>> rootTasks;
 
   public final Set<ReadEntity> inputs;
   public final Set<WriteEntity> outputs;
@@ -163,7 +164,7 @@ public class GenTezProcContext implements NodeProcessorCtx {
 
   @SuppressWarnings("unchecked")
   public GenTezProcContext(HiveConf conf, ParseContext parseContext,
-      List<Task<MoveWork>> moveTask, List<Task<?>> rootTasks,
+      List<Task<MoveWork>> moveTask, List<Task<? extends Serializable>> rootTasks,
       Set<ReadEntity> inputs, Set<WriteEntity> outputs) {
 
     this.conf = conf;
@@ -173,7 +174,7 @@ public class GenTezProcContext implements NodeProcessorCtx {
     this.inputs = inputs;
     this.outputs = outputs;
     this.currentTask = (TezTask) TaskFactory.get(
-        new TezWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID), conf));
+         new TezWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID), conf), conf);
     this.leafOperatorToFollowingWork = new LinkedHashMap<Operator<?>, BaseWork>();
     this.linkOpWithWorkMap = new LinkedHashMap<Operator<?>, Map<BaseWork, TezEdgeProperty>>();
     this.linkWorkWithReduceSinkMap = new LinkedHashMap<BaseWork, List<ReduceSinkOperator>>();
@@ -185,7 +186,7 @@ public class GenTezProcContext implements NodeProcessorCtx {
     this.currentMapJoinOperators = new LinkedHashSet<MapJoinOperator>();
     this.linkChildOpWithDummyOp = new LinkedHashMap<Operator<?>, List<Operator<?>>>();
     this.dependencyTask = (DependencyCollectionTask)
-    TaskFactory.get(new DependencyCollectionWork());
+        TaskFactory.get(new DependencyCollectionWork(), conf);
     this.unionWorkMap = new LinkedHashMap<Operator<?>, BaseWork>();
     this.rootUnionWorkMap = new LinkedHashMap<Operator<?>, UnionWork>();
     this.currentUnionOperators = new LinkedList<UnionOperator>();

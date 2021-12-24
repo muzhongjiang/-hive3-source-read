@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,8 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hive.common.classification.InterfaceAudience;
-import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.apache.hadoop.hive.metastore.api.Order;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hive.hcatalog.common.HCatException;
@@ -33,8 +31,6 @@ import org.apache.hive.hcatalog.data.schema.HCatFieldSchema;
  * The Class HCatCreateTableDesc for defining attributes for a new table.
  */
 @SuppressWarnings("deprecation")
-@InterfaceAudience.Public
-@InterfaceStability.Stable
 public class HCatCreateTableDesc {
 
   private boolean ifNotExists;
@@ -99,7 +95,7 @@ public class HCatCreateTableDesc {
    *
    * @return the table name
    */
-  @Deprecated // @deprecated in favour of {@link HCatTable.#getDbTableName()}. To be removed in Hive 0.16.
+  @Deprecated // @deprecated in favour of {@link HCatTable.#getTableName()}. To be removed in Hive 0.16.
   public String getTableName() {
     return this.hcatTable.getTableName();
   }

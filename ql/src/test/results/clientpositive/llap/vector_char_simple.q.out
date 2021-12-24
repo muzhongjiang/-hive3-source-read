@@ -50,15 +50,11 @@ from char_2
 order by key asc
 limit 5
 PREHOOK: type: QUERY
-PREHOOK: Input: default@char_2
-#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization only select key, value
 from char_2
 order by key asc
 limit 5
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@char_2
-#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -79,10 +75,9 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
-                allNative: true
+                allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
         Reducer 2 
@@ -90,6 +85,7 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                groupByVectorOutput: true
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
@@ -140,15 +136,11 @@ from char_2
 order by key desc
 limit 5
 PREHOOK: type: QUERY
-PREHOOK: Input: default@char_2
-#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization only select key, value
 from char_2
 order by key desc
 limit 5
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@char_2
-#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -169,10 +161,9 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
-                allNative: true
+                allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
         Reducer 2 
@@ -180,6 +171,7 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                groupByVectorOutput: true
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
@@ -229,13 +221,9 @@ POSTHOOK: Output: default@char_3
 PREHOOK: query: explain vectorization only operator
 insert into table char_3 select cint from alltypesorc limit 10
 PREHOOK: type: QUERY
-PREHOOK: Input: default@alltypesorc
-PREHOOK: Output: default@char_3
 POSTHOOK: query: explain vectorization only operator
 insert into table char_3 select cint from alltypesorc limit 10
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@alltypesorc
-POSTHOOK: Output: default@char_3
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -256,25 +244,25 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                    Limit Vectorization:
-                        className: VectorLimitOperator
+                    Select Vectorization:
+                        className: VectorSelectOperator
                         native: true
-                      Select Vectorization:
-                          className: VectorSelectOperator
+                      Limit Vectorization:
+                          className: VectorLimitOperator
                           native: true
                         Reduce Sink Vectorization:
-                            className: VectorReduceSinkEmptyKeyOperator
-                            native: true
-                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
+                            className: VectorReduceSinkOperator
+                            native: false
+                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
+                            nativeConditionsNotMet: No TopN IS false
             Execution mode: vectorized, llap
             LLAP IO: all inputs
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
-                allNative: true
+                allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
         Reducer 2 
@@ -282,20 +270,24 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                groupByVectorOutput: true
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
             Reduce Operator Tree:
-                Limit Vectorization:
-                    className: VectorLimitOperator
+                Select Vectorization:
+                    className: VectorSelectOperator
                     native: true
-                  Select Vectorization:
-                      className: VectorSelectOperator
+                  Limit Vectorization:
+                      className: VectorLimitOperator
                       native: true
-                      selectExpressions: CastLongToChar(col 0:int, maxLength 12) -> 1:char(12)
-                    File Sink Vectorization:
-                        className: VectorFileSinkOperator
-                        native: false
+                    Select Vectorization:
+                        className: VectorSelectOperator
+                        native: true
+                        selectExpressions: CastLongToChar(col 0, maxLength 12) -> 1:Char
+                      File Sink Vectorization:
+                          className: VectorFileSinkOperator
+                          native: false
 
   Stage: Stage-2
 

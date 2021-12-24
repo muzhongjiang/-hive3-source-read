@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,18 +20,14 @@ package org.apache.hadoop.hive.ql.parse;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.common.ValidReadTxnList;
-import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
-import org.apache.hadoop.hive.metastore.utils.TestTxnDbUtil;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.QueryState;
@@ -226,18 +222,15 @@ public class TestUpdateDeleteSemanticAnalyzer {
   }
 
   @Before
-  public void setup() throws Exception {
-    queryState = new QueryState.Builder().build();
+  public void setup() {
+    queryState = new QueryState(null);
     conf = queryState.getConf();
     conf
     .setVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER,
         "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory");
+    conf.setVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE, "nonstrict");
     conf.setVar(HiveConf.ConfVars.HIVEMAPREDMODE, "nonstrict");
     conf.setVar(HiveConf.ConfVars.HIVE_TXN_MANAGER, "org.apache.hadoop.hive.ql.lockmgr.DbTxnManager");
-    conf.setBoolVar(HiveConf.ConfVars.HIVE_IN_TEST, true);
-    conf.set(ValidTxnList.VALID_TXNS_KEY,
-        new ValidReadTxnList(new long[0], new BitSet(), 1000, Long.MAX_VALUE).writeToString());
-    TestTxnDbUtil.prepDb(conf);
   }
 
   public void cleanupTables() throws HiveException {
@@ -269,7 +262,6 @@ public class TestUpdateDeleteSemanticAnalyzer {
 
     BaseSemanticAnalyzer sem = SemanticAnalyzerFactory.get(queryState, tree);
     SessionState.get().initTxnMgr(conf);
-    SessionState.get().getTxnMgr().openTxn(ctx, conf.getUser());
     db = sem.getDb();
 
     // I have to create the tables here (rather than in setup()) because I need the Hive
@@ -306,11 +298,11 @@ public class TestUpdateDeleteSemanticAnalyzer {
     ExplainConfiguration config = new ExplainConfiguration();
     config.setExtended(true);
     ExplainWork work = new ExplainWork(tmp, sem.getParseContext(), sem.getRootTasks(),
-        sem.getFetchTask(), null, sem, config, null, plan.getOptimizedQueryString(), plan.getOptimizedCBOPlan());
+        sem.getFetchTask(), sem, config, null);
     ExplainTask task = new ExplainTask();
     task.setWork(work);
     task.initialize(queryState, plan, null, null);
-    task.execute();
+    task.execute(null);
     FSDataInputStream in = fs.open(tmp);
     StringBuilder builder = new StringBuilder();
     final int bufSz = 4096;

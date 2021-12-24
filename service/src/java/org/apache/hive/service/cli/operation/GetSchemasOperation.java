@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,8 @@
 
 package org.apache.hive.service.cli.operation;
 
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
@@ -30,17 +31,12 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * GetSchemasOperation.
  *
  */
 public class GetSchemasOperation extends MetadataOperation {
-
-  private static final Logger LOG = LoggerFactory.getLogger(GetSchemasOperation.class.getName());
-
   private final String catalogName;
   private final String schemaName;
 
@@ -55,15 +51,11 @@ public class GetSchemasOperation extends MetadataOperation {
     this.catalogName = catalogName;
     this.schemaName = schemaName;
     this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
-    LOG.info(
-        "Starting GetSchemasOperation with the following parameters: catalogName={}, schemaName={}",
-        catalogName, schemaName);
   }
 
   @Override
   public void runInternal() throws HiveSQLException {
     setState(OperationState.RUNNING);
-    LOG.info("Fetching schema metadata");
     if (isAuthV2Enabled()) {
       String cmdStr = "catalog : " + catalogName + ", schemaPattern : " + schemaName;
       authorizeMetaGets(HiveOperationType.GET_SCHEMAS, null, cmdStr);
@@ -73,28 +65,21 @@ public class GetSchemasOperation extends MetadataOperation {
       String schemaPattern = convertSchemaPattern(schemaName);
       for (String dbName : metastoreClient.getDatabases(schemaPattern)) {
         rowSet.addRow(new Object[] {dbName, DEFAULT_HIVE_CATALOG});
-        if (LOG.isDebugEnabled()) {
-          String debugMessage = getDebugMessage("schema", RESULT_SET_SCHEMA);
-          LOG.debug(debugMessage, dbName, DEFAULT_HIVE_CATALOG);
-        }
-      }
-      if (LOG.isDebugEnabled() && rowSet.numRows() == 0) {
-        LOG.debug("No schema metadata has been returned.");
       }
       setState(OperationState.FINISHED);
-      LOG.info("Fetching schema metadata has been successfully finished");
     } catch (Exception e) {
       setState(OperationState.ERROR);
       throw new HiveSQLException(e);
     }
   }
 
+
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
   public TableSchema getResultSetSchema() throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     return RESULT_SET_SCHEMA;
   }
 
@@ -103,7 +88,7 @@ public class GetSchemasOperation extends MetadataOperation {
    */
   @Override
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);

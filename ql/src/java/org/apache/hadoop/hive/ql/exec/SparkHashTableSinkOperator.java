@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +22,6 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.commons.io.FileExistsException;
 import org.apache.hadoop.conf.Configuration;
@@ -50,12 +49,10 @@ public class SparkHashTableSinkOperator
   private final String CLASS_NAME = this.getClass().getName();
   private final transient PerfLogger perfLogger = SessionState.getPerfLogger();
   protected static final Logger LOG = LoggerFactory.getLogger(SparkHashTableSinkOperator.class.getName());
-  private static final String MAPRED_FILE_REPLICATION = "mapreduce.client.submit.file.replication";
-  private static final int DEFAULT_REPLICATION = 10;
+  public static final String DFS_REPLICATION_MAX = "dfs.replication.max";
+  private int minReplication = 10;
 
   private final HashTableSinkOperator htsOperator;
-
-  private short numReplication;
 
   /** Kryo ctor. */
   protected SparkHashTableSinkOperator() {
@@ -75,7 +72,9 @@ public class SparkHashTableSinkOperator
     byte tag = conf.getTag();
     inputOIs[tag] = inputObjInspectors[0];
     conf.setTagOrder(new Byte[]{ tag });
-    numReplication = (short) hconf.getInt(MAPRED_FILE_REPLICATION, DEFAULT_REPLICATION);
+    int dfsMaxReplication = hconf.getInt(DFS_REPLICATION_MAX, minReplication);
+    // minReplication value should not cross the value of dfs.replication.max
+    minReplication = Math.min(minReplication, dfsMaxReplication);
     htsOperator.setConf(conf);
     htsOperator.initialize(hconf, inputOIs);
   }
@@ -95,14 +94,16 @@ public class SparkHashTableSinkOperator
           || mapJoinTables[tag] == null) {
         LOG.debug("mapJoinTable is null");
       } else if (abort) {
-        LOG.debug("Aborting, skip dumping side-table for tag: {}", tag);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Aborting, skip dumping side-table for tag: " + tag);
+        }
       } else {
         String method = PerfLogger.SPARK_FLUSH_HASHTABLE + getName();
-        perfLogger.perfLogBegin(CLASS_NAME, method);
+        perfLogger.PerfLogBegin(CLASS_NAME, method);
         try {
           flushToFile(mapJoinTables[tag], tag);
         } finally {
-          perfLogger.perfLogEnd(CLASS_NAME, method);
+          perfLogger.PerfLogEnd(CLASS_NAME, method);
         }
       }
       super.closeOp(abort);
@@ -135,11 +136,12 @@ public class SparkHashTableSinkOperator
     String dumpFilePrefix = conf.getDumpFilePrefix();
     Path path = Utilities.generatePath(tmpURI, dumpFilePrefix, tag, fileName);
     FileSystem fs = path.getFileSystem(htsOperator.getConfiguration());
+    short replication = fs.getDefaultReplication(path);
 
     fs.mkdirs(path);  // Create the folder and its parents if not there
     while (true) {
       path = new Path(path, getOperatorId()
-        + "-" + Math.abs(ThreadLocalRandom.current().nextInt()));
+        + "-" + Math.abs(Utilities.randGen.nextInt()));
       try {
         // This will guarantee file name uniqueness.
         if (fs.createNewFile(path)) {
@@ -149,7 +151,9 @@ public class SparkHashTableSinkOperator
         // No problem, use a new name
       }
     }
-
+    // TODO find out numOfPartitions for the big table
+    int numOfPartitions = replication;
+    replication = (short) Math.max(minReplication, numOfPartitions);
     htsOperator.console.printInfo(Utilities.now() + "\tDump the side-table for tag: " + tag
       + " with group count: " + tableContainer.size() + " into file: " + path);
     try {
@@ -158,7 +162,7 @@ public class SparkHashTableSinkOperator
       ObjectOutputStream out = null;
       MapJoinTableContainerSerDe mapJoinTableSerde = htsOperator.mapJoinTableSerdes[tag];
       try {
-        os = fs.create(path, numReplication);
+        os = fs.create(path, replication);
         out = new ObjectOutputStream(new BufferedOutputStream(os, 4096));
         mapJoinTableSerde.persist(out, tableContainer);
       } finally {

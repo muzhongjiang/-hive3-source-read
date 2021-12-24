@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.optimizer.spark;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,12 +33,12 @@ import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.spark.SparkTask;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.PreOrderWalker;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.optimizer.physical.PhysicalContext;
 import org.apache.hadoop.hive.ql.optimizer.physical.PhysicalPlanResolver;
@@ -54,16 +55,16 @@ public class SparkSkewJoinResolver implements PhysicalPlanResolver {
   @Override
   public PhysicalContext resolve(PhysicalContext pctx) throws SemanticException {
     SparkSkewJoinProcFactory.getVisitedJoinOp().clear();
-    SemanticDispatcher disp = new SparkSkewJoinTaskDispatcher(pctx);
+    Dispatcher disp = new SparkSkewJoinTaskDispatcher(pctx);
     // since we may split current task, use a pre-order walker
-    SemanticGraphWalker ogw = new PreOrderWalker(disp);
+    GraphWalker ogw = new PreOrderWalker(disp);
     ArrayList<Node> topNodes = new ArrayList<Node>();
     topNodes.addAll(pctx.getRootTasks());
     ogw.startWalking(topNodes, null);
     return pctx;
   }
 
-  class SparkSkewJoinTaskDispatcher implements SemanticDispatcher {
+  class SparkSkewJoinTaskDispatcher implements Dispatcher {
     private PhysicalContext physicalContext;
 
     public SparkSkewJoinTaskDispatcher(PhysicalContext context) {
@@ -76,17 +77,17 @@ public class SparkSkewJoinResolver implements PhysicalPlanResolver {
         throws SemanticException {
 
       @SuppressWarnings("unchecked")
-      Task<?> task = (Task<?>) nd;
+      Task<? extends Serializable> task = (Task<? extends Serializable>) nd;
       if (task instanceof SparkTask) {
         SparkWork sparkWork = ((SparkTask) task).getWork();
         SparkSkewJoinProcCtx skewJoinProcCtx =
             new SparkSkewJoinProcCtx(task, physicalContext.getParseContext());
-        Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+        Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
         opRules.put(new RuleRegExp("R1", CommonJoinOperator.getOperatorName() + "%"),
             SparkSkewJoinProcFactory.getJoinProc());
-        SemanticDispatcher disp = new DefaultRuleDispatcher(
+        Dispatcher disp = new DefaultRuleDispatcher(
             SparkSkewJoinProcFactory.getDefaultProc(), opRules, skewJoinProcCtx);
-        SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+        GraphWalker ogw = new DefaultGraphWalker(disp);
         ArrayList<Node> topNodes = new ArrayList<Node>();
         // since we may need to split the task, let's walk the graph bottom-up
         List<ReduceWork> reduceWorkList = sparkWork.getAllReduceWork();
@@ -113,7 +114,7 @@ public class SparkSkewJoinResolver implements PhysicalPlanResolver {
     // need a map from the reducer to the corresponding ReduceWork
     private Map<Operator<?>, ReduceWork> reducerToReduceWork;
 
-    public SparkSkewJoinProcCtx(Task<?> task,
+    public SparkSkewJoinProcCtx(Task<? extends Serializable> task,
                                 ParseContext parseCtx) {
       super(task, parseCtx);
       reducerToReduceWork = new HashMap<Operator<?>, ReduceWork>();

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,7 +26,6 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.exec.tez.TezContext;
@@ -57,15 +56,6 @@ public class MapredContext {
       logger.debug("MapredContext initialized.");
     }
     return context;
-  }
-
-  // Creates a dummy MapredContext that uses conf as the basis for JobConf
-  // - the intent is for this to be used in situations where there is a
-  // need to provide a MapredContext but one is not available. (For example
-  // when hive.fetch.task.conversion optimization kicks in UDFs still expect
-  // configure to be called but a MapredContext isn't available)
-  public static MapredContext createDummy(Configuration conf) {
-    return new MapredContext(false, new JobConf(conf));
   }
 
   public static void close() {

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,10 +21,7 @@ package org.apache.hadoop.hive.ql.plan;
 import java.io.Serializable;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.ql.ddl.table.create.CreateTableDesc;
-import org.apache.hadoop.hive.ql.ddl.view.create.CreateMaterializedViewDesc;
-import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.io.AcidUtils;
+import org.apache.hadoop.hive.ql.exec.PTFUtils;
 
 /**
  * LoadFileDesc.
@@ -37,52 +34,45 @@ public class LoadFileDesc extends LoadDesc implements Serializable {
   // list of columns, comma separated
   private String columns;
   private String columnTypes;
-  private transient CreateTableDesc ctasCreateTableDesc;
-  private transient CreateMaterializedViewDesc createViewDesc;
-  private boolean isMmCtas;
-  private String moveTaskId;
+  private String destinationCreateTable;
+
+  public LoadFileDesc() {
+  }
 
   public LoadFileDesc(final LoadFileDesc o) {
-    super(o.getSourcePath(), o.getWriteType());
+    super(o.getSourcePath());
 
     this.targetDir = o.targetDir;
     this.isDfsDir = o.isDfsDir;
     this.columns = o.columns;
     this.columnTypes = o.columnTypes;
-    this.isMmCtas = o.isMmCtas;
-    this.ctasCreateTableDesc = o.ctasCreateTableDesc;
-    this.createViewDesc = o.createViewDesc;
+    this.destinationCreateTable = o.destinationCreateTable;
   }
 
-  public LoadFileDesc(final CreateTableDesc createTableDesc, final CreateMaterializedViewDesc createViewDesc,
-      final Path sourcePath, final Path targetDir, final boolean isDfsDir,
-      final String columns, final String columnTypes, AcidUtils.Operation writeType, boolean isMmCtas) {
-    this(sourcePath, targetDir, isDfsDir, columns, columnTypes, writeType, isMmCtas);
-    if (createTableDesc != null && createTableDesc.isCTAS()) {
-      this.ctasCreateTableDesc = createTableDesc;
-    }
-    if (createViewDesc != null) {
-      this.createViewDesc = createViewDesc;
+  public LoadFileDesc(final CreateTableDesc createTableDesc, final CreateViewDesc  createViewDesc,
+                      final Path sourcePath, final Path targetDir, final boolean isDfsDir,
+                      final String columns, final String columnTypes) {
+    this(sourcePath, targetDir, isDfsDir, columns, columnTypes);
+    if (createTableDesc != null && createTableDesc.getDatabaseName() != null
+        && createTableDesc.getTableName() != null) {
+      destinationCreateTable = (createTableDesc.getTableName().contains(".") ? "" : createTableDesc
+          .getDatabaseName() + ".")
+          + createTableDesc.getTableName();
+    } else if (createViewDesc != null) {
+      // The work is already done in analyzeCreateView to assure that the view name is fully
+      // qualified.
+      destinationCreateTable = createViewDesc.getViewName();
     }
   }
 
   public LoadFileDesc(final Path sourcePath, final Path targetDir,
-      final boolean isDfsDir, final String columns, final String columnTypes, boolean isMmCtas) {
-    this(sourcePath, targetDir, isDfsDir, columns, columnTypes, AcidUtils.Operation.NOT_ACID, isMmCtas);
-  }
+      final boolean isDfsDir, final String columns, final String columnTypes) {
 
-  private LoadFileDesc(final Path sourcePath, final Path targetDir,
-      final boolean isDfsDir, final String columns,
-      final String columnTypes, AcidUtils.Operation writeType, boolean isMmCtas) {
-    super(sourcePath, writeType);
-    if (Utilities.FILE_OP_LOGGER.isTraceEnabled()) {
-      Utilities.FILE_OP_LOGGER.trace("creating LFD from " + sourcePath + " to " + targetDir);
-    }
+    super(sourcePath);
     this.targetDir = targetDir;
     this.isDfsDir = isDfsDir;
     this.columns = columns;
     this.columnTypes = columnTypes;
-    this.isMmCtas = isMmCtas;
   }
 
   @Explain(displayName = "destination")
@@ -133,23 +123,10 @@ public class LoadFileDesc extends LoadDesc implements Serializable {
     this.columnTypes = columnTypes;
   }
 
-  public CreateTableDesc getCtasCreateTableDesc() {
-    return ctasCreateTableDesc;
-  }
-
-  public CreateMaterializedViewDesc getCreateViewDesc() {
-    return createViewDesc;
-  }
-
-  public boolean isMmCtas() {
-    return isMmCtas;
-  }
-
-  public String getMoveTaskId() {
-    return moveTaskId;
-  }
-
-  public void setMoveTaskId(String moveTaskId) {
-    this.moveTaskId = moveTaskId;
+  /**
+   * @return the destinationCreateTable
+   */
+  public String getDestinationCreateTable(){
+    return destinationCreateTable;
   }
 }

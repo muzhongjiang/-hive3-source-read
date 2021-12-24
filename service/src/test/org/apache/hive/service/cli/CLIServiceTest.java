@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -240,12 +240,11 @@ public abstract class CLIServiceTest {
      * to give a runtime time error.
      * Also check that the sqlState and errorCode should be set
      */
-    // TODO: this is brittle.. anything that touches this path during compile will break this test
     queryString = "CREATE TABLE NON_EXISTING_TAB (ID STRING) location 'invalid://localhost:10000/a/b/c'";
     opStatus = runAsyncAndWait(sessionHandle, queryString, confOverlay, OperationState.ERROR, longPollingTimeout);
     // sqlState, errorCode should be set
     assertEquals(opStatus.getOperationException().getSQLState(), "08S01");
-    assertEquals(opStatus.getOperationException().getErrorCode(), 40000);
+    assertEquals(opStatus.getOperationException().getErrorCode(), 1);
     /**
      * Execute an async query with default config
      */
@@ -366,7 +365,7 @@ public abstract class CLIServiceTest {
 
     @Override
     public void postAnalyze(HiveSemanticAnalyzerHookContext context,
-      List<Task<?>> rootTasks) throws SemanticException {
+      List<Task<? extends Serializable>> rootTasks) throws SemanticException {
     }
   }
 
@@ -536,7 +535,7 @@ public abstract class CLIServiceTest {
     long longPollingTimeDelta;
     OperationStatus opStatus = null;
     OperationState state = null;
-    int count = 0;
+    int count = 0;    
     long start = System.currentTimeMillis();
     while (true) {
       // Break if iteration times out

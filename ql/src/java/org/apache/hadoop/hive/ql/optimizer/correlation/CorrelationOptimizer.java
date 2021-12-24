@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -50,12 +50,12 @@ import org.apache.hadoop.hive.ql.exec.UnionOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.optimizer.MapJoinProcessor;
@@ -154,7 +154,7 @@ public class CorrelationOptimizer extends Transform {
           aliasTotalKnownInputSize += size;
           Long es = aliasToSize.get(alias);
           if(es == null) {
-            es = Long.valueOf(0);
+            es = new Long(0);
           }
           es += size;
           aliasToSize.put(alias, es);
@@ -203,11 +203,10 @@ public class CorrelationOptimizer extends Transform {
   /**
    * Detect correlations and transform the query tree.
    *
-   * @param pctx
+   * @param pactx
    *          current parse context
    * @throws SemanticException
    */
-  @Override
   public ParseContext transform(ParseContext pctx) throws SemanticException {
 
     pCtx = pctx;
@@ -218,12 +217,12 @@ public class CorrelationOptimizer extends Transform {
 
     // detect correlations
     CorrelationNodeProcCtx corrCtx = new CorrelationNodeProcCtx(pCtx);
-    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
     opRules.put(new RuleRegExp("R1", ReduceSinkOperator.getOperatorName() + "%"),
         new CorrelationNodeProc());
 
-    SemanticDispatcher disp = new DefaultRuleDispatcher(getDefaultProc(), opRules, corrCtx);
-    SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+    Dispatcher disp = new DefaultRuleDispatcher(getDefaultProc(), opRules, corrCtx);
+    GraphWalker ogw = new DefaultGraphWalker(disp);
 
     // Create a list of topOp nodes
     List<Node> topNodes = new ArrayList<Node>();
@@ -249,12 +248,12 @@ public class CorrelationOptimizer extends Transform {
     return pCtx;
   }
 
-  private class CorrelationNodeProc implements SemanticNodeProcessor {
+  private class CorrelationNodeProc implements NodeProcessor {
 
     private void analyzeReduceSinkOperatorsOfJoinOperator(JoinCondDesc[] joinConds,
         List<Operator<? extends OperatorDesc>> rsOps, Operator<? extends OperatorDesc> curentRsOp,
         Set<ReduceSinkOperator> correlatedRsOps) {
-      if (correlatedRsOps.contains(curentRsOp)) {
+      if (correlatedRsOps.contains((ReduceSinkOperator) curentRsOp)) {
         return;
       }
       correlatedRsOps.add((ReduceSinkOperator) curentRsOp);
@@ -266,8 +265,7 @@ public class CorrelationOptimizer extends Transform {
         if (pos == joinCond.getLeft()) {
           if (type == JoinDesc.INNER_JOIN ||
               type == JoinDesc.LEFT_OUTER_JOIN ||
-              type == JoinDesc.LEFT_SEMI_JOIN ||
-              type == JoinDesc.ANTI_JOIN) {
+              type == JoinDesc.LEFT_SEMI_JOIN) {
             Operator<? extends OperatorDesc> newCurrentRsOps = rsOps.get(joinCond.getRight());
             analyzeReduceSinkOperatorsOfJoinOperator(joinConds, rsOps, newCurrentRsOps,
                 correlatedRsOps);
@@ -571,7 +569,6 @@ public class CorrelationOptimizer extends Transform {
       return reduceSinkOperators;
     }
 
-    @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx ctx,
         Object... nodeOutputs) throws SemanticException {
       CorrelationNodeProcCtx corrCtx = (CorrelationNodeProcCtx) ctx;
@@ -631,11 +628,11 @@ public class CorrelationOptimizer extends Transform {
     }
   }
 
-  private SemanticNodeProcessor getDefaultProc() {
-    return new SemanticNodeProcessor() {
+  private NodeProcessor getDefaultProc() {
+    return new NodeProcessor() {
       @Override
       public Object process(Node nd, Stack<Node> stack,
-                            NodeProcessorCtx ctx, Object... nodeOutputs) throws SemanticException {
+          NodeProcessorCtx ctx, Object... nodeOutputs) throws SemanticException {
         Operator<? extends OperatorDesc> op = (Operator<? extends OperatorDesc>) nd;
         LOG.info("Walk to operator " + op.getIdentifier() + " "
             + op.getName() + ". No actual work to do");

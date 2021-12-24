@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,26 +28,30 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 
 import org.apache.hadoop.hive.common.io.DiskRangeList;
-import org.apache.hadoop.hive.ql.io.orc.encoded.LlapDataReader;
 import org.apache.orc.CompressionCodec;
+import org.apache.orc.DataReader;
 import org.apache.orc.OrcFile;
 import org.apache.orc.TypeDescription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.llap.IncrementalObjectSizeEstimator;
+import org.apache.hadoop.hive.llap.IncrementalObjectSizeEstimator.ObjectEstimator;
+import org.apache.hadoop.hive.llap.io.metadata.OrcFileMetadata;
+import org.apache.hadoop.hive.llap.io.metadata.OrcStripeMetadata;
 import org.apache.orc.impl.OrcIndex;
 import org.apache.orc.StripeInformation;
-import org.apache.hadoop.hive.ql.util.IncrementalObjectSizeEstimator;
-import org.apache.hadoop.hive.ql.util.IncrementalObjectSizeEstimator.ObjectEstimator;
+import org.apache.hadoop.hive.ql.io.orc.encoded.OrcBatchKey;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.orc.OrcProto;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import com.google.protobuf.CodedOutputStream;
 
 public class TestIncrementalObjectSizeEstimator {
   private static final Logger LOG = LoggerFactory.getLogger(TestIncrementalObjectSizeEstimator.class);
 
-  private static class DummyMetadataReader implements LlapDataReader {
+  private static class DummyMetadataReader implements DataReader {
     public boolean doStreamStep = false;
     public boolean isEmpty;
 
@@ -149,7 +153,7 @@ public class TestIncrementalObjectSizeEstimator {
     }
 
     @Override
-    public LlapDataReader clone() {
+    public DataReader clone() {
       return null;
     }
 
@@ -162,7 +166,7 @@ public class TestIncrementalObjectSizeEstimator {
       return null;
     }
   }
-/*
+
   @Test
   public void testMetadata() throws IOException {
     // Mostly tests that it doesn't crash.
@@ -204,7 +208,7 @@ public class TestIncrementalObjectSizeEstimator {
     root = map.get(OrcFileMetadata.class);
 
     LOG.info("Estimated " + root.estimate(ofm, map) + " for a dummy OFM");
-  }*/
+  }
 
   private static class Struct {
     Integer i;
@@ -221,22 +225,22 @@ public class TestIncrementalObjectSizeEstimator {
   @Test
   public void testSimpleTypes() {
     JavaDataModel memModel = JavaDataModel.get();
-    int intSize = runEstimate(Integer.valueOf(0), memModel, null);
-    runEstimate("", memModel, "empty string");
-    runEstimate("foobarzzzzzzzzzzzzzz", memModel, null);
+    int intSize = runEstimate(new Integer(0), memModel, null);
+    runEstimate(new String(""), memModel, "empty string");
+    runEstimate(new String("foobarzzzzzzzzzzzzzz"), memModel, null);
     List<Object> list = new ArrayList<Object>(0);
     runEstimate(list, memModel, "empty ArrayList");
-    list.add("zzz");
+    list.add(new String("zzz"));
     runEstimate(list, memModel, "ArrayList - one string");
-    list.add(Integer.valueOf(5));
-    list.add(Integer.valueOf(6));
+    list.add(new Integer(5));
+    list.add(new Integer(6));
     int arrayListSize = runEstimate(list, memModel, "ArrayList - 3 elements");
     LinkedHashSet<Object> list2 = new LinkedHashSet<Object>(0);
     runEstimate(list2, memModel, "empty LinkedHashSet");
-    list2.add("zzzz");
+    list2.add(new String("zzzz"));
     runEstimate(list2, memModel, "LinkedHashSet - one string");
-    list2.add(Integer.valueOf(7));
-    list2.add(Integer.valueOf(4));
+    list2.add(new Integer(7));
+    list2.add(new Integer(4));
     int lhsSize = runEstimate(list2, memModel, "LinkedHashSet - 3 elements");
 
     Struct struct = new Struct();

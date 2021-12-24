@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,17 +27,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 
+import junit.framework.TestCase;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import org.junit.Test;
+public class TestGenericUDFLpad extends TestCase {
 
-/**
- * TestGenericUDFLpad.
- */
-public class TestGenericUDFLpad {
-
-  @Test
   public void testLpad() throws HiveException {
     GenericUDFLpad udf = new GenericUDFLpad();
     ObjectInspector valueOI1 = PrimitiveObjectInspectorFactory.writableStringObjectInspector;

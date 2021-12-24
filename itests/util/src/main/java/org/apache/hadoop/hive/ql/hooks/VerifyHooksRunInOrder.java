@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,7 @@ package org.apache.hadoop.hive.ql.hooks;
 import java.io.Serializable;
 import java.util.List;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.apache.hadoop.hive.ql.HiveDriverRunHook;
 import org.apache.hadoop.hive.ql.HiveDriverRunHookContext;
@@ -110,7 +110,7 @@ public class VerifyHooksRunInOrder {
 
     @Override
     public void postAnalyze(HiveSemanticAnalyzerHookContext context,
-        List<Task<?>> rootTasks) throws SemanticException {
+        List<Task<? extends Serializable>> rootTasks) throws SemanticException {
       LogHelper console = SessionState.getConsole();
 
       if (console == null) {
@@ -145,7 +145,7 @@ public class VerifyHooksRunInOrder {
 
     @Override
     public void postAnalyze(HiveSemanticAnalyzerHookContext context,
-        List<Task<?>> rootTasks) throws SemanticException {
+        List<Task<? extends Serializable>> rootTasks) throws SemanticException {
       LogHelper console = SessionState.getConsole();
 
       if (console == null) {

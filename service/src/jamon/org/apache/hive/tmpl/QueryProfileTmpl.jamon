@@ -17,19 +17,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 </%doc>
 <%args>
-QueryInfo queryInfo;
-HiveConf hiveConf;
+SQLOperationDisplay sod;
 </%args>
 <%import>
 java.util.*;
 org.apache.hadoop.hive.ql.QueryDisplay;
-org.apache.hadoop.hive.ql.QueryInfo;
-org.apache.hadoop.hive.conf.HiveConf;
+org.apache.hive.service.cli.operation.SQLOperationDisplay;
 </%import>
-<%class>
-private boolean showGraph = false;
-private boolean showStats = false;
-</%class>
 <!--[if IE]>
 <!DOCTYPE html>
 <![endif]-->
@@ -44,22 +38,6 @@ private boolean showStats = false;
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
     <link href="/static/css/bootstrap-theme.min.css" rel="stylesheet">
     <link href="/static/css/hive.css" rel="stylesheet">
-
-    <script src="/static/js/jquery.min.js" type="text/javascript"></script>
-    <script src="/static/js/bootstrap.min.js" type="text/javascript"></script>
-    <script src="/static/js/tab.js" type="text/javascript"></script>
-    <%if hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_WEBUI_SHOW_GRAPH) &&
-      hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_WEBUI_EXPLAIN_OUTPUT) %>
-      <%java showGraph = true; %>
-      <%if hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_WEBUI_SHOW_STATS) %>
-        <%java showStats = true; %>
-      </%if>
-    </%if>
-    <%if showGraph %>
-      <script type="text/javascript" src="/static/js/vis.min.js"></script>
-      <link href="/static/css/query-plan-graph.css" rel="stylesheet">
-      <script src="/static/js/query-plan-graph.js"></script>
-    </%if>
   </head>
 
   <body>
@@ -87,7 +65,7 @@ private boolean showStats = false;
     </div>
 
 
-    <%if queryInfo == null %>
+    <%if sod == null %>
          <div class="jumbotron">
            <p>Query not found.  It may have been deleted, increase <i>hive.server2.webui.max.historic.queries</i>
               to retain more historic query information.</p>
@@ -98,7 +76,7 @@ private boolean showStats = false;
     <div class="container">
       <div class="row inner_header">
         <div class="page-header">
-          <h1>Query Information: <% queryInfo.getQueryDisplay() == null ? "Unknown" : queryInfo.getQueryDisplay().getQueryString() %></h1>
+          <h1>Query Information: <% sod.getQueryDisplay() == null ? "Unknown" : sod.getQueryDisplay().getQueryString() %></h1>
         </div>
       </div>
       <div class="row">
@@ -113,16 +91,16 @@ private boolean showStats = false;
           </ul>
           <div class="tab-content" style="padding-bottom: 9px; border-bottom: 1px solid #ddd;">
               <div class="tab-pane active" id="tab_baseProfile">
-                  <& baseProfile; queryInfo = queryInfo &>
+                  <& baseProfile; sod = sod &>
               </div>
               <div class="tab-pane" id="tab_stages">
-                  <& stages; queryInfo = queryInfo &>
+                  <& stages; sod = sod &>
               </div>
               <div class="tab-pane" id="tab_queryPlan">
-                  <& queryPlan; queryInfo = queryInfo &>
+                  <& queryPlan; sod = sod &>
               </div>
               <div class="tab-pane" id="tab_perfLogging">
-                  <& perfLogging; queryInfo = queryInfo &>
+                  <& perfLogging; sod = sod &>
               </div>
           </div>
       </div>
@@ -139,59 +117,59 @@ private boolean showStats = false;
 
 <%def baseProfile>
 <%args>
-    QueryInfo queryInfo;
+    SQLOperationDisplay sod;
 </%args>
     <table class="table table-striped">
         <tr>
             <td>User Name</td>
-            <td><% queryInfo.getUserName() %></td>
+            <td><% sod.getUserName() %></td>
         </tr>
         <tr>
             <td>Query String</td>
-            <td><% queryInfo.getQueryDisplay() == null ? "Unknown" : queryInfo.getQueryDisplay().getQueryString() %></td>
+            <td><% sod.getQueryDisplay() == null ? "Unknown" : sod.getQueryDisplay().getQueryString() %></td>
         </tr>
         <tr>
             <td>Id</td>
-            <td><% queryInfo.getQueryDisplay() == null ? "Unknown" : queryInfo.getQueryDisplay().getQueryId() %></td>
+            <td><% sod.getQueryDisplay() == null ? "Unknown" : sod.getQueryDisplay().getQueryId() %></td>
         </tr>
         <tr>
             <td>Execution Engine</td>
-            <td><% queryInfo.getExecutionEngine() %>
+            <td><% sod.getExecutionEngine() %>
         </tr>
         <tr>
             <td>State</td>
-            <td><% queryInfo.getState() %></td>
+            <td><% sod.getState() %></td>
         </tr>
         <tr>
             <td>Opened Timestamp</td>
-            <td><% new Date(queryInfo.getBeginTime()) %></td>
+            <td><% new Date(sod.getBeginTime()) %></td>
         </tr>
         <tr>
             <td>Opened (s)</td>
-            <td><% queryInfo.getElapsedTime()/1000 %></td>
+            <td><% sod.getElapsedTime()/1000 %></td>
         </tr>
         <tr>
             <td>Closed Timestamp</td>
-            <td><% queryInfo.getEndTime() == null ? "Open" : new Date(queryInfo.getEndTime()) %></td>
+            <td><% sod.getEndTime() == null ? "Open" : new Date(sod.getEndTime()) %></td>
         </tr>
-        <%if queryInfo.getQueryDisplay() != null && queryInfo.getQueryDisplay().getErrorMessage() != null %>
+        <%if sod.getQueryDisplay() != null && sod.getQueryDisplay().getErrorMessage() != null %>
             <tr>
                 <td>Error</td>
-                <td><% queryInfo.getQueryDisplay().getErrorMessage() %></td>
+                <td><% sod.getQueryDisplay().getErrorMessage() %></td>
             </tr>
         </%if>
         <tr>
             <td>Latency (s)</td>
-            <td><% queryInfo.getRuntime() == null ? "Not finished" : queryInfo.getRuntime()/1000 %></td>
+            <td><% sod.getRuntime() == null ? "Not finished" : sod.getRuntime()/1000 %></td>
         </tr>
     </table>
 </%def>
 
 <%def stages>
 <%args>
-    QueryInfo queryInfo;
+    SQLOperationDisplay sod;
 </%args>
-   <table class="table table-striped">
+   <table id="attributes_table" class="table table-striped">
        <tr>
            <th>Stage Id</th>
            <th>Status</th>
@@ -199,10 +177,11 @@ private boolean showStats = false;
            <th>End Time</th>
            <th>Elapsed Time (s)</th>
            <th>Requires Lock</th>
+           <th>Retry If Fail</th>
         </tr>
 
-       <%if queryInfo.getQueryDisplay() != null && queryInfo.getQueryDisplay().getTaskDisplays() != null %>
-           <%for QueryDisplay.TaskDisplay taskDisplay : queryInfo.getQueryDisplay().getTaskDisplays() %>
+       <%if sod.getQueryDisplay() != null && sod.getQueryDisplay().getTaskDisplays() != null %>
+           <%for QueryDisplay.TaskDisplay taskDisplay : sod.getQueryDisplay().getTaskDisplays() %>
                <tr>
                    <td><% taskDisplay.getTaskId() + ":" + taskDisplay.getTaskType() %></td>
                    <td><% taskDisplay.getStatus() %></td>
@@ -210,6 +189,7 @@ private boolean showStats = false;
                    <td><% taskDisplay.getEndTime() == null ? "" : new Date(taskDisplay.getEndTime()) %></td>
                    <td><% taskDisplay.getElapsedTime() == null ? "" : taskDisplay.getElapsedTime()/1000 %> (s) </td>
                    <td><% taskDisplay.isRequireLock() %></td>
+                   <td><% taskDisplay.isRetryIfFail() %></td>
                </tr>
            </%for>
        </%if>
@@ -219,93 +199,33 @@ private boolean showStats = false;
 
 <%def queryPlan>
 <%args>
-    QueryInfo queryInfo;
+    SQLOperationDisplay sod;
 </%args>
     <div class="panel panel-default">
       <div class="panel-heading">Explain plan</div>
       <div class="panel-body">
-        <%if showGraph %>
-          <%if queryInfo.getQueryDisplay() != null &&
-                queryInfo.getQueryDisplay().getExplainPlan() != null &&
-                !queryInfo.getQueryDisplay().getExplainPlan().equals("UNKNOWN")%>
-            <div id='plan-visualization'></div>
-            <%if showStats %>
-              <div class="row">
-                <div class="col-md-6">
-                  <pre id='stage-info'></pre>
-                </div>
-                <div class="col-md-6">
-                  <pre id='statistics-info'><div id='statistics-info-head'></div><div id='statistics-info-body'></div></pre>
-                </div>
-              </div>
-            <%else>
-              <pre id='stage-info'></pre>
-            </%if>
-            <script type="text/javascript">
-              var jsonPlan = <% queryInfo.getQueryDisplay().getExplainPlan() %>
-              var jsonStatuses = {};
-              var jsonStatistics = {};
-              var jsonLogs = {};
-              <%if queryInfo.getOperationLogLocation() != null %>
-                jsonLogs["Operation Log - will be deleted after query completes"] = "<% queryInfo.getOperationLogLocation() %>"
-              </%if>
-              <%if queryInfo.getQueryDisplay().getFullLogLocation() != null %>
-                jsonLogs["Full Log"] = "<% queryInfo.getQueryDisplay().getFullLogLocation() %>"
-              </%if>
-              <%for QueryDisplay.TaskDisplay taskDisplay : queryInfo.getQueryDisplay().getTaskDisplays() %>
-                jsonStatuses["<% taskDisplay.getTaskId() %>"] = "<% taskDisplay.getStatus() %>";
-                <%if showStats && taskDisplay.getStatsJsonString() != null %>
-                  jsonStatistics["<% taskDisplay.getTaskId() %>"] = <% taskDisplay.getStatsJsonString() %>;
-                </%if>
-              </%for>
-              const MAP_PROGRESS = '<% QueryDisplay.TaskDisplay.MAP_PROGRESS %>';
-              const REDUCE_PROGRESS = '<% QueryDisplay.TaskDisplay.REDUCE_PROGRESS %>';
-              network = visualizeJsonPlan('plan-visualization', 'stage-info', 'statistics-info', 'statistics-info-head',
-                'statistics-info-body', jsonPlan, jsonStatuses, jsonStatistics, jsonLogs);
-            </script>
-          <%else>
-            <pre>Query information not available. Query may have failed or plan size may exceed value of config hive.server2.webui.max.graph.size.</pre>
-          </%if>
-        <%else>
-          <%if hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_WEBUI_EXPLAIN_OUTPUT) %>
-            <pre>
-            <% queryInfo.getQueryDisplay() == null ? "Unknown" : queryInfo.getQueryDisplay().getExplainPlan() %>
-            </pre>
-          <%else>
-            <pre>
-            Set configuration hive.server2.webui.explain.output to true to view future query plans
-            </pre>
-          </%if>
-        </%if>
+        <pre>
+        <% sod.getQueryDisplay() == null ? "Unknown" : sod.getQueryDisplay().getExplainPlan() %>
+        </pre>
       </div>
     </div>
 </%def>
-<%if showGraph %>
-  <script type="text/javascript">
-    // reload network to centralize graph upon switching to "Query Plan" tab
-    $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-      if (e.target.toString().includes("queryPlan") && typeof network !== 'undefined') {
-        network.fit();
-      }
-    });
-  </script>
-</%if>
 
 
 <%def perfLogging>
 <%args>
-    QueryInfo queryInfo;
+    SQLOperationDisplay sod;
 </%args>
     <section>
       <h3>Compile-time metadata operations</h3>
-        <table class="table table-striped">
+        <table id="attributes_table" class="table table-striped">
           <tr>
              <th>Call Name</th>
              <th>Time (ms)</th>
           </tr>
 
-          <%if queryInfo.getQueryDisplay() != null && queryInfo.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.COMPILATION) != null %>
-             <%for Map.Entry<String, Long> time : queryInfo.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.COMPILATION).entrySet() %>
+          <%if sod.getQueryDisplay() != null && sod.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.COMPILATION) != null %>
+             <%for Map.Entry<String, Long> time : sod.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.COMPILATION).entrySet() %>
                  <tr>
                      <td><% time.getKey() %></td>
                      <td><% time.getValue() %></td>
@@ -317,14 +237,14 @@ private boolean showStats = false;
 
     <section>
       <h3>Execution-time metadata operations</h3>
-        <table class="table table-striped">
+        <table id="attributes_table" class="table table-striped">
           <tr>
              <th>Call Name</th>
              <th>Time (ms)</th>
           </tr>
 
-          <%if queryInfo.getQueryDisplay() != null && queryInfo.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.EXECUTION) != null %>
-             <%for Map.Entry<String, Long> time : queryInfo.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.EXECUTION).entrySet() %>
+          <%if sod.getQueryDisplay() != null && sod.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.EXECUTION) != null %>
+             <%for Map.Entry<String, Long> time : sod.getQueryDisplay().getHmsTimings(QueryDisplay.Phase.EXECUTION).entrySet() %>
                  <tr>
                      <td><% time.getKey() %></td>
                      <td><% time.getValue() %></td>
@@ -336,14 +256,14 @@ private boolean showStats = false;
 
     <section>
       <h3>Compile-Time Perf-Logger</h3>
-        <table class="table table-striped">
+        <table id="attributes_table" class="table table-striped">
           <tr>
              <th>Compile-time Call Name</th>
              <th>Time (ms)</th>
           </tr>
 
-          <%if queryInfo.getQueryDisplay() != null && queryInfo.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.COMPILATION) != null %>
-             <%for Map.Entry<String, Long> time : queryInfo.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.COMPILATION).entrySet()  %>
+          <%if sod.getQueryDisplay() != null && sod.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.COMPILATION) != null %>
+             <%for Map.Entry<String, Long> time : sod.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.COMPILATION).entrySet()  %>
                  <tr>
                      <td><% time.getKey() %></td>
                      <td><% time.getValue() %></td>
@@ -355,14 +275,14 @@ private boolean showStats = false;
 
     <section>
       <h3>Execution-Time Perf-Logger</h3>
-        <table class="table table-striped">
+        <table id="attributes_table" class="table table-striped">
           <tr>
              <th>Execution-time Call Name</th>
              <th>Time (ms)</th>
           </tr>
 
-          <%if queryInfo.getQueryDisplay() != null && queryInfo.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.EXECUTION) != null %>
-             <%for Map.Entry<String, Long> time : queryInfo.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.EXECUTION).entrySet()  %>
+          <%if sod.getQueryDisplay() != null && sod.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.EXECUTION) != null %>
+             <%for Map.Entry<String, Long> time : sod.getQueryDisplay().getPerfLogTimes(QueryDisplay.Phase.EXECUTION).entrySet()  %>
                  <tr>
                      <td><% time.getKey() %></td>
                      <td><% time.getValue() %></td>
@@ -375,5 +295,8 @@ private boolean showStats = false;
 
 </div>
 </div>
+<script src="/static/js/jquery.min.js" type="text/javascript"></script>
+<script src="/static/js/bootstrap.min.js" type="text/javascript"></script>
+<script src="/static/js/tab.js" type="text/javascript"></script>
 </body>
 </html>

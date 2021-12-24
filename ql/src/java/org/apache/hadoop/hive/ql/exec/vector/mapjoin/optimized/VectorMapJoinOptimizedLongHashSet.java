@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer.ReusableGetAdaptor;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashSetResult;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinLongHashSet;
-import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 
 /*
@@ -76,9 +75,9 @@ public class VectorMapJoinOptimizedLongHashSet
   }
 
   public VectorMapJoinOptimizedLongHashSet(
-          boolean minMaxEnabled, boolean isOuterJoin, HashTableKeyType hashTableKeyType,
-          MapJoinTableContainer originalTableContainer, ReusableGetAdaptor hashMapRowGetter, TableDesc tableDesc) {
+        boolean minMaxEnabled, boolean isOuterJoin, HashTableKeyType hashTableKeyType,
+        MapJoinTableContainer originalTableContainer, ReusableGetAdaptor hashMapRowGetter) {
     super(originalTableContainer, hashMapRowGetter);
-    longCommon =  new VectorMapJoinOptimizedLongCommon(minMaxEnabled, isOuterJoin, hashTableKeyType, tableDesc);
+    longCommon =  new VectorMapJoinOptimizedLongCommon(minMaxEnabled, isOuterJoin, hashTableKeyType);
   }
 }

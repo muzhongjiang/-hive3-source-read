@@ -19,16 +19,12 @@
 package org.apache.hadoop.hive.ql;
 
 import org.apache.hadoop.conf.Configurable;
-import org.apache.hadoop.hive.common.classification.InterfaceAudience;
-import org.apache.hadoop.hive.common.classification.InterfaceStability;
 
 /**
  * Context information provided by Hive to implementations of
  * HiveDriverRunHook.
  */
-@InterfaceAudience.Public
-@InterfaceStability.Stable
 public interface HiveDriverRunHookContext extends Configurable{
-  String getCommand();
-  void setCommand(String command);
+  public String getCommand();
+  public void setCommand(String command);
 }

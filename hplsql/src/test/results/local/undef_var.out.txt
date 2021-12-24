@@ -1,2 +1,0 @@
-Ln:1 PRINT
-Ln:1 identifier 'UNDEF_VAR' must be declared.

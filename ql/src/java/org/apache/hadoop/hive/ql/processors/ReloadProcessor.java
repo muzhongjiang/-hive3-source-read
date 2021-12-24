@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,6 +22,7 @@ import java.io.IOException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.ql.CommandNeedRetryException;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
 /**
@@ -31,18 +32,18 @@ public class ReloadProcessor implements CommandProcessor{
   private static final Logger LOG = LoggerFactory.getLogger(ReloadProcessor.class);
 
   @Override
-  public CommandProcessorResponse run(String command) throws CommandProcessorException {
+  public void init() {
+  }
+
+  @Override
+  public CommandProcessorResponse run(String command) throws CommandNeedRetryException {
     SessionState ss = SessionState.get();
     try {
       ss.loadReloadableAuxJars();
     } catch (IOException e) {
       LOG.error("fail to reload auxiliary jar files", e);
-      throw new CommandProcessorException(e.getMessage(), e);
+      return CommandProcessorResponse.create(e);
     }
-    return new CommandProcessorResponse();
-  }
-
-  @Override
-  public void close() throws Exception {
+    return new CommandProcessorResponse(0);
   }
 }

@@ -1,103 +1,93 @@
-PREHOOK: query: CREATE TABLE test_table1_n0 (key INT, value STRING) PARTITIONED BY (ds STRING)
+PREHOOK: query: CREATE TABLE test_table1 (key INT, value STRING) PARTITIONED BY (ds STRING)
 CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
-PREHOOK: Output: default@test_table1_n0
-POSTHOOK: query: CREATE TABLE test_table1_n0 (key INT, value STRING) PARTITIONED BY (ds STRING)
+PREHOOK: Output: default@test_table1
+POSTHOOK: query: CREATE TABLE test_table1 (key INT, value STRING) PARTITIONED BY (ds STRING)
 CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
-POSTHOOK: Output: default@test_table1_n0
-PREHOOK: query: CREATE TABLE test_table2_n0 (key INT, value STRING) PARTITIONED BY (ds STRING)
+POSTHOOK: Output: default@test_table1
+PREHOOK: query: CREATE TABLE test_table2 (key INT, value STRING) PARTITIONED BY (ds STRING)
 CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
-PREHOOK: Output: default@test_table2_n0
-POSTHOOK: query: CREATE TABLE test_table2_n0 (key INT, value STRING) PARTITIONED BY (ds STRING)
+PREHOOK: Output: default@test_table2
+POSTHOOK: query: CREATE TABLE test_table2 (key INT, value STRING) PARTITIONED BY (ds STRING)
 CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
-POSTHOOK: Output: default@test_table2_n0
-PREHOOK: query: CREATE TABLE test_table3_n0 (key INT, value STRING) PARTITIONED BY (ds STRING)
+POSTHOOK: Output: default@test_table2
+PREHOOK: query: CREATE TABLE test_table3 (key INT, value STRING) PARTITIONED BY (ds STRING)
 CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
-PREHOOK: Output: default@test_table3_n0
-POSTHOOK: query: CREATE TABLE test_table3_n0 (key INT, value STRING) PARTITIONED BY (ds STRING)
+PREHOOK: Output: default@test_table3
+POSTHOOK: query: CREATE TABLE test_table3 (key INT, value STRING) PARTITIONED BY (ds STRING)
 CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
-POSTHOOK: Output: default@test_table3_n0
+POSTHOOK: Output: default@test_table3
 PREHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table1_n0 PARTITION (ds = '1') SELECT * where key < 10
+INSERT OVERWRITE TABLE test_table1 PARTITION (ds = '1') SELECT * where key < 10
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
-PREHOOK: Output: default@test_table1_n0@ds=1
+PREHOOK: Output: default@test_table1@ds=1
 POSTHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table1_n0 PARTITION (ds = '1') SELECT * where key < 10
+INSERT OVERWRITE TABLE test_table1 PARTITION (ds = '1') SELECT * where key < 10
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
-POSTHOOK: Output: default@test_table1_n0@ds=1
-POSTHOOK: Lineage: test_table1_n0 PARTITION(ds=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
-POSTHOOK: Lineage: test_table1_n0 PARTITION(ds=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+POSTHOOK: Output: default@test_table1@ds=1
+POSTHOOK: Lineage: test_table1 PARTITION(ds=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: test_table1 PARTITION(ds=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 PREHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table2_n0 PARTITION (ds = '1') SELECT * where key < 100
+INSERT OVERWRITE TABLE test_table2 PARTITION (ds = '1') SELECT * where key < 100
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
-PREHOOK: Output: default@test_table2_n0@ds=1
+PREHOOK: Output: default@test_table2@ds=1
 POSTHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table2_n0 PARTITION (ds = '1') SELECT * where key < 100
+INSERT OVERWRITE TABLE test_table2 PARTITION (ds = '1') SELECT * where key < 100
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
-POSTHOOK: Output: default@test_table2_n0@ds=1
-POSTHOOK: Lineage: test_table2_n0 PARTITION(ds=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
-POSTHOOK: Lineage: test_table2_n0 PARTITION(ds=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+POSTHOOK: Output: default@test_table2@ds=1
+POSTHOOK: Lineage: test_table2 PARTITION(ds=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: test_table2 PARTITION(ds=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 PREHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table1_n0 PARTITION (ds = '2') SELECT * where key < 10
+INSERT OVERWRITE TABLE test_table1 PARTITION (ds = '2') SELECT * where key < 10
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
-PREHOOK: Output: default@test_table1_n0@ds=2
+PREHOOK: Output: default@test_table1@ds=2
 POSTHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table1_n0 PARTITION (ds = '2') SELECT * where key < 10
+INSERT OVERWRITE TABLE test_table1 PARTITION (ds = '2') SELECT * where key < 10
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
-POSTHOOK: Output: default@test_table1_n0@ds=2
-POSTHOOK: Lineage: test_table1_n0 PARTITION(ds=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
-POSTHOOK: Lineage: test_table1_n0 PARTITION(ds=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+POSTHOOK: Output: default@test_table1@ds=2
+POSTHOOK: Lineage: test_table1 PARTITION(ds=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: test_table1 PARTITION(ds=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 PREHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table2_n0 PARTITION (ds = '2') SELECT * where key < 100
+INSERT OVERWRITE TABLE test_table2 PARTITION (ds = '2') SELECT * where key < 100
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
-PREHOOK: Output: default@test_table2_n0@ds=2
+PREHOOK: Output: default@test_table2@ds=2
 POSTHOOK: query: FROM src
-INSERT OVERWRITE TABLE test_table2_n0 PARTITION (ds = '2') SELECT * where key < 100
+INSERT OVERWRITE TABLE test_table2 PARTITION (ds = '2') SELECT * where key < 100
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
-POSTHOOK: Output: default@test_table2_n0@ds=2
-POSTHOOK: Lineage: test_table2_n0 PARTITION(ds=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
-POSTHOOK: Lineage: test_table2_n0 PARTITION(ds=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+POSTHOOK: Output: default@test_table2@ds=2
+POSTHOOK: Lineage: test_table2 PARTITION(ds=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: test_table2 PARTITION(ds=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 PREHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
+FROM test_table1 a JOIN test_table2 b 
 ON a.key = b.key WHERE a.ds = '1' and b.ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
 POSTHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
+FROM test_table1 a JOIN test_table2 b 
 ON a.key = b.key WHERE a.ds = '1' and b.ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -109,335 +99,79 @@ STAGE PLANS:
     Tez
 #### A masked pattern was here ####
       Edges:
-        Reducer 2 <- Map 1 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
+        Map 2 <- Map 1 (BROADCAST_EDGE)
+        Reducer 3 <- Map 2 (SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
-            Map Operator Tree:
-                TableScan
-                  alias: b
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
-                  Filter Operator
-                    predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
-                    Select Operator
-                      expressions: key (type: int), value (type: string)
-                      outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
-                      Dummy Store
             Map Operator Tree:
                 TableScan
                   alias: a
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), value (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
-                      Merge Join Operator
-                        condition map:
-                             Inner Join 0 to 1
-                        keys:
-                          0 _col0 (type: int)
-                          1 _col0 (type: int)
-                        outputColumnNames: _col0, _col1, _col3
-                        Statistics: Num rows: 14 Data size: 2562 Basic stats: COMPLETE Column stats: COMPLETE
-                        Select Operator
-                          expressions: _col0 (type: int), concat(_col1, _col3) (type: string)
-                          outputColumnNames: _col0, _col1
-                          Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
-                          Reduce Output Operator
-                            key expressions: _col0 (type: int)
-                            null sort order: a
-                            sort order: +
-                            Map-reduce partition columns: _col0 (type: int)
-                            Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
-                            value expressions: _col1 (type: string)
+                      Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                      Reduce Output Operator
+                        key expressions: _col0 (type: int)
+                        sort order: +
+                        Map-reduce partition columns: _col0 (type: int)
+                        Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                        value expressions: _col1 (type: string)
             Execution mode: llap
-        Reducer 2 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Select Operator
-                expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: string)
-                outputColumnNames: _col0, _col1
-                Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
-                  table:
-                      input format: org.apache.hadoop.mapred.TextInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                      name: default.test_table3_n0
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: string), '1' (type: string)
-                  outputColumnNames: key, value, ds
-                  Statistics: Num rows: 14 Data size: 3822 Basic stats: COMPLETE Column stats: COMPLETE
-                  Group By Operator
-                    aggregations: min(key), max(key), count(1), count(key), compute_bit_vector_hll(key), max(length(value)), avg(COALESCE(length(value),0)), count(value), compute_bit_vector_hll(value)
-                    keys: ds (type: string)
-                    minReductionHashAggr: 0.9285714
-                    mode: hash
-                    outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                    Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                    Reduce Output Operator
-                      key expressions: _col0 (type: string)
-                      null sort order: z
-                      sort order: +
-                      Map-reduce partition columns: _col0 (type: string)
-                      Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                      value expressions: _col1 (type: int), _col2 (type: int), _col3 (type: bigint), _col4 (type: bigint), _col5 (type: binary), _col6 (type: int), _col7 (type: struct<count:bigint,sum:double,input:int>), _col8 (type: bigint), _col9 (type: binary)
-        Reducer 3 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), count(VALUE._col2), count(VALUE._col3), compute_bit_vector_hll(VALUE._col4), max(VALUE._col5), avg(VALUE._col6), count(VALUE._col7), compute_bit_vector_hll(VALUE._col8)
-                keys: KEY._col0 (type: string)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                Statistics: Num rows: 1 Data size: 417 Basic stats: COMPLETE Column stats: COMPLETE
-                Select Operator
-                  expressions: 'LONG' (type: string), UDFToLong(_col1) (type: bigint), UDFToLong(_col2) (type: bigint), (_col3 - _col4) (type: bigint), COALESCE(ndv_compute_bit_vector(_col5),0) (type: bigint), _col5 (type: binary), 'STRING' (type: string), UDFToLong(COALESCE(_col6,0)) (type: bigint), COALESCE(_col7,0) (type: double), (_col3 - _col8) (type: bigint), COALESCE(ndv_compute_bit_vector(_col9),0) (type: bigint), _col9 (type: binary), _col0 (type: string)
-                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10, _col11, _col12
-                  Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                  File Output Operator
-                    compressed: false
-                    Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                    table:
-                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-
-  Stage: Stage-2
-    Dependency Collection
-
-  Stage: Stage-0
-    Move Operator
-      tables:
-          partition:
-            ds 1
-          replace: true
-          table:
-              input format: org.apache.hadoop.mapred.TextInputFormat
-              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.test_table3_n0
-
-  Stage: Stage-3
-    Stats Work
-      Basic Stats Work:
-      Column Stats Desc:
-          Columns: key, value
-          Column Types: int, string
-          Table: default.test_table3_n0
-
-PREHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
-SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds = '1' and b.ds = '1'
-PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
-SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds = '1' and b.ds = '1'
-POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).key SIMPLE [(test_table1_n0)a.FieldSchema(name:key, type:int, comment:null), ]
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).value EXPRESSION [(test_table1_n0)a.FieldSchema(name:value, type:string, comment:null), (test_table2_n0)b.FieldSchema(name:value, type:string, comment:null), ]
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
-PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
-POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-2	val_2val_2	1
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-4	val_4val_4	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-8	val_8val_8	1
-9	val_9val_9	1
-PREHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
-SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
-PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table1_n0@ds=2
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
-SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
-POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table1_n0@ds=2
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
-STAGE DEPENDENCIES:
-  Stage-1 is a root stage
-  Stage-2 depends on stages: Stage-1
-  Stage-0 depends on stages: Stage-2
-  Stage-3 depends on stages: Stage-0
-
-STAGE PLANS:
-  Stage: Stage-1
-    Tez
-#### A masked pattern was here ####
-      Edges:
-        Reducer 2 <- Map 1 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
-#### A masked pattern was here ####
-      Vertices:
-        Map 1 
+            LLAP IO: no inputs
+        Map 2 
             Map Operator Tree:
                 TableScan
                   alias: b
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), value (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
-                      Dummy Store
-            Map Operator Tree:
-                TableScan
-                  alias: a
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 20 Data size: 1860 Basic stats: COMPLETE Column stats: COMPLETE
-                  Filter Operator
-                    predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 20 Data size: 1860 Basic stats: COMPLETE Column stats: COMPLETE
-                    Select Operator
-                      expressions: key (type: int), value (type: string)
-                      outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 20 Data size: 1860 Basic stats: COMPLETE Column stats: COMPLETE
-                      Merge Join Operator
+                      Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
+                      Map Join Operator
                         condition map:
                              Inner Join 0 to 1
                         keys:
                           0 _col0 (type: int)
                           1 _col0 (type: int)
-                        outputColumnNames: _col0, _col1, _col3
-                        Statistics: Num rows: 29 Data size: 5307 Basic stats: COMPLETE Column stats: COMPLETE
+                        outputColumnNames: _col0, _col1, _col4
+                        input vertices:
+                          0 Map 1
+                        Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                         Select Operator
-                          expressions: _col0 (type: int), concat(_col1, _col3) (type: string)
+                          expressions: _col0 (type: int), concat(_col1, _col4) (type: string)
                           outputColumnNames: _col0, _col1
-                          Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                           Reduce Output Operator
                             key expressions: _col0 (type: int)
-                            null sort order: a
                             sort order: +
                             Map-reduce partition columns: _col0 (type: int)
-                            Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                             value expressions: _col1 (type: string)
             Execution mode: llap
-        Reducer 2 
+            LLAP IO: no inputs
+        Reducer 3 
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: string)
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                   table:
                       input format: org.apache.hadoop.mapred.TextInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                       serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                      name: default.test_table3_n0
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: string), '1' (type: string)
-                  outputColumnNames: key, value, ds
-                  Statistics: Num rows: 29 Data size: 7917 Basic stats: COMPLETE Column stats: COMPLETE
-                  Group By Operator
-                    aggregations: min(key), max(key), count(1), count(key), compute_bit_vector_hll(key), max(length(value)), avg(COALESCE(length(value),0)), count(value), compute_bit_vector_hll(value)
-                    keys: ds (type: string)
-                    minReductionHashAggr: 0.9655172
-                    mode: hash
-                    outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                    Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                    Reduce Output Operator
-                      key expressions: _col0 (type: string)
-                      null sort order: z
-                      sort order: +
-                      Map-reduce partition columns: _col0 (type: string)
-                      Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                      value expressions: _col1 (type: int), _col2 (type: int), _col3 (type: bigint), _col4 (type: bigint), _col5 (type: binary), _col6 (type: int), _col7 (type: struct<count:bigint,sum:double,input:int>), _col8 (type: bigint), _col9 (type: binary)
-        Reducer 3 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), count(VALUE._col2), count(VALUE._col3), compute_bit_vector_hll(VALUE._col4), max(VALUE._col5), avg(VALUE._col6), count(VALUE._col7), compute_bit_vector_hll(VALUE._col8)
-                keys: KEY._col0 (type: string)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                Statistics: Num rows: 1 Data size: 417 Basic stats: COMPLETE Column stats: COMPLETE
-                Select Operator
-                  expressions: 'LONG' (type: string), UDFToLong(_col1) (type: bigint), UDFToLong(_col2) (type: bigint), (_col3 - _col4) (type: bigint), COALESCE(ndv_compute_bit_vector(_col5),0) (type: bigint), _col5 (type: binary), 'STRING' (type: string), UDFToLong(COALESCE(_col6,0)) (type: bigint), COALESCE(_col7,0) (type: double), (_col3 - _col8) (type: bigint), COALESCE(ndv_compute_bit_vector(_col9),0) (type: bigint), _col9 (type: binary), _col0 (type: string)
-                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10, _col11, _col12
-                  Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                  File Output Operator
-                    compressed: false
-                    Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                    table:
-                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                      name: default.test_table3
 
   Stage: Stage-2
     Dependency Collection
@@ -452,82 +186,65 @@ STAGE PLANS:
               input format: org.apache.hadoop.mapred.TextInputFormat
               output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
               serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.test_table3_n0
+              name: default.test_table3
 
   Stage: Stage-3
-    Stats Work
-      Basic Stats Work:
-      Column Stats Desc:
-          Columns: key, value
-          Column Types: int, string
-          Table: default.test_table3_n0
+    Stats-Aggr Operator
 
-PREHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds = '1' and b.ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table1_n0@ds=2
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: Input: default@test_table1
+PREHOOK: Input: default@test_table1@ds=1
+PREHOOK: Input: default@test_table2
+PREHOOK: Input: default@test_table2@ds=1
+PREHOOK: Output: default@test_table3@ds=1
+POSTHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds = '1' and b.ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table1_n0@ds=2
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).key SIMPLE [(test_table1_n0)a.FieldSchema(name:key, type:int, comment:null), ]
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).value EXPRESSION [(test_table1_n0)a.FieldSchema(name:value, type:string, comment:null), (test_table2_n0)b.FieldSchema(name:value, type:string, comment:null), ]
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: Input: default@test_table1
+POSTHOOK: Input: default@test_table1@ds=1
+POSTHOOK: Input: default@test_table2
+POSTHOOK: Input: default@test_table2@ds=1
+POSTHOOK: Output: default@test_table3@ds=1
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).key SIMPLE [(test_table1)a.FieldSchema(name:key, type:int, comment:null), ]
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).value EXPRESSION [(test_table1)a.FieldSchema(name:value, type:string, comment:null), (test_table2)b.FieldSchema(name:value, type:string, comment:null), ]
+PREHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
 2	val_2val_2	1
-2	val_2val_2	1
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
+4	val_4val_4	1
+8	val_8val_8	1
+PREHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
+POSTHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-4	val_4val_4	1
-4	val_4val_4	1
 5	val_5val_5	1
 5	val_5val_5	1
 5	val_5val_5	1
@@ -537,43 +254,19 @@ POSTHOOK: Input: default@test_table3_n0@ds=1
 5	val_5val_5	1
 5	val_5val_5	1
 5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-8	val_8val_8	1
-8	val_8val_8	1
-9	val_9val_9	1
 9	val_9val_9	1
 PREHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Input: default@test_table2_n0@ds=2
-PREHOOK: Output: default@test_table3_n0@ds=1
 POSTHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0@ds=2
-POSTHOOK: Output: default@test_table3_n0@ds=1
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -585,109 +278,79 @@ STAGE PLANS:
     Tez
 #### A masked pattern was here ####
       Edges:
-        Reducer 2 <- Map 1 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
+        Map 2 <- Map 1 (BROADCAST_EDGE)
+        Reducer 3 <- Map 2 (SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
+            Map Operator Tree:
+                TableScan
+                  alias: a
+                  Statistics: Num rows: 20 Data size: 300 Basic stats: COMPLETE Column stats: NONE
+                  Filter Operator
+                    predicate: key is not null (type: boolean)
+                    Statistics: Num rows: 20 Data size: 300 Basic stats: COMPLETE Column stats: NONE
+                    Select Operator
+                      expressions: key (type: int), value (type: string)
+                      outputColumnNames: _col0, _col1
+                      Statistics: Num rows: 20 Data size: 300 Basic stats: COMPLETE Column stats: NONE
+                      Reduce Output Operator
+                        key expressions: _col0 (type: int)
+                        sort order: +
+                        Map-reduce partition columns: _col0 (type: int)
+                        Statistics: Num rows: 20 Data size: 300 Basic stats: COMPLETE Column stats: NONE
+                        value expressions: _col1 (type: string)
+            Execution mode: llap
+            LLAP IO: no inputs
+        Map 2 
             Map Operator Tree:
                 TableScan
                   alias: b
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 168 Data size: 15792 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 168 Data size: 15792 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), value (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 168 Data size: 15792 Basic stats: COMPLETE Column stats: COMPLETE
-                      Dummy Store
-            Map Operator Tree:
-                TableScan
-                  alias: a
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
-                  Filter Operator
-                    predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
-                    Select Operator
-                      expressions: key (type: int), value (type: string)
-                      outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
-                      Merge Join Operator
+                      Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
+                      Map Join Operator
                         condition map:
                              Inner Join 0 to 1
                         keys:
                           0 _col0 (type: int)
                           1 _col0 (type: int)
-                        outputColumnNames: _col0, _col1, _col3
-                        Statistics: Num rows: 29 Data size: 5307 Basic stats: COMPLETE Column stats: COMPLETE
+                        outputColumnNames: _col0, _col1, _col4
+                        input vertices:
+                          0 Map 1
+                        Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                         Select Operator
-                          expressions: _col0 (type: int), concat(_col1, _col3) (type: string)
+                          expressions: _col0 (type: int), concat(_col1, _col4) (type: string)
                           outputColumnNames: _col0, _col1
-                          Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                           Reduce Output Operator
                             key expressions: _col0 (type: int)
-                            null sort order: a
                             sort order: +
                             Map-reduce partition columns: _col0 (type: int)
-                            Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                             value expressions: _col1 (type: string)
             Execution mode: llap
-        Reducer 2 
+            LLAP IO: no inputs
+        Reducer 3 
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: string)
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 29 Data size: 5452 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                   table:
                       input format: org.apache.hadoop.mapred.TextInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                       serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                      name: default.test_table3_n0
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: string), '1' (type: string)
-                  outputColumnNames: key, value, ds
-                  Statistics: Num rows: 29 Data size: 7917 Basic stats: COMPLETE Column stats: COMPLETE
-                  Group By Operator
-                    aggregations: min(key), max(key), count(1), count(key), compute_bit_vector_hll(key), max(length(value)), avg(COALESCE(length(value),0)), count(value), compute_bit_vector_hll(value)
-                    keys: ds (type: string)
-                    minReductionHashAggr: 0.9655172
-                    mode: hash
-                    outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                    Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                    Reduce Output Operator
-                      key expressions: _col0 (type: string)
-                      null sort order: z
-                      sort order: +
-                      Map-reduce partition columns: _col0 (type: string)
-                      Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                      value expressions: _col1 (type: int), _col2 (type: int), _col3 (type: bigint), _col4 (type: bigint), _col5 (type: binary), _col6 (type: int), _col7 (type: struct<count:bigint,sum:double,input:int>), _col8 (type: bigint), _col9 (type: binary)
-        Reducer 3 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), count(VALUE._col2), count(VALUE._col3), compute_bit_vector_hll(VALUE._col4), max(VALUE._col5), avg(VALUE._col6), count(VALUE._col7), compute_bit_vector_hll(VALUE._col8)
-                keys: KEY._col0 (type: string)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                Statistics: Num rows: 1 Data size: 417 Basic stats: COMPLETE Column stats: COMPLETE
-                Select Operator
-                  expressions: 'LONG' (type: string), UDFToLong(_col1) (type: bigint), UDFToLong(_col2) (type: bigint), (_col3 - _col4) (type: bigint), COALESCE(ndv_compute_bit_vector(_col5),0) (type: bigint), _col5 (type: binary), 'STRING' (type: string), UDFToLong(COALESCE(_col6,0)) (type: bigint), COALESCE(_col7,0) (type: double), (_col3 - _col8) (type: bigint), COALESCE(ndv_compute_bit_vector(_col9),0) (type: bigint), _col9 (type: binary), _col0 (type: string)
-                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10, _col11, _col12
-                  Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                  File Output Operator
-                    compressed: false
-                    Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                    table:
-                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                      name: default.test_table3
 
   Stage: Stage-2
     Dependency Collection
@@ -702,82 +365,79 @@ STAGE PLANS:
               input format: org.apache.hadoop.mapred.TextInputFormat
               output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
               serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.test_table3_n0
+              name: default.test_table3
 
   Stage: Stage-3
-    Stats Work
-      Basic Stats Work:
-      Column Stats Desc:
-          Columns: key, value
-          Column Types: int, string
-          Table: default.test_table3_n0
+    Stats-Aggr Operator
 
-PREHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Input: default@test_table2_n0@ds=2
-PREHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: Input: default@test_table1
+PREHOOK: Input: default@test_table1@ds=1
+PREHOOK: Input: default@test_table1@ds=2
+PREHOOK: Input: default@test_table2
+PREHOOK: Input: default@test_table2@ds=1
+PREHOOK: Output: default@test_table3@ds=1
+POSTHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM test_table1_n0 a JOIN test_table2_n0 b 
-ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds is not null and b.ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0@ds=2
-POSTHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).key SIMPLE [(test_table1_n0)a.FieldSchema(name:key, type:int, comment:null), ]
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).value EXPRESSION [(test_table1_n0)a.FieldSchema(name:value, type:string, comment:null), (test_table2_n0)b.FieldSchema(name:value, type:string, comment:null), ]
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: Input: default@test_table1
+POSTHOOK: Input: default@test_table1@ds=1
+POSTHOOK: Input: default@test_table1@ds=2
+POSTHOOK: Input: default@test_table2
+POSTHOOK: Input: default@test_table2@ds=1
+POSTHOOK: Output: default@test_table3@ds=1
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).key SIMPLE [(test_table1)a.FieldSchema(name:key, type:int, comment:null), ]
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).value EXPRESSION [(test_table1)a.FieldSchema(name:value, type:string, comment:null), (test_table2)b.FieldSchema(name:value, type:string, comment:null), ]
+PREHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
 2	val_2val_2	1
 2	val_2val_2	1
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
+4	val_4val_4	1
+4	val_4val_4	1
+8	val_8val_8	1
+8	val_8val_8	1
+PREHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
+POSTHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-4	val_4val_4	1
-4	val_4val_4	1
 5	val_5val_5	1
 5	val_5val_5	1
 5	val_5val_5	1
@@ -796,38 +456,20 @@ POSTHOOK: Input: default@test_table3_n0@ds=1
 5	val_5val_5	1
 5	val_5val_5	1
 5	val_5val_5	1
-8	val_8val_8	1
-8	val_8val_8	1
 9	val_9val_9	1
 9	val_9val_9	1
 PREHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
-JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
-ON a.key = b.key
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
 POSTHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
-JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
-ON a.key = b.key
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -839,109 +481,79 @@ STAGE PLANS:
     Tez
 #### A masked pattern was here ####
       Edges:
-        Reducer 2 <- Map 1 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
+        Map 2 <- Map 1 (BROADCAST_EDGE)
+        Reducer 3 <- Map 2 (SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
             Map Operator Tree:
                 TableScan
-                  alias: test_table2_n0
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                  alias: a
+                  Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), value (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
-                      Dummy Store
+                      Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                      Reduce Output Operator
+                        key expressions: _col0 (type: int)
+                        sort order: +
+                        Map-reduce partition columns: _col0 (type: int)
+                        Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                        value expressions: _col1 (type: string)
+            Execution mode: llap
+            LLAP IO: no inputs
+        Map 2 
             Map Operator Tree:
                 TableScan
-                  alias: test_table1_n0
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                  alias: b
+                  Statistics: Num rows: 168 Data size: 2816 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 168 Data size: 2816 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), value (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
-                      Merge Join Operator
+                      Statistics: Num rows: 168 Data size: 2816 Basic stats: COMPLETE Column stats: NONE
+                      Map Join Operator
                         condition map:
                              Inner Join 0 to 1
                         keys:
                           0 _col0 (type: int)
                           1 _col0 (type: int)
-                        outputColumnNames: _col0, _col1, _col3
-                        Statistics: Num rows: 14 Data size: 2562 Basic stats: COMPLETE Column stats: COMPLETE
+                        outputColumnNames: _col0, _col1, _col4
+                        input vertices:
+                          0 Map 1
+                        Statistics: Num rows: 184 Data size: 3097 Basic stats: COMPLETE Column stats: NONE
                         Select Operator
-                          expressions: _col0 (type: int), concat(_col1, _col3) (type: string)
+                          expressions: _col0 (type: int), concat(_col1, _col4) (type: string)
                           outputColumnNames: _col0, _col1
-                          Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 184 Data size: 3097 Basic stats: COMPLETE Column stats: NONE
                           Reduce Output Operator
                             key expressions: _col0 (type: int)
-                            null sort order: a
                             sort order: +
                             Map-reduce partition columns: _col0 (type: int)
-                            Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 184 Data size: 3097 Basic stats: COMPLETE Column stats: NONE
                             value expressions: _col1 (type: string)
             Execution mode: llap
-        Reducer 2 
+            LLAP IO: no inputs
+        Reducer 3 
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: string)
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 184 Data size: 3097 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 184 Data size: 3097 Basic stats: COMPLETE Column stats: NONE
                   table:
                       input format: org.apache.hadoop.mapred.TextInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                       serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                      name: default.test_table3_n0
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: string), '1' (type: string)
-                  outputColumnNames: key, value, ds
-                  Statistics: Num rows: 14 Data size: 3822 Basic stats: COMPLETE Column stats: COMPLETE
-                  Group By Operator
-                    aggregations: min(key), max(key), count(1), count(key), compute_bit_vector_hll(key), max(length(value)), avg(COALESCE(length(value),0)), count(value), compute_bit_vector_hll(value)
-                    keys: ds (type: string)
-                    minReductionHashAggr: 0.9285714
-                    mode: hash
-                    outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                    Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                    Reduce Output Operator
-                      key expressions: _col0 (type: string)
-                      null sort order: z
-                      sort order: +
-                      Map-reduce partition columns: _col0 (type: string)
-                      Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                      value expressions: _col1 (type: int), _col2 (type: int), _col3 (type: bigint), _col4 (type: bigint), _col5 (type: binary), _col6 (type: int), _col7 (type: struct<count:bigint,sum:double,input:int>), _col8 (type: bigint), _col9 (type: binary)
-        Reducer 3 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), count(VALUE._col2), count(VALUE._col3), compute_bit_vector_hll(VALUE._col4), max(VALUE._col5), avg(VALUE._col6), count(VALUE._col7), compute_bit_vector_hll(VALUE._col8)
-                keys: KEY._col0 (type: string)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                Statistics: Num rows: 1 Data size: 417 Basic stats: COMPLETE Column stats: COMPLETE
-                Select Operator
-                  expressions: 'LONG' (type: string), UDFToLong(_col1) (type: bigint), UDFToLong(_col2) (type: bigint), (_col3 - _col4) (type: bigint), COALESCE(ndv_compute_bit_vector(_col5),0) (type: bigint), _col5 (type: binary), 'STRING' (type: string), UDFToLong(COALESCE(_col6,0)) (type: bigint), COALESCE(_col7,0) (type: double), (_col3 - _col8) (type: bigint), COALESCE(ndv_compute_bit_vector(_col9),0) (type: bigint), _col9 (type: binary), _col0 (type: string)
-                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10, _col11, _col12
-                  Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                  File Output Operator
-                    compressed: false
-                    Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                    table:
-                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                      name: default.test_table3
 
   Stage: Stage-2
     Dependency Collection
@@ -956,114 +568,308 @@ STAGE PLANS:
               input format: org.apache.hadoop.mapred.TextInputFormat
               output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
               serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.test_table3_n0
+              name: default.test_table3
 
   Stage: Stage-3
-    Stats Work
-      Basic Stats Work:
-      Column Stats Desc:
-          Columns: key, value
-          Column Types: int, string
-          Table: default.test_table3_n0
+    Stats-Aggr Operator
 
-PREHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
-JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
-ON a.key = b.key
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: Input: default@test_table1
+PREHOOK: Input: default@test_table1@ds=1
+PREHOOK: Input: default@test_table2
+PREHOOK: Input: default@test_table2@ds=1
+PREHOOK: Input: default@test_table2@ds=2
+PREHOOK: Output: default@test_table3@ds=1
+POSTHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.value, b.value) 
-FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
-JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
-ON a.key = b.key
+FROM test_table1 a JOIN test_table2 b 
+ON a.key = b.key WHERE a.ds = '1' and b.ds is not null
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).key SIMPLE [(test_table1_n0)test_table1_n0.FieldSchema(name:key, type:int, comment:null), ]
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).value EXPRESSION [(test_table1_n0)test_table1_n0.FieldSchema(name:value, type:string, comment:null), (test_table2_n0)test_table2_n0.FieldSchema(name:value, type:string, comment:null), ]
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: Input: default@test_table1
+POSTHOOK: Input: default@test_table1@ds=1
+POSTHOOK: Input: default@test_table2
+POSTHOOK: Input: default@test_table2@ds=1
+POSTHOOK: Input: default@test_table2@ds=2
+POSTHOOK: Output: default@test_table3@ds=1
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).key SIMPLE [(test_table1)a.FieldSchema(name:key, type:int, comment:null), ]
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).value EXPRESSION [(test_table1)a.FieldSchema(name:value, type:string, comment:null), (test_table2)b.FieldSchema(name:value, type:string, comment:null), ]
+PREHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
 2	val_2val_2	1
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
-0	val_0val_0	1
+2	val_2val_2	1
 4	val_4val_4	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
-5	val_5val_5	1
+4	val_4val_4	1
 8	val_8val_8	1
+8	val_8val_8	1
+PREHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+PREHOOK: type: QUERY
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+POSTHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+9	val_9val_9	1
 9	val_9val_9	1
 PREHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
+SELECT a.key, concat(a.value, b.value) 
+FROM 
+(select key, value from test_table1 where ds = '1') a 
+JOIN 
+(select key, value from test_table2 where ds = '1') b 
+ON a.key = b.key
+PREHOOK: type: QUERY
+POSTHOOK: query: EXPLAIN
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
+SELECT a.key, concat(a.value, b.value) 
+FROM 
+(select key, value from test_table1 where ds = '1') a 
+JOIN 
+(select key, value from test_table2 where ds = '1') b 
+ON a.key = b.key
+POSTHOOK: type: QUERY
+STAGE DEPENDENCIES:
+  Stage-1 is a root stage
+  Stage-2 depends on stages: Stage-1
+  Stage-0 depends on stages: Stage-2
+  Stage-3 depends on stages: Stage-0
+
+STAGE PLANS:
+  Stage: Stage-1
+    Tez
+#### A masked pattern was here ####
+      Edges:
+        Map 2 <- Map 1 (BROADCAST_EDGE)
+        Reducer 3 <- Map 2 (SIMPLE_EDGE)
+#### A masked pattern was here ####
+      Vertices:
+        Map 1 
+            Map Operator Tree:
+                TableScan
+                  alias: test_table1
+                  Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                  Filter Operator
+                    predicate: key is not null (type: boolean)
+                    Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                    Select Operator
+                      expressions: key (type: int), value (type: string)
+                      outputColumnNames: _col0, _col1
+                      Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                      Reduce Output Operator
+                        key expressions: _col0 (type: int)
+                        sort order: +
+                        Map-reduce partition columns: _col0 (type: int)
+                        Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                        value expressions: _col1 (type: string)
+            Execution mode: llap
+            LLAP IO: no inputs
+        Map 2 
+            Map Operator Tree:
+                TableScan
+                  alias: test_table2
+                  Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
+                  Filter Operator
+                    predicate: key is not null (type: boolean)
+                    Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
+                    Select Operator
+                      expressions: key (type: int), value (type: string)
+                      outputColumnNames: _col0, _col1
+                      Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
+                      Map Join Operator
+                        condition map:
+                             Inner Join 0 to 1
+                        keys:
+                          0 _col0 (type: int)
+                          1 _col0 (type: int)
+                        outputColumnNames: _col0, _col1, _col3
+                        input vertices:
+                          0 Map 1
+                        Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
+                        Select Operator
+                          expressions: _col0 (type: int), concat(_col1, _col3) (type: string)
+                          outputColumnNames: _col0, _col1
+                          Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
+                          Reduce Output Operator
+                            key expressions: _col0 (type: int)
+                            sort order: +
+                            Map-reduce partition columns: _col0 (type: int)
+                            Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
+                            value expressions: _col1 (type: string)
+            Execution mode: llap
+            LLAP IO: no inputs
+        Reducer 3 
+            Execution mode: llap
+            Reduce Operator Tree:
+              Select Operator
+                expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: string)
+                outputColumnNames: _col0, _col1
+                Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
+                File Output Operator
+                  compressed: false
+                  Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
+                  table:
+                      input format: org.apache.hadoop.mapred.TextInputFormat
+                      output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                      name: default.test_table3
+
+  Stage: Stage-2
+    Dependency Collection
+
+  Stage: Stage-0
+    Move Operator
+      tables:
+          partition:
+            ds 1
+          replace: true
+          table:
+              input format: org.apache.hadoop.mapred.TextInputFormat
+              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+              name: default.test_table3
+
+  Stage: Stage-3
+    Stats-Aggr Operator
+
+PREHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
+SELECT a.key, concat(a.value, b.value) 
+FROM 
+(select key, value from test_table1 where ds = '1') a 
+JOIN 
+(select key, value from test_table2 where ds = '1') b 
+ON a.key = b.key
+PREHOOK: type: QUERY
+PREHOOK: Input: default@test_table1
+PREHOOK: Input: default@test_table1@ds=1
+PREHOOK: Input: default@test_table2
+PREHOOK: Input: default@test_table2@ds=1
+PREHOOK: Output: default@test_table3@ds=1
+POSTHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
+SELECT a.key, concat(a.value, b.value) 
+FROM 
+(select key, value from test_table1 where ds = '1') a 
+JOIN 
+(select key, value from test_table2 where ds = '1') b 
+ON a.key = b.key
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@test_table1
+POSTHOOK: Input: default@test_table1@ds=1
+POSTHOOK: Input: default@test_table2
+POSTHOOK: Input: default@test_table2@ds=1
+POSTHOOK: Output: default@test_table3@ds=1
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).key SIMPLE [(test_table1)test_table1.FieldSchema(name:key, type:int, comment:null), ]
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).value EXPRESSION [(test_table1)test_table1.FieldSchema(name:value, type:string, comment:null), (test_table2)test_table2.FieldSchema(name:value, type:string, comment:null), ]
+PREHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
+PREHOOK: type: QUERY
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+POSTHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+0	val_0val_0	1
+2	val_2val_2	1
+4	val_4val_4	1
+8	val_8val_8	1
+PREHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+PREHOOK: type: QUERY
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+POSTHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+5	val_5val_5	1
+9	val_9val_9	1
+PREHOOK: query: EXPLAIN
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.v1, b.v2) 
 FROM 
-(select key, concat(value, value) as v1 from test_table1_n0 where ds = '1') a 
+(select key, concat(value, value) as v1 from test_table1 where ds = '1') a 
 JOIN 
-(select key, concat(value, value) as v2 from test_table2_n0 where ds = '1') b 
+(select key, concat(value, value) as v2 from test_table2 where ds = '1') b 
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
 POSTHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.v1, b.v2) 
 FROM 
-(select key, concat(value, value) as v1 from test_table1_n0 where ds = '1') a 
+(select key, concat(value, value) as v1 from test_table1 where ds = '1') a 
 JOIN 
-(select key, concat(value, value) as v2 from test_table2_n0 where ds = '1') b 
+(select key, concat(value, value) as v2 from test_table2 where ds = '1') b 
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -1075,109 +881,79 @@ STAGE PLANS:
     Tez
 #### A masked pattern was here ####
       Edges:
-        Reducer 2 <- Map 1 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
+        Map 2 <- Map 1 (BROADCAST_EDGE)
+        Reducer 3 <- Map 2 (SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
             Map Operator Tree:
                 TableScan
-                  alias: test_table2_n0
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                  alias: test_table1
+                  Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), concat(value, value) (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 84 Data size: 15792 Basic stats: COMPLETE Column stats: COMPLETE
-                      Dummy Store
+                      Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                      Reduce Output Operator
+                        key expressions: _col0 (type: int)
+                        sort order: +
+                        Map-reduce partition columns: _col0 (type: int)
+                        Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                        value expressions: _col1 (type: string)
+            Execution mode: llap
+            LLAP IO: no inputs
+        Map 2 
             Map Operator Tree:
                 TableScan
-                  alias: test_table1_n0
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                  alias: test_table2
+                  Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), concat(value, value) (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 10 Data size: 1880 Basic stats: COMPLETE Column stats: COMPLETE
-                      Merge Join Operator
+                      Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
+                      Map Join Operator
                         condition map:
                              Inner Join 0 to 1
                         keys:
                           0 _col0 (type: int)
                           1 _col0 (type: int)
                         outputColumnNames: _col0, _col1, _col3
-                        Statistics: Num rows: 14 Data size: 5208 Basic stats: COMPLETE Column stats: COMPLETE
+                        input vertices:
+                          0 Map 1
+                        Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                         Select Operator
                           expressions: _col0 (type: int), concat(_col1, _col3) (type: string)
                           outputColumnNames: _col0, _col1
-                          Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                           Reduce Output Operator
                             key expressions: _col0 (type: int)
-                            null sort order: a
                             sort order: +
                             Map-reduce partition columns: _col0 (type: int)
-                            Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                             value expressions: _col1 (type: string)
             Execution mode: llap
-        Reducer 2 
+            LLAP IO: no inputs
+        Reducer 3 
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: string)
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                   table:
                       input format: org.apache.hadoop.mapred.TextInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                       serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                      name: default.test_table3_n0
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: string), '1' (type: string)
-                  outputColumnNames: key, value, ds
-                  Statistics: Num rows: 14 Data size: 3822 Basic stats: COMPLETE Column stats: COMPLETE
-                  Group By Operator
-                    aggregations: min(key), max(key), count(1), count(key), compute_bit_vector_hll(key), max(length(value)), avg(COALESCE(length(value),0)), count(value), compute_bit_vector_hll(value)
-                    keys: ds (type: string)
-                    minReductionHashAggr: 0.9285714
-                    mode: hash
-                    outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                    Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                    Reduce Output Operator
-                      key expressions: _col0 (type: string)
-                      null sort order: z
-                      sort order: +
-                      Map-reduce partition columns: _col0 (type: string)
-                      Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                      value expressions: _col1 (type: int), _col2 (type: int), _col3 (type: bigint), _col4 (type: bigint), _col5 (type: binary), _col6 (type: int), _col7 (type: struct<count:bigint,sum:double,input:int>), _col8 (type: bigint), _col9 (type: binary)
-        Reducer 3 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), count(VALUE._col2), count(VALUE._col3), compute_bit_vector_hll(VALUE._col4), max(VALUE._col5), avg(VALUE._col6), count(VALUE._col7), compute_bit_vector_hll(VALUE._col8)
-                keys: KEY._col0 (type: string)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                Statistics: Num rows: 1 Data size: 417 Basic stats: COMPLETE Column stats: COMPLETE
-                Select Operator
-                  expressions: 'LONG' (type: string), UDFToLong(_col1) (type: bigint), UDFToLong(_col2) (type: bigint), (_col3 - _col4) (type: bigint), COALESCE(ndv_compute_bit_vector(_col5),0) (type: bigint), _col5 (type: binary), 'STRING' (type: string), UDFToLong(COALESCE(_col6,0)) (type: bigint), COALESCE(_col7,0) (type: double), (_col3 - _col8) (type: bigint), COALESCE(ndv_compute_bit_vector(_col9),0) (type: bigint), _col9 (type: binary), _col0 (type: string)
-                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10, _col11, _col12
-                  Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                  File Output Operator
-                    compressed: false
-                    Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                    table:
-                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                      name: default.test_table3
 
   Stage: Stage-2
     Dependency Collection
@@ -1192,114 +968,99 @@ STAGE PLANS:
               input format: org.apache.hadoop.mapred.TextInputFormat
               output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
               serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.test_table3_n0
+              name: default.test_table3
 
   Stage: Stage-3
-    Stats Work
-      Basic Stats Work:
-      Column Stats Desc:
-          Columns: key, value
-          Column Types: int, string
-          Table: default.test_table3_n0
+    Stats-Aggr Operator
 
-PREHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.v1, b.v2) 
 FROM 
-(select key, concat(value, value) as v1 from test_table1_n0 where ds = '1') a 
+(select key, concat(value, value) as v1 from test_table1 where ds = '1') a 
 JOIN 
-(select key, concat(value, value) as v2 from test_table2_n0 where ds = '1') b 
+(select key, concat(value, value) as v2 from test_table2 where ds = '1') b 
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: Input: default@test_table1
+PREHOOK: Input: default@test_table1@ds=1
+PREHOOK: Input: default@test_table2
+PREHOOK: Input: default@test_table2@ds=1
+PREHOOK: Output: default@test_table3@ds=1
+POSTHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key, concat(a.v1, b.v2) 
 FROM 
-(select key, concat(value, value) as v1 from test_table1_n0 where ds = '1') a 
+(select key, concat(value, value) as v1 from test_table1 where ds = '1') a 
 JOIN 
-(select key, concat(value, value) as v2 from test_table2_n0 where ds = '1') b 
+(select key, concat(value, value) as v2 from test_table2 where ds = '1') b 
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).key SIMPLE [(test_table1_n0)test_table1_n0.FieldSchema(name:key, type:int, comment:null), ]
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).value EXPRESSION [(test_table1_n0)test_table1_n0.FieldSchema(name:value, type:string, comment:null), (test_table2_n0)test_table2_n0.FieldSchema(name:value, type:string, comment:null), ]
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: Input: default@test_table1
+POSTHOOK: Input: default@test_table1@ds=1
+POSTHOOK: Input: default@test_table2
+POSTHOOK: Input: default@test_table2@ds=1
+POSTHOOK: Output: default@test_table3@ds=1
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).key SIMPLE [(test_table1)test_table1.FieldSchema(name:key, type:int, comment:null), ]
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).value EXPRESSION [(test_table1)test_table1.FieldSchema(name:value, type:string, comment:null), (test_table2)test_table2.FieldSchema(name:value, type:string, comment:null), ]
+PREHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
+0	val_0val_0val_0val_0	1
 2	val_2val_2val_2val_2	1
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
-0	val_0val_0val_0val_0	1
 4	val_4val_4val_4val_4	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
-5	val_5val_5val_5val_5	1
 8	val_8val_8val_8val_8	1
+PREHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+PREHOOK: type: QUERY
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+POSTHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
+5	val_5val_5val_5val_5	1
 9	val_9val_9val_9val_9	1
 PREHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key+a.key, concat(a.value, b.value) 
 FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
+(select key, value from test_table1 where ds = '1') a 
 JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
+(select key, value from test_table2 where ds = '1') b 
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
 POSTHOOK: query: EXPLAIN
-INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key+a.key, concat(a.value, b.value) 
 FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
+(select key, value from test_table1 where ds = '1') a 
 JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
+(select key, value from test_table2 where ds = '1') b 
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -1311,109 +1072,79 @@ STAGE PLANS:
     Tez
 #### A masked pattern was here ####
       Edges:
-        Reducer 2 <- Map 1 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
+        Map 2 <- Map 1 (BROADCAST_EDGE)
+        Reducer 3 <- Map 2 (SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
             Map Operator Tree:
                 TableScan
-                  alias: test_table2_n0
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                  alias: test_table1
+                  Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), value (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 84 Data size: 7896 Basic stats: COMPLETE Column stats: COMPLETE
-                      Dummy Store
+                      Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                      Reduce Output Operator
+                        key expressions: _col0 (type: int)
+                        sort order: +
+                        Map-reduce partition columns: _col0 (type: int)
+                        Statistics: Num rows: 10 Data size: 150 Basic stats: COMPLETE Column stats: NONE
+                        value expressions: _col1 (type: string)
+            Execution mode: llap
+            LLAP IO: no inputs
+        Map 2 
             Map Operator Tree:
                 TableScan
-                  alias: test_table1_n0
-                  filterExpr: key is not null (type: boolean)
-                  Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                  alias: test_table2
+                  Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
-                    Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), value (type: string)
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 10 Data size: 930 Basic stats: COMPLETE Column stats: COMPLETE
-                      Merge Join Operator
+                      Statistics: Num rows: 84 Data size: 1408 Basic stats: COMPLETE Column stats: NONE
+                      Map Join Operator
                         condition map:
                              Inner Join 0 to 1
                         keys:
                           0 _col0 (type: int)
                           1 _col0 (type: int)
                         outputColumnNames: _col0, _col1, _col3
-                        Statistics: Num rows: 14 Data size: 2562 Basic stats: COMPLETE Column stats: COMPLETE
+                        input vertices:
+                          0 Map 1
+                        Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                         Select Operator
                           expressions: (_col0 + _col0) (type: int), concat(_col1, _col3) (type: string)
                           outputColumnNames: _col0, _col1
-                          Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                           Reduce Output Operator
                             key expressions: _col0 (type: int)
-                            null sort order: a
                             sort order: +
                             Map-reduce partition columns: _col0 (type: int)
-                            Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                             value expressions: _col1 (type: string)
             Execution mode: llap
-        Reducer 2 
+            LLAP IO: no inputs
+        Reducer 3 
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: string)
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 14 Data size: 2632 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 92 Data size: 1548 Basic stats: COMPLETE Column stats: NONE
                   table:
                       input format: org.apache.hadoop.mapred.TextInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                       serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                      name: default.test_table3_n0
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: string), '1' (type: string)
-                  outputColumnNames: key, value, ds
-                  Statistics: Num rows: 14 Data size: 3822 Basic stats: COMPLETE Column stats: COMPLETE
-                  Group By Operator
-                    aggregations: min(key), max(key), count(1), count(key), compute_bit_vector_hll(key), max(length(value)), avg(COALESCE(length(value),0)), count(value), compute_bit_vector_hll(value)
-                    keys: ds (type: string)
-                    minReductionHashAggr: 0.9285714
-                    mode: hash
-                    outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                    Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                    Reduce Output Operator
-                      key expressions: _col0 (type: string)
-                      null sort order: z
-                      sort order: +
-                      Map-reduce partition columns: _col0 (type: string)
-                      Statistics: Num rows: 1 Data size: 485 Basic stats: COMPLETE Column stats: COMPLETE
-                      value expressions: _col1 (type: int), _col2 (type: int), _col3 (type: bigint), _col4 (type: bigint), _col5 (type: binary), _col6 (type: int), _col7 (type: struct<count:bigint,sum:double,input:int>), _col8 (type: bigint), _col9 (type: binary)
-        Reducer 3 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), count(VALUE._col2), count(VALUE._col3), compute_bit_vector_hll(VALUE._col4), max(VALUE._col5), avg(VALUE._col6), count(VALUE._col7), compute_bit_vector_hll(VALUE._col8)
-                keys: KEY._col0 (type: string)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9
-                Statistics: Num rows: 1 Data size: 417 Basic stats: COMPLETE Column stats: COMPLETE
-                Select Operator
-                  expressions: 'LONG' (type: string), UDFToLong(_col1) (type: bigint), UDFToLong(_col2) (type: bigint), (_col3 - _col4) (type: bigint), COALESCE(ndv_compute_bit_vector(_col5),0) (type: bigint), _col5 (type: binary), 'STRING' (type: string), UDFToLong(COALESCE(_col6,0)) (type: bigint), COALESCE(_col7,0) (type: double), (_col3 - _col8) (type: bigint), COALESCE(ndv_compute_bit_vector(_col9),0) (type: bigint), _col9 (type: binary), _col0 (type: string)
-                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10, _col11, _col12
-                  Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                  File Output Operator
-                    compressed: false
-                    Statistics: Num rows: 1 Data size: 615 Basic stats: COMPLETE Column stats: COMPLETE
-                    table:
-                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                      name: default.test_table3
 
   Stage: Stage-2
     Dependency Collection
@@ -1428,72 +1159,48 @@ STAGE PLANS:
               input format: org.apache.hadoop.mapred.TextInputFormat
               output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
               serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.test_table3_n0
+              name: default.test_table3
 
   Stage: Stage-3
-    Stats Work
-      Basic Stats Work:
-      Column Stats Desc:
-          Columns: key, value
-          Column Types: int, string
-          Table: default.test_table3_n0
+    Stats-Aggr Operator
 
-PREHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key+a.key, concat(a.value, b.value) 
 FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
+(select key, value from test_table1 where ds = '1') a 
 JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
+(select key, value from test_table2 where ds = '1') b 
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table1_n0
-PREHOOK: Input: default@test_table1_n0@ds=1
-PREHOOK: Input: default@test_table2_n0
-PREHOOK: Input: default@test_table2_n0@ds=1
-PREHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: query: INSERT OVERWRITE TABLE test_table3_n0 PARTITION (ds = '1')
+PREHOOK: Input: default@test_table1
+PREHOOK: Input: default@test_table1@ds=1
+PREHOOK: Input: default@test_table2
+PREHOOK: Input: default@test_table2@ds=1
+PREHOOK: Output: default@test_table3@ds=1
+POSTHOOK: query: INSERT OVERWRITE TABLE test_table3 PARTITION (ds = '1')
 SELECT a.key+a.key, concat(a.value, b.value) 
 FROM 
-(select key, value from test_table1_n0 where ds = '1') a 
+(select key, value from test_table1 where ds = '1') a 
 JOIN 
-(select key, value from test_table2_n0 where ds = '1') b 
+(select key, value from test_table2 where ds = '1') b 
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table1_n0
-POSTHOOK: Input: default@test_table1_n0@ds=1
-POSTHOOK: Input: default@test_table2_n0
-POSTHOOK: Input: default@test_table2_n0@ds=1
-POSTHOOK: Output: default@test_table3_n0@ds=1
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).key EXPRESSION [(test_table1_n0)test_table1_n0.FieldSchema(name:key, type:int, comment:null), ]
-POSTHOOK: Lineage: test_table3_n0 PARTITION(ds=1).value EXPRESSION [(test_table1_n0)test_table1_n0.FieldSchema(name:value, type:string, comment:null), (test_table2_n0)test_table2_n0.FieldSchema(name:value, type:string, comment:null), ]
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: Input: default@test_table1
+POSTHOOK: Input: default@test_table1@ds=1
+POSTHOOK: Input: default@test_table2
+POSTHOOK: Input: default@test_table2@ds=1
+POSTHOOK: Output: default@test_table3@ds=1
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).key EXPRESSION [(test_table1)test_table1.FieldSchema(name:key, type:int, comment:null), ]
+POSTHOOK: Lineage: test_table3 PARTITION(ds=1).value EXPRESSION [(test_table1)test_table1.FieldSchema(name:value, type:string, comment:null), (test_table2)test_table2.FieldSchema(name:value, type:string, comment:null), ]
+PREHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 1 out of 2) s where ds = '1'
+POSTHOOK: query: select * from test_table3 tablesample (bucket 1 out of 2) s where ds = '1'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-10	val_5val_5	1
-10	val_5val_5	1
-10	val_5val_5	1
-10	val_5val_5	1
-10	val_5val_5	1
-10	val_5val_5	1
-10	val_5val_5	1
-10	val_5val_5	1
-10	val_5val_5	1
-PREHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-PREHOOK: type: QUERY
-PREHOOK: Input: default@test_table3_n0
-PREHOOK: Input: default@test_table3_n0@ds=1
-#### A masked pattern was here ####
-POSTHOOK: query: select * from test_table3_n0 tablesample (bucket 2 out of 2) s where ds = '1'
-POSTHOOK: type: QUERY
-POSTHOOK: Input: default@test_table3_n0
-POSTHOOK: Input: default@test_table3_n0@ds=1
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
 #### A masked pattern was here ####
 0	val_0val_0	1
 0	val_0val_0	1
@@ -1506,5 +1213,24 @@ POSTHOOK: Input: default@test_table3_n0@ds=1
 0	val_0val_0	1
 4	val_2val_2	1
 8	val_4val_4	1
+10	val_5val_5	1
+10	val_5val_5	1
+10	val_5val_5	1
+10	val_5val_5	1
+10	val_5val_5	1
+10	val_5val_5	1
+10	val_5val_5	1
+10	val_5val_5	1
+10	val_5val_5	1
 16	val_8val_8	1
 18	val_9val_9	1
+PREHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+PREHOOK: type: QUERY
+PREHOOK: Input: default@test_table3
+PREHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####
+POSTHOOK: query: select * from test_table3 tablesample (bucket 2 out of 2) s where ds = '1'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@test_table3
+POSTHOOK: Input: default@test_table3@ds=1
+#### A masked pattern was here ####

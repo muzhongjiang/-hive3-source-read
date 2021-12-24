@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -73,8 +73,7 @@ public abstract class TypedSerDe extends AbstractSerDe {
   }
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-      throws SerDeException {
+  public void initialize(Configuration job, Properties tbl) throws SerDeException {
     // do nothing
   }
 
@@ -86,6 +85,12 @@ public abstract class TypedSerDe extends AbstractSerDe {
   @Override
   public Writable serialize(Object obj, ObjectInspector objInspector) throws SerDeException {
     throw new RuntimeException("not supported");
+  }
+
+  @Override
+  public SerDeStats getSerDeStats() {
+    // no support for statistics
+    return null;
   }
 
 }

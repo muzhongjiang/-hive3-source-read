@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,56 +18,53 @@
 
 package org.apache.hadoop.hive.ql.parse;
 
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
+import com.google.common.base.Function;
+
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.ReplChangeManager;
 import org.apache.hadoop.hive.metastore.api.Database;
-import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.hadoop.hive.ql.Context;
-import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.Task;
-import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.repl.util.ReplUtils;
-import org.apache.hadoop.hive.ql.exec.repl.util.StringConvertibleObject;
 import org.apache.hadoop.hive.ql.hooks.ReadEntity;
 import org.apache.hadoop.hive.ql.hooks.WriteEntity;
 import org.apache.hadoop.hive.ql.metadata.Hive;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.metadata.Partition;
-import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.parse.repl.DumpType;
-import org.apache.hadoop.hive.ql.parse.repl.dump.Utils;
-import org.apache.hadoop.hive.ql.parse.repl.dump.io.DBSerializer;
-import org.apache.hadoop.hive.ql.parse.repl.dump.io.JsonWriter;
-import org.apache.hadoop.hive.ql.parse.repl.dump.io.ReplicationSpecSerializer;
-import org.apache.hadoop.hive.ql.parse.repl.dump.io.TableSerializer;
-import org.apache.hadoop.hive.ql.parse.repl.load.MetaData;
-import org.apache.hadoop.hive.ql.parse.repl.load.MetadataJson;
-import org.apache.hadoop.hive.ql.plan.PlanUtils;
-import org.apache.thrift.TException;
-import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.TableType;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.Partition;
+import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.ql.ErrorMsg;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TJSONProtocol;
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.JsonGenerator;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
+import javax.annotation.Nullable;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.TreeMap;
 
 /**
  *
@@ -79,15 +76,9 @@ public class EximUtil {
 
   public static final String METADATA_NAME = "_metadata";
   public static final String FILES_NAME = "_files";
-  public static final String FILE_LIST = "_file_list";
-  public static final String FILE_LIST_EXTERNAL = "_file_list_external";
-  public static final String FILE_LIST_EXTERNAL_SNAPSHOT_CURRENT = "_file_list_external_current";
-  public static final String FILE_LIST_EXTERNAL_SNAPSHOT_OLD = "_file_list_external_old";
   public static final String DATA_PATH_NAME = "data";
-  public static final String METADATA_PATH_NAME = "metadata";
 
   private static final Logger LOG = LoggerFactory.getLogger(EximUtil.class);
-  private static final String DATABASE_PATH_SUFFIX = ".db";
 
   /**
    * Wrapper class for common BaseSemanticAnalyzer non-static members
@@ -102,13 +93,11 @@ public class EximUtil {
   public static class SemanticAnalyzerWrapperContext {
     private HiveConf conf;
     private Hive db;
-    private Set<ReadEntity> inputs;
-    private Set<WriteEntity> outputs;
-    private List<Task<?>> tasks;
+    private HashSet<ReadEntity> inputs;
+    private HashSet<WriteEntity> outputs;
+    private List<Task<? extends Serializable>> tasks;
     private Logger LOG;
     private Context ctx;
-    private DumpType eventType = DumpType.EVENT_UNKNOWN;
-    private Task<?> openTxnTask = null;
 
     public HiveConf getConf() {
       return conf;
@@ -118,15 +107,15 @@ public class EximUtil {
       return db;
     }
 
-    public Set<ReadEntity> getInputs() {
+    public HashSet<ReadEntity> getInputs() {
       return inputs;
     }
 
-    public Set<WriteEntity> getOutputs() {
+    public HashSet<WriteEntity> getOutputs() {
       return outputs;
     }
 
-    public List<Task<?>> getTasks() {
+    public List<Task<? extends Serializable>> getTasks() {
       return tasks;
     }
 
@@ -138,18 +127,10 @@ public class EximUtil {
       return ctx;
     }
 
-    public void setEventType(DumpType eventType) {
-      this.eventType = eventType;
-    }
-
-    public DumpType getEventType() {
-      return eventType;
-    }
-
     public SemanticAnalyzerWrapperContext(HiveConf conf, Hive db,
-                                          Set<ReadEntity> inputs,
-                                          Set<WriteEntity> outputs,
-                                          List<Task<?>> tasks,
+                                          HashSet<ReadEntity> inputs,
+                                          HashSet<WriteEntity> outputs,
+                                          List<Task<? extends Serializable>> tasks,
                                           Logger LOG, Context ctx){
       this.conf = conf;
       this.db = db;
@@ -159,98 +140,8 @@ public class EximUtil {
       this.LOG = LOG;
       this.ctx = ctx;
     }
-
-    public Task<?> getOpenTxnTask() {
-      return openTxnTask;
-    }
-    public void setOpenTxnTask(Task<?> openTxnTask) {
-      this.openTxnTask = openTxnTask;
-    }
   }
 
-  /**
-   * Wrapper class for mapping source and target path for copying managed table data and function's binary.
-   */
-  public static class DataCopyPath implements StringConvertibleObject {
-    private static final String URI_SEPARATOR = "#";
-    private ReplicationSpec replicationSpec;
-    private static boolean nullSrcPathForTest = false;
-    private Path srcPath;
-    private Path tgtPath;
-
-    public DataCopyPath(ReplicationSpec replicationSpec) {
-      this.replicationSpec = replicationSpec;
-    }
-
-    public DataCopyPath(ReplicationSpec replicationSpec, Path srcPath, Path tgtPath) {
-      this.replicationSpec = replicationSpec;
-      if (srcPath == null) {
-        throw new IllegalArgumentException("Source path can not be null.");
-      }
-      this.srcPath = srcPath;
-      if (tgtPath == null) {
-        throw new IllegalArgumentException("Target path can not be null.");
-      }
-      this.tgtPath = tgtPath;
-    }
-
-    public Path getSrcPath() {
-      if (nullSrcPathForTest) {
-        return null;
-      }
-      return srcPath;
-    }
-
-    public Path getTargetPath() {
-      return tgtPath;
-    }
-
-    @Override
-    public String toString() {
-      return "DataCopyPath{"
-              + "fullyQualifiedSourcePath=" + srcPath
-              + ", fullyQualifiedTargetPath=" + tgtPath
-              + '}';
-    }
-
-    public ReplicationSpec getReplicationSpec() {
-      return replicationSpec;
-    }
-
-    public void setReplicationSpec(ReplicationSpec replicationSpec) {
-      this.replicationSpec = replicationSpec;
-    }
-
-    /**
-     * To be used only for testing purpose.
-     * It has been used to make repl dump operation fail.
-     */
-    public static void setNullSrcPath(HiveConf conf, boolean aNullSrcPath) {
-      if (conf.getBoolVar(HiveConf.ConfVars.HIVE_IN_TEST)) {
-        nullSrcPathForTest = aNullSrcPath;
-      }
-    }
-
-    @Override
-    public String convertToString() {
-      StringBuilder objInStr = new StringBuilder();
-      objInStr.append(srcPath)
-              .append(URI_SEPARATOR)
-              .append(tgtPath);
-      return objInStr.toString();
-    }
-
-    @Override
-    public void loadFromString(String objectInStr) {
-      String paths[] = objectInStr.split(URI_SEPARATOR);
-      this.srcPath = new Path(paths[0]);
-      this.tgtPath = new Path(paths[1]);
-    }
-
-    private String getEmptyOrString(String str) {
-      return (str == null) ? "" : str;
-    }
-  }
 
   private EximUtil() {
   }
@@ -259,16 +150,14 @@ public class EximUtil {
    * Initialize the URI where the exported data collection is
    * to created for export, or is present for import
    */
-  public static URI getValidatedURI(HiveConf conf, String dcPath) throws SemanticException {
+  static URI getValidatedURI(HiveConf conf, String dcPath) throws SemanticException {
     try {
-      boolean testMode = conf.getBoolVar(HiveConf.ConfVars.HIVETESTMODE)
-          || conf.getBoolVar(HiveConf.ConfVars.HIVEEXIMTESTMODE);
+      boolean testMode = conf.getBoolVar(HiveConf.ConfVars.HIVETESTMODE);
       URI uri = new Path(dcPath).toUri();
-      FileSystem fs = FileSystem.get(uri, conf);
-      // Get scheme from FileSystem
-      String scheme = fs.getScheme();
+      String scheme = uri.getScheme();
       String authority = uri.getAuthority();
       String path = uri.getPath();
+      FileSystem fs = FileSystem.get(uri, conf);
 
       LOG.info("Path before norm :" + path);
       // generate absolute path relative to home directory
@@ -282,6 +171,8 @@ public class EximUtil {
         }
       }
 
+      // Get scheme from FileSystem
+      scheme = fs.getScheme();
 
       // if scheme is specified but not authority then use the default authority
       if (StringUtils.isEmpty(authority)) {
@@ -318,8 +209,7 @@ public class EximUtil {
   public static String relativeToAbsolutePath(HiveConf conf, String location)
       throws SemanticException {
     try {
-      boolean testMode = conf.getBoolVar(HiveConf.ConfVars.HIVETESTMODE)
-        || conf.getBoolVar(HiveConf.ConfVars.HIVEEXIMTESTMODE);;
+      boolean testMode = conf.getBoolVar(HiveConf.ConfVars.HIVETESTMODE);
       if (testMode) {
         URI uri = new Path(location).toUri();
         FileSystem fs = FileSystem.get(uri, conf);
@@ -329,9 +219,6 @@ public class EximUtil {
         if (!path.startsWith("/")) {
           path = (new Path(System.getProperty("test.tmp.dir"), path)).toUri().getPath();
         }
-        if (StringUtils.isEmpty(scheme)) {
-          scheme = "pfile";
-        }
         try {
           uri = new URI(scheme, authority, path, null, null);
         } catch (URISyntaxException e) {
@@ -339,11 +226,8 @@ public class EximUtil {
         }
         return uri.toString();
       } else {
-        Path path = new Path(location);
-        if (path.isAbsolute()) {
-          return location;
-        }
-        return path.getFileSystem(conf).makeQualified(path).toString();
+        // no-op for non-test mode for now
+        return location;
       }
     } catch (IOException e) {
       throw new SemanticException(ErrorMsg.IO_ERROR.getMsg() + ": " + e.getMessage(), e);
@@ -356,101 +240,234 @@ public class EximUtil {
   /* If null, then the major version number should match */
   public static final String METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION = null;
 
-  public static void createDbExportDump(FileSystem fs, Path metadataPath, Database dbObj,
-      ReplicationSpec replicationSpec, Configuration conf) throws IOException, SemanticException {
-    updateIfCustomDbLocations(dbObj, conf);
+  public static void createDbExportDump(
+      FileSystem fs, Path metadataPath, Database dbObj,
+      ReplicationSpec replicationSpec) throws IOException, SemanticException {
 
     // WARNING NOTE : at this point, createDbExportDump lives only in a world where ReplicationSpec is in replication scope
     // If we later make this work for non-repl cases, analysis of this logic might become necessary. Also, this is using
     // Replv2 semantics, i.e. with listFiles laziness (no copy at export time)
 
-    // Remove all the entries from the parameters which are added by repl tasks internally.
-    Map<String, String> parameters = dbObj.getParameters();
-    if (parameters != null) {
-      Map<String, String> tmpParameters = new HashMap<>(parameters);
-      tmpParameters.entrySet()
-                .removeIf(e -> e.getKey().startsWith(Utils.BOOTSTRAP_DUMP_STATE_KEY_PREFIX)
-                            || e.getKey().equals(ReplUtils.REPL_CHECKPOINT_KEY)
-                            || e.getKey().equals(ReplChangeManager.SOURCE_OF_REPLICATION)
-                            || e.getKey().equals(ReplUtils.REPL_FIRST_INC_PENDING_FLAG));
-      dbObj.setParameters(tmpParameters);
-    }
-    try (JsonWriter jsonWriter = new JsonWriter(fs, metadataPath)) {
-      new DBSerializer(dbObj).writeTo(jsonWriter, replicationSpec);
-    }
-    if (parameters != null) {
-      dbObj.setParameters(parameters);
-    }
-  }
+    OutputStream out = fs.create(metadataPath);
+    JsonGenerator jgen = (new JsonFactory()).createJsonGenerator(out);
+    jgen.writeStartObject();
+    jgen.writeStringField("version",METADATA_FORMAT_VERSION);
+    dbObj.putToParameters(ReplicationSpec.KEY.CURR_STATE_ID.toString(), replicationSpec.getCurrentReplicationState());
 
-  private static void updateIfCustomDbLocations(Database database, Configuration conf) throws SemanticException {
+    if (METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION != null) {
+      jgen.writeStringField("fcversion",METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION);
+    }
+    TSerializer serializer = new TSerializer(new TJSONProtocol.Factory());
     try {
-      String whLocatoion = MetastoreConf.getVar(conf, MetastoreConf.ConfVars.WAREHOUSE_EXTERNAL,
-              MetastoreConf.getVar(conf, MetastoreConf.ConfVars.WAREHOUSE));
-      Path dbDerivedLoc = new Path(whLocatoion, database.getName().toLowerCase() + DATABASE_PATH_SUFFIX);
-      String defaultDbLoc = Utilities.getQualifiedPath((HiveConf) conf, dbDerivedLoc);
-      database.putToParameters(ReplUtils.REPL_IS_CUSTOM_DB_LOC,
-              Boolean.toString(!defaultDbLoc.equals(database.getLocationUri())));
-      String whManagedLocatoion = MetastoreConf.getVar(conf, MetastoreConf.ConfVars.WAREHOUSE);
-      Path dbDerivedManagedLoc = new Path(whManagedLocatoion, database.getName().toLowerCase()
-              + DATABASE_PATH_SUFFIX);
-      String defaultDbManagedLoc = Utilities.getQualifiedPath((HiveConf) conf, dbDerivedManagedLoc);
-      database.getParameters().put(ReplUtils.REPL_IS_CUSTOM_DB_MANAGEDLOC, Boolean.toString(
-              !(database.getManagedLocationUri() == null
-                      ||defaultDbManagedLoc.equals(database.getManagedLocationUri()))));
-    } catch (HiveException ex) {
-      throw new SemanticException(ex);
+      jgen.writeStringField("db", serializer.toString(dbObj, "UTF-8"));
+    } catch (TException e) {
+      throw new SemanticException(
+          ErrorMsg.ERROR_SERIALIZE_METASTORE
+              .getMsg(), e);
     }
+
+    jgen.writeEndObject();
+    jgen.close(); // JsonGenerator owns the OutputStream, so it closes it when we call close.
   }
 
-  public static void createExportDump(FileSystem fs, Path metadataPath, Table tableHandle,
-      Iterable<Partition> partitions, ReplicationSpec replicationSpec, HiveConf hiveConf)
-      throws SemanticException, IOException {
+  public static void createExportDump(FileSystem fs, Path metadataPath,
+      org.apache.hadoop.hive.ql.metadata.Table tableHandle,
+      Iterable<org.apache.hadoop.hive.ql.metadata.Partition> partitions,
+      ReplicationSpec replicationSpec) throws SemanticException, IOException {
 
-    if (replicationSpec == null) {
+    if (replicationSpec == null){
       replicationSpec = new ReplicationSpec(); // instantiate default values if not specified
     }
 
-    if (tableHandle == null) {
+    if (tableHandle == null){
       replicationSpec.setNoop(true);
     }
 
-    try (JsonWriter writer = new JsonWriter(fs, metadataPath)) {
-      if (replicationSpec.isInReplicationScope()) {
-        new ReplicationSpecSerializer().writeTo(writer, replicationSpec);
+    OutputStream out = fs.create(metadataPath);
+    JsonGenerator jgen = (new JsonFactory()).createJsonGenerator(out);
+    jgen.writeStartObject();
+    jgen.writeStringField("version",METADATA_FORMAT_VERSION);
+    if (METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION != null) {
+      jgen.writeStringField("fcversion",METADATA_FORMAT_FORWARD_COMPATIBLE_VERSION);
+    }
+
+    if (replicationSpec.isInReplicationScope()){
+      for (ReplicationSpec.KEY key : ReplicationSpec.KEY.values()){
+        String value = replicationSpec.get(key);
+        if (value != null){
+          jgen.writeStringField(key.toString(), value);
+        }
       }
-      new TableSerializer(tableHandle, partitions, hiveConf).writeTo(writer, replicationSpec);
+      if (tableHandle != null){
+        Table ttable = tableHandle.getTTable();
+        ttable.putToParameters(
+            ReplicationSpec.KEY.CURR_STATE_ID.toString(), replicationSpec.getCurrentReplicationState());
+        if ((ttable.getParameters().containsKey("EXTERNAL")) &&
+            (ttable.getParameters().get("EXTERNAL").equalsIgnoreCase("TRUE"))){
+          // Replication destination will not be external - override if set
+          ttable.putToParameters("EXTERNAL","FALSE");
+        }
+        if (ttable.isSetTableType() && ttable.getTableType().equalsIgnoreCase(TableType.EXTERNAL_TABLE.toString())){
+          // Replication dest will not be external - override if set
+          ttable.setTableType(TableType.MANAGED_TABLE.toString());
+        }
+      }
+    } else {
+      // ReplicationSpec.KEY scopeKey = ReplicationSpec.KEY.REPL_SCOPE;
+      // write(out, ",\""+ scopeKey.toString() +"\":\"" + replicationSpec.get(scopeKey) + "\"");
+      // TODO: if we want to be explicit about this dump not being a replication dump, we can
+      // uncomment this else section, but currently unnneeded. Will require a lot of golden file
+      // regen if we do so.
     }
+    if ((tableHandle != null) && (!replicationSpec.isNoop())){
+      TSerializer serializer = new TSerializer(new TJSONProtocol.Factory());
+      try {
+        jgen.writeStringField("table", serializer.toString(tableHandle.getTTable(), "UTF-8"));
+        jgen.writeFieldName("partitions");
+        jgen.writeStartArray();
+        if (partitions != null) {
+          for (org.apache.hadoop.hive.ql.metadata.Partition partition : partitions) {
+            Partition tptn = partition.getTPartition();
+            if (replicationSpec.isInReplicationScope()){
+              tptn.putToParameters(
+                  ReplicationSpec.KEY.CURR_STATE_ID.toString(), replicationSpec.getCurrentReplicationState());
+              if ((tptn.getParameters().containsKey("EXTERNAL")) &&
+                  (tptn.getParameters().get("EXTERNAL").equalsIgnoreCase("TRUE"))){
+                // Replication destination will not be external
+                tptn.putToParameters("EXTERNAL", "FALSE");
+              }
+            }
+            jgen.writeString(serializer.toString(tptn, "UTF-8"));
+            jgen.flush();
+          }
+        }
+        jgen.writeEndArray();
+      } catch (TException e) {
+        throw new SemanticException(
+            ErrorMsg.ERROR_SERIALIZE_METASTORE
+                .getMsg(), e);
+      }
+    }
+    jgen.writeEndObject();
+    jgen.close(); // JsonGenerator owns the OutputStream, so it closes it when we call close.
   }
 
-  public static MetaData getMetaDataFromLocation(String fromLocn, HiveConf conf)
-      throws SemanticException, IOException {
-    URI fromURI = getValidatedURI(conf, PlanUtils.stripQuotes(fromLocn));
-    Path fromPath = new Path(fromURI.getScheme(), fromURI.getAuthority(), fromURI.getPath());
-    FileSystem fs = FileSystem.get(fromURI, conf);
+  /**
+   * Utility class to help return complex value from readMetaData function
+   */
+  public static class ReadMetaData {
+    private final Database db;
+    private final Table table;
+    private final Iterable<Partition> partitions;
+    private final ReplicationSpec replicationSpec;
 
-    try {
-      return readMetaData(fs, new Path(fromPath, EximUtil.METADATA_NAME));
-    } catch (IOException e) {
-      throw new SemanticException(ErrorMsg.INVALID_PATH.getMsg(), e);
+    public ReadMetaData(){
+      this(null,null,null,new ReplicationSpec());
     }
-  }
+    public ReadMetaData(Database db, Table table, Iterable<Partition> partitions, ReplicationSpec replicationSpec){
+      this.db = db;
+      this.table = table;
+      this.partitions = partitions;
+      this.replicationSpec = replicationSpec;
+    }
 
-  public static MetaData readMetaData(FileSystem fs, Path metadataPath)
+    public Database getDatabase(){
+      return db;
+    }
+
+    public Table getTable() {
+      return table;
+    }
+
+    public Iterable<Partition> getPartitions() {
+      return partitions;
+    }
+
+    public ReplicationSpec getReplicationSpec() {
+      return replicationSpec;
+    }
+  };
+
+  public static ReadMetaData readMetaData(FileSystem fs, Path metadataPath)
       throws IOException, SemanticException {
-    String message = readAsString(fs, metadataPath);
+    FSDataInputStream mdstream = null;
     try {
-      return new MetadataJson(message).getMetaData();
-    } catch (TException | JSONException e) {
+      mdstream = fs.open(metadataPath);
+      byte[] buffer = new byte[1024];
+      ByteArrayOutputStream sb = new ByteArrayOutputStream();
+      int read = mdstream.read(buffer);
+      while (read != -1) {
+        sb.write(buffer, 0, read);
+        read = mdstream.read(buffer);
+      }
+      String md = new String(sb.toByteArray(), "UTF-8");
+      JSONObject jsonContainer = new JSONObject(md);
+      String version = jsonContainer.getString("version");
+      String fcversion = getJSONStringEntry(jsonContainer, "fcversion");
+      checkCompatibility(version, fcversion);
+
+      String dbDesc = getJSONStringEntry(jsonContainer, "db");
+      String tableDesc = getJSONStringEntry(jsonContainer,"table");
+      TDeserializer deserializer = new TDeserializer(new TJSONProtocol.Factory());
+
+      Database db = null;
+      if (dbDesc != null){
+        db = new Database();
+        deserializer.deserialize(db, dbDesc, "UTF-8");
+      }
+
+      Table table = null;
+      List<Partition> partitionsList = null;
+      if (tableDesc != null){
+        table = new Table();
+        deserializer.deserialize(table, tableDesc, "UTF-8");
+        // TODO : jackson-streaming-iterable-redo this
+        JSONArray jsonPartitions = new JSONArray(jsonContainer.getString("partitions"));
+        partitionsList = new ArrayList<Partition>(jsonPartitions.length());
+        for (int i = 0; i < jsonPartitions.length(); ++i) {
+          String partDesc = jsonPartitions.getString(i);
+          Partition partition = new Partition();
+          deserializer.deserialize(partition, partDesc, "UTF-8");
+          partitionsList.add(partition);
+        }
+      }
+
+      return new ReadMetaData(db, table, partitionsList,readReplicationSpec(jsonContainer));
+    } catch (JSONException e) {
       throw new SemanticException(ErrorMsg.ERROR_SERIALIZE_METADATA.getMsg(), e);
+    } catch (TException e) {
+      throw new SemanticException(ErrorMsg.ERROR_SERIALIZE_METADATA.getMsg(), e);
+    } finally {
+      if (mdstream != null) {
+        mdstream.close();
+      }
     }
   }
 
-  public static String readAsString(final FileSystem fs, final Path fromMetadataPath)
-      throws IOException {
-    try (FSDataInputStream stream = fs.open(fromMetadataPath)) {
-      return IOUtils.toString(stream, StandardCharsets.UTF_8);
-    }
+  private static ReplicationSpec readReplicationSpec(final JSONObject jsonContainer){
+    Function<String,String> keyFetcher = new Function<String, String>() {
+      @Override
+      public String apply(@Nullable String s) {
+        return getJSONStringEntry(jsonContainer,s);
+      }
+    };
+    return new ReplicationSpec(keyFetcher);
+  }
+
+  private static String getJSONStringEntry(JSONObject jsonContainer, String name) {
+    String retval = null;
+    try {
+      retval = jsonContainer.getString(name);
+    } catch (JSONException ignored) {}
+    return retval;
+  }
+
+  /* check the forward and backward compatibility */
+  private static void checkCompatibility(String version, String fcVersion) throws SemanticException {
+    doCheckCompatibility(
+        METADATA_FORMAT_VERSION,
+        version,
+        fcVersion);
   }
 
   /* check the forward and backward compatibility */
@@ -501,7 +518,7 @@ public class EximUtil {
    * @return the partition specification as a map
    */
   public static Map<String, String> makePartSpec(List<FieldSchema> partCols, List<String> partVals) {
-    Map<String, String> partSpec = new LinkedHashMap<String, String>();
+    Map<String, String> partSpec = new TreeMap<String, String>();
     for (int i = 0; i < partCols.size(); ++i) {
       partSpec.put(partCols.get(i).getName(), partVals.get(i));
     }
@@ -551,4 +568,5 @@ public class EximUtil {
       }
     };
   }
+
 }

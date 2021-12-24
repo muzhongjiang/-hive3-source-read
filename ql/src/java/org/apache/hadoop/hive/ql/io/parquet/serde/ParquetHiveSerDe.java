@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,6 +14,7 @@
 package org.apache.hadoop.hive.ql.io.parquet.serde;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,13 +23,14 @@ import java.util.Properties;
 import com.google.common.base.Preconditions;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.optimizer.FieldNode;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeSpec;
+import org.apache.hadoop.hive.serde2.SerDeStats;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.io.ParquetHiveRecord;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
@@ -36,15 +38,16 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.parquet.hadoop.ParquetOutputFormat;
 
 /**
- * A ParquetHiveSerDe for Hive (with the deprecated package mapred). Parquet
- * format and stats is collected in ParquetRecordWriterWrapper when writer gets
- * closed.
+ *
+ * A ParquetHiveSerDe for Hive (with the deprecated package mapred)
+ *
  */
 @SerDeSpec(schemaProps = {serdeConstants.LIST_COLUMNS, serdeConstants.LIST_COLUMN_TYPES,
         ParquetOutputFormat.COMPRESSION})
@@ -65,36 +68,78 @@ public class ParquetHiveSerDe extends AbstractSerDe {
     }
   }
 
+  private SerDeStats stats;
   private ObjectInspector objInspector;
+
+  private enum LAST_OPERATION {
+    SERIALIZE,
+    DESERIALIZE,
+    UNKNOWN
+  }
+
+  private LAST_OPERATION status;
+  private long serializedSize;
+  private long deserializedSize;
+
   private ParquetHiveRecord parquetRow;
 
   public ParquetHiveSerDe() {
     parquetRow = new ParquetHiveRecord();
+    stats = new SerDeStats();
   }
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-      throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
+  public final void initialize(final Configuration conf, final Properties tbl) throws SerDeException {
 
+    final TypeInfo rowTypeInfo;
+    final List<String> columnNames;
+    final List<TypeInfo> columnTypes;
+    // Get column names and sort order
+    final String columnNameProperty = tbl.getProperty(serdeConstants.LIST_COLUMNS);
+    final String columnTypeProperty = tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES);
+    final String columnNameDelimiter = tbl.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? tbl
+        .getProperty(serdeConstants.COLUMN_NAME_DELIMITER) : String.valueOf(SerDeUtils.COMMA);
+    if (columnNameProperty.length() == 0) {
+      columnNames = new ArrayList<String>();
+    } else {
+      columnNames = Arrays.asList(columnNameProperty.split(columnNameDelimiter));
+    }
+    if (columnTypeProperty.length() == 0) {
+      columnTypes = new ArrayList<TypeInfo>();
+    } else {
+      columnTypes = TypeInfoUtils.getTypeInfosFromTypeString(columnTypeProperty);
+    }
+
+    if (columnNames.size() != columnTypes.size()) {
+      throw new IllegalArgumentException("ParquetHiveSerde initialization failed. Number of column " +
+        "name and column type differs. columnNames = " + columnNames + ", columnTypes = " +
+        columnTypes);
+    }
     // Create row related objects
     StructTypeInfo completeTypeInfo =
-        (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(getColumnNames(), getColumnTypes());
+        (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(columnNames, columnTypes);
     StructTypeInfo prunedTypeInfo = null;
-    if (this.configuration.isPresent()) {
-      String rawPrunedColumnPaths =
-          this.configuration.get().get(ColumnProjectionUtils.READ_NESTED_COLUMN_PATH_CONF_STR);
+    if (conf != null) {
+      String rawPrunedColumnPaths = conf.get(ColumnProjectionUtils.READ_NESTED_COLUMN_PATH_CONF_STR);
       if (rawPrunedColumnPaths != null) {
         List<String> prunedColumnPaths = processRawPrunedPaths(rawPrunedColumnPaths);
         prunedTypeInfo = pruneFromPaths(completeTypeInfo, prunedColumnPaths);
       }
     }
     this.objInspector = new ArrayWritableObjectInspector(completeTypeInfo, prunedTypeInfo);
+
+    // Stats part
+    serializedSize = 0;
+    deserializedSize = 0;
+    status = LAST_OPERATION.UNKNOWN;
   }
 
   @Override
   public Object deserialize(final Writable blob) throws SerDeException {
+    status = LAST_OPERATION.DESERIALIZE;
+    deserializedSize = 0;
     if (blob instanceof ArrayWritable) {
+      deserializedSize = ((ArrayWritable) blob).get().length;
       return blob;
     } else {
       return null;
@@ -117,18 +162,23 @@ public class ParquetHiveSerDe extends AbstractSerDe {
     if (!objInspector.getCategory().equals(Category.STRUCT)) {
       throw new SerDeException("Cannot serialize " + objInspector.getCategory() + ". Can only serialize a struct");
     }
-
+    serializedSize = ((StructObjectInspector)objInspector).getAllStructFieldRefs().size();
+    status = LAST_OPERATION.SERIALIZE;
     parquetRow.value = obj;
     parquetRow.inspector= (StructObjectInspector)objInspector;
     return parquetRow;
   }
 
-  /**
-   * @param table
-   * @return true if the table has the parquet serde defined
-   */
-  public static boolean isParquetTable(Table table) {
-    return  table == null ? false : ParquetHiveSerDe.class.getName().equals(table.getSerializationLib());
+  @Override
+  public SerDeStats getSerDeStats() {
+    // must be different
+    assert (status != LAST_OPERATION.UNKNOWN);
+    if (status == LAST_OPERATION.SERIALIZE) {
+      stats.setRawDataSize(serializedSize);
+    } else {
+      stats.setRawDataSize(deserializedSize);
+    }
+    return stats;
   }
 
   /**

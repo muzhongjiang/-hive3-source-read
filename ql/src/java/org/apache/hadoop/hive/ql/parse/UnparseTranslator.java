@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -116,6 +116,7 @@ public class UnparseTranslator {
       if (existingEntry.getValue().tokenStopIndex <= tokenStopIndex &&
             existingEntry.getKey() >= tokenStartIndex) {
         // Collect newer entry is if a super-set of existing entry,
+        assert (replacementText.contains(existingEntry.getValue().replacementText));
         subsetEntries.add(existingEntry.getKey());
         // check if the existing entry contains the new
       } else if (existingEntry.getValue().tokenStopIndex >= tokenStopIndex &&
@@ -140,7 +141,7 @@ public class UnparseTranslator {
    * @param node
    *          source node (which must be an tabName) to be replaced
    */
-  public void addTableNameTranslation(ASTNode tableName, String currentDatabaseName) {
+  void addTableNameTranslation(ASTNode tableName, String currentDatabaseName) {
     if (!enabled) {
       return;
     }
@@ -175,7 +176,7 @@ public class UnparseTranslator {
    * @param node
    *          source node (which must be an identifier) to be replaced
    */
-  public void addIdentifierTranslation(ASTNode identifier) {
+  void addIdentifierTranslation(ASTNode identifier) {
     if (!enabled) {
       return;
     }
@@ -198,7 +199,7 @@ public class UnparseTranslator {
    * @param sourceNode the node providing the replacement text
    *
    */
-  public void addCopyTranslation(ASTNode targetNode, ASTNode sourceNode) {
+  void addCopyTranslation(ASTNode targetNode, ASTNode sourceNode) {
     if (!enabled) {
       return;
     }
@@ -220,15 +221,10 @@ public class UnparseTranslator {
    *          rewrite-capable stream
    */
   void applyTranslations(TokenRewriteStream tokenRewriteStream) {
-    applyTranslations(tokenRewriteStream, TokenRewriteStream.DEFAULT_PROGRAM_NAME);
-  }
-
-  void applyTranslations(TokenRewriteStream tokenRewriteStream, String programName) {
     for (Map.Entry<Integer, Translation> entry : translations.entrySet()) {
-      if (entry.getKey() > 0) { // negative means the key didn't exist in the original
+      if (entry.getKey() > 0) { // negative means the key didn't exist in the original 
                                 // stream (i.e.: we changed the tree)
         tokenRewriteStream.replace(
-           programName,
            entry.getKey(),
            entry.getValue().tokenStopIndex,
            entry.getValue().replacementText);
@@ -236,11 +232,9 @@ public class UnparseTranslator {
     }
     for (CopyTranslation copyTranslation : copyTranslations) {
       String replacementText = tokenRewriteStream.toString(
-        programName,
         copyTranslation.sourceNode.getTokenStartIndex(),
         copyTranslation.sourceNode.getTokenStopIndex());
       String currentText = tokenRewriteStream.toString(
-        programName,
         copyTranslation.targetNode.getTokenStartIndex(),
         copyTranslation.targetNode.getTokenStopIndex());
       if (currentText.equals(replacementText)) {
@@ -252,7 +246,6 @@ public class UnparseTranslator {
       // checking.
       addTranslation(copyTranslation.targetNode, replacementText);
       tokenRewriteStream.replace(
-        programName,
         copyTranslation.targetNode.getTokenStartIndex(),
         copyTranslation.targetNode.getTokenStopIndex(),
         replacementText);

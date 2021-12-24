@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,11 +23,7 @@ import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.common.util.HiveTestUtils;
 
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import org.junit.Test;
+import junit.framework.TestCase;
 
 /**
  * TestHiveLogging
@@ -35,7 +31,7 @@ import org.junit.Test;
  * Test cases for HiveLogging, which is initialized in HiveConf.
  * Loads configuration files located in common/src/test/resources.
  */
-public class TestHiveLogging {
+public class TestHiveLogging extends TestCase {
   public TestHiveLogging() {
     super();
   }
@@ -78,7 +74,6 @@ public class TestHiveLogging {
     assertTrue(logFile + " should exist", logFile.exists());
   }
 
-  @Test
   public void testHiveLogging() throws Exception {
     // customized log4j config log file to be: /${test.tmp.dir}/TestHiveLogging/hiveLog4jTest.log
     File customLogPath = new File(new File(System.getProperty("test.tmp.dir")),

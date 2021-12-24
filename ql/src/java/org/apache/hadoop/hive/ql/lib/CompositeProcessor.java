@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,18 +26,18 @@ import org.apache.hadoop.hive.ql.parse.SemanticException;
  * rule.
  *
  */
-public class CompositeProcessor implements SemanticNodeProcessor {
+public class CompositeProcessor implements NodeProcessor {
 
-  SemanticNodeProcessor[] procs;
+  NodeProcessor[] procs;
 
-  public CompositeProcessor(SemanticNodeProcessor...nodeProcessors) {
+  public CompositeProcessor(NodeProcessor...nodeProcessors) {
     procs = nodeProcessors;
   }
 
   @Override
   public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx, Object... nodeOutputs)
       throws SemanticException {
-    for (SemanticNodeProcessor proc: procs) {
+    for (NodeProcessor proc: procs) {
       proc.process(nd, stack, procCtx, nodeOutputs);
     }
     return null;

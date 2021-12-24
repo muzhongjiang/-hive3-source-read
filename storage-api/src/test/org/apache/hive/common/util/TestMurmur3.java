@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,8 +18,7 @@
 
 package org.apache.hive.common.util;
 
-import static org.junit.Assert.*;
-import org.apache.hive.common.util.Murmur3.IncrementalHash32;
+import static org.junit.Assert.assertEquals;
 
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -28,7 +27,6 @@ import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -42,13 +40,13 @@ public class TestMurmur3 {
     String key = "test";
     int seed = 123;
     HashFunction hf = Hashing.murmur3_32(seed);
-    int hc1 = hf.hashBytes(key.getBytes(StandardCharsets.UTF_8)).asInt();
-    int hc2 = Murmur3.hash32(key.getBytes(StandardCharsets.UTF_8), key.getBytes().length, seed);
+    int hc1 = hf.hashBytes(key.getBytes()).asInt();
+    int hc2 = Murmur3.hash32(key.getBytes(), key.getBytes().length, seed);
     assertEquals(hc1, hc2);
 
     key = "testkey";
-    hc1 = hf.hashBytes(key.getBytes(StandardCharsets.UTF_8)).asInt();
-    hc2 = Murmur3.hash32(key.getBytes(StandardCharsets.UTF_8), key.getBytes().length, seed);
+    hc1 = hf.hashBytes(key.getBytes()).asInt();
+    hc2 = Murmur3.hash32(key.getBytes(), key.getBytes().length, seed);
     assertEquals(hc1, hc2);
   }
 
@@ -101,11 +99,11 @@ public class TestMurmur3 {
     HashFunction hf = Hashing.murmur3_128(seed);
     // guava stores the hashcodes in little endian order
     ByteBuffer buf = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN);
-    buf.put(hf.hashBytes(key.getBytes(StandardCharsets.UTF_8)).asBytes());
+    buf.put(hf.hashBytes(key.getBytes()).asBytes());
     buf.flip();
     long gl1 = buf.getLong();
     long gl2 = buf.getLong(8);
-    long[] hc = Murmur3.hash128(key.getBytes(StandardCharsets.UTF_8), 0, key.getBytes(StandardCharsets.UTF_8).length, seed);
+    long[] hc = Murmur3.hash128(key.getBytes(), 0, key.getBytes().length, seed);
     long m1 = hc[0];
     long m2 = hc[1];
     assertEquals(gl1, m1);
@@ -113,11 +111,11 @@ public class TestMurmur3 {
 
     key = "testkey128_testkey128";
     buf = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN);
-    buf.put(hf.hashBytes(key.getBytes(StandardCharsets.UTF_8)).asBytes());
+    buf.put(hf.hashBytes(key.getBytes()).asBytes());
     buf.flip();
     gl1 = buf.getLong();
     gl2 = buf.getLong(8);
-    byte[] keyBytes = key.getBytes(StandardCharsets.UTF_8);
+    byte[] keyBytes = key.getBytes();
     hc = Murmur3.hash128(keyBytes, 0, keyBytes.length, seed);
     m1 = hc[0];
     m2 = hc[1];
@@ -141,7 +139,7 @@ public class TestMurmur3 {
         " it was the spring of hope, it was the winter of despair," +
         " we had everything before us, we had nothing before us," +
         " we were all going direct to Heaven," +
-        " we were all going direct the other way.").getBytes(StandardCharsets.UTF_8);
+        " we were all going direct the other way.").getBytes();
     long hash = Murmur3.hash64(origin, 0, origin.length);
     assertEquals(305830725663368540L, hash);
 
@@ -221,101 +219,6 @@ public class TestMurmur3 {
       long m2 = hc[1];
       assertEquals(gl1, m1);
       assertEquals(gl2, m2);
-    }
-  }
-
-  @Test
-  public void test64() {
-    final int seed = 123, iters = 1000000;
-    ByteBuffer SHORT_BUFFER = ByteBuffer.allocate(Short.BYTES);
-    ByteBuffer INT_BUFFER = ByteBuffer.allocate(Integer.BYTES);
-    ByteBuffer LONG_BUFFER = ByteBuffer.allocate(Long.BYTES);
-    Random rdm = new Random(seed);
-    for (int i = 0; i < iters; ++i) {
-      long ln = rdm.nextLong();
-      int in = rdm.nextInt();
-      short sn = (short) (rdm.nextInt(2* Short.MAX_VALUE - 1) - Short.MAX_VALUE);
-      float fn = rdm.nextFloat();
-      double dn = rdm.nextDouble();
-      SHORT_BUFFER.putShort(0, sn);
-      assertEquals(Murmur3.hash64(SHORT_BUFFER.array()), Murmur3.hash64(sn));
-      INT_BUFFER.putInt(0, in);
-      assertEquals(Murmur3.hash64(INT_BUFFER.array()), Murmur3.hash64(in));
-      LONG_BUFFER.putLong(0, ln);
-      assertEquals(Murmur3.hash64(LONG_BUFFER.array()), Murmur3.hash64(ln));
-      INT_BUFFER.putFloat(0, fn);
-      assertEquals(Murmur3.hash64(INT_BUFFER.array()), Murmur3.hash64(Float.floatToIntBits(fn)));
-      LONG_BUFFER.putDouble(0, dn);
-      assertEquals(Murmur3.hash64(LONG_BUFFER.array()), Murmur3.hash64(Double.doubleToLongBits(dn)));
-    }
-  }
-
-  @Test
-  public void testIncremental() {
-    final int seed = 123, arraySize = 1023;
-    byte[] bytes = new byte[arraySize];
-    new Random(seed).nextBytes(bytes);
-    int expected = Murmur3.hash32(bytes, arraySize);
-    Murmur3.IncrementalHash32 same = new IncrementalHash32(), diff = new IncrementalHash32();
-    for (int blockSize = 1; blockSize <= arraySize; ++blockSize) {
-      byte[] block = new byte[blockSize];
-      same.start(Murmur3.DEFAULT_SEED);
-      diff.start(Murmur3.DEFAULT_SEED);
-      for (int offset = 0; offset < arraySize; offset += blockSize) {
-        int length = Math.min(arraySize - offset, blockSize);
-        same.add(bytes, offset, length);
-        System.arraycopy(bytes, offset, block, 0, length);
-        diff.add(block, 0, length);
-      }
-      assertEquals("Block size " + blockSize, expected, same.end());
-      assertEquals("Block size " + blockSize, expected, diff.end());
-    }
-  }
-
-  @Test
-  public void testTwoLongOrdered() {
-    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
-    for (long i = 0; i < 1000; i++) {
-      for (long j = 0; j < 1000; j++) {
-        buffer.putLong(0, i);
-        buffer.putLong(Long.BYTES, j);
-        assertEquals(Murmur3.hash32(buffer.array()), Murmur3.hash32(i, j));
-      }
-    }
-  }
-
-  @Test
-  public void testTwoLongRandom() {
-    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
-    Random random = new Random();
-    for (long i = 0; i < 1000; i++) {
-      for (long j = 0; j < 1000; j++) {
-        long x = random.nextLong();
-        long y = random.nextLong();
-        buffer.putLong(0, x);
-        buffer.putLong(Long.BYTES, y);
-        assertEquals(Murmur3.hash32(buffer.array()), Murmur3.hash32(x, y));
-      }
-    }
-  }
-
-  @Test
-  public void testSingleLongOrdered() {
-    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-    for (long i = 0; i < 1000; i++) {
-      buffer.putLong(0, i);
-      assertEquals(Murmur3.hash32(buffer.array()), Murmur3.hash32(i));
-    }
-  }
-
-  @Test
-  public void testSingleLongRandom() {
-    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-    Random random = new Random();
-    for (long i = 0; i < 1000; i++) {
-      long x = random.nextLong();
-      buffer.putLong(0, x);
-      assertEquals(Murmur3.hash32(buffer.array()), Murmur3.hash32(x));
     }
   }
 }

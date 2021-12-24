@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,11 +18,11 @@
 
 package org.apache.hadoop.hive.ql.plan;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.ddl.DDLTask;
+import org.apache.hadoop.hive.ql.exec.DDLTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.junit.Test;
 
@@ -32,8 +32,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class TestConditionalResolverCommonJoin {
@@ -42,7 +40,7 @@ public class TestConditionalResolverCommonJoin {
   public void testResolvingDriverAlias() throws Exception {
     ConditionalResolverCommonJoin resolver = new ConditionalResolverCommonJoin();
 
-    Map<Path, List<String>> pathToAliases = new HashMap<>();
+    HashMap<Path, ArrayList<String>> pathToAliases = new HashMap<>();
     pathToAliases.put(new Path("path1"), new ArrayList<String>(Arrays.asList("alias1", "alias2")));
     pathToAliases.put(new Path("path2"), new ArrayList<String>(Arrays.asList("alias3")));
 
@@ -58,8 +56,8 @@ public class TestConditionalResolverCommonJoin {
 
     // joins alias1, alias2, alias3 (alias1 was not eligible for big pos)
     // Must be deterministic order map for consistent q-test output across Java versions
-    HashMap<Task<?>, Set<String>> taskToAliases =
-        new LinkedHashMap<Task<?>, Set<String>>();
+    HashMap<Task<? extends Serializable>, Set<String>> taskToAliases =
+        new LinkedHashMap<Task<? extends Serializable>, Set<String>>();
     taskToAliases.put(task1, new HashSet<String>(Arrays.asList("alias2")));
     taskToAliases.put(task2, new HashSet<String>(Arrays.asList("alias3")));
 

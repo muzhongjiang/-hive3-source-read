@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,7 +26,6 @@ import org.apache.hadoop.hive.common.type.HiveDecimalV1;
 
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.hive.common.util.SuppressFBWarnings;
 
 public class HiveDecimalWritableV1 implements WritableComparable<HiveDecimalWritableV1> {
 
@@ -78,7 +77,6 @@ public class HiveDecimalWritableV1 implements WritableComparable<HiveDecimalWrit
   }
 
   @HiveDecimalWritableVersionV1
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "Ref external obj for efficiency")
   public void set(byte[] bytes, int scale) {
     this.internalStorage = bytes;
     this.scale = scale;
@@ -164,7 +162,6 @@ public class HiveDecimalWritableV1 implements WritableComparable<HiveDecimalWrit
    * @return
    */
   @HiveDecimalWritableVersionV1
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "Expose internal rep for efficiency")
   public byte[] getInternalStorage() {
     return internalStorage;
   }

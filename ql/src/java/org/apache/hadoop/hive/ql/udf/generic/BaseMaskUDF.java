@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,38 +19,26 @@
 package org.apache.hadoop.hive.ql.udf.generic;
 
 
-
-import org.apache.hadoop.hive.common.type.Date;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject;
-import org.apache.hadoop.hive.serde2.io.ByteWritable;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
-import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
-import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
-import org.apache.hadoop.hive.serde2.io.ShortWritable;
+import org.apache.hadoop.hive.serde2.io.*;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.ByteObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveCharObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveVarcharObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.IntObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.LongObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.ShortObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.StringObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.*;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import java.sql.Date;
 
 
 public abstract class BaseMaskUDF extends GenericUDF {
-  private static final Logger LOG = LoggerFactory.getLogger(BaseMaskUDF.class);
+  private static final Log LOG = LogFactory.getLog(BaseMaskUDF.class);
 
   final protected AbstractTransformer  transformer;
   final protected String               displayName;
@@ -240,13 +228,13 @@ class ByteTransformerAdapter extends AbstractTransformerAdapter {
 
 class DateTransformerAdapter extends AbstractTransformerAdapter {
   final DateObjectInspector columnType;
-  final DateWritableV2 writable;
+  final DateWritable        writable;
 
   public DateTransformerAdapter(DateObjectInspector columnType, AbstractTransformer transformer) {
-    this(columnType, transformer, new DateWritableV2());
+    this(columnType, transformer, new DateWritable());
   }
 
-  public DateTransformerAdapter(DateObjectInspector columnType, AbstractTransformer transformer, DateWritableV2 writable) {
+  public DateTransformerAdapter(DateObjectInspector columnType, AbstractTransformer transformer, DateWritable writable) {
     super(transformer);
 
     this.columnType = columnType;

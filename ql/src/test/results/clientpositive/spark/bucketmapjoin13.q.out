@@ -1,89 +1,77 @@
-PREHOOK: query: CREATE TABLE srcbucket_mapjoin_part_1_n8 (key INT, value STRING) PARTITIONED BY (part STRING) 
+PREHOOK: query: CREATE TABLE srcbucket_mapjoin_part_1 (key INT, value STRING) PARTITIONED BY (part STRING) 
 CLUSTERED BY (value) INTO 2 BUCKETS
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
-PREHOOK: Output: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: query: CREATE TABLE srcbucket_mapjoin_part_1_n8 (key INT, value STRING) PARTITIONED BY (part STRING) 
+PREHOOK: Output: default@srcbucket_mapjoin_part_1
+POSTHOOK: query: CREATE TABLE srcbucket_mapjoin_part_1 (key INT, value STRING) PARTITIONED BY (part STRING) 
 CLUSTERED BY (value) INTO 2 BUCKETS
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
-POSTHOOK: Output: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1_n8 PARTITION (part='1')
+POSTHOOK: Output: default@srcbucket_mapjoin_part_1
+PREHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1 PARTITION (part='1')
 SELECT * FROM src
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
-PREHOOK: Output: default@srcbucket_mapjoin_part_1_n8@part=1
-POSTHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1_n8 PARTITION (part='1')
+PREHOOK: Output: default@srcbucket_mapjoin_part_1@part=1
+POSTHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1 PARTITION (part='1')
 SELECT * FROM src
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
-POSTHOOK: Output: default@srcbucket_mapjoin_part_1_n8@part=1
-POSTHOOK: Lineage: srcbucket_mapjoin_part_1_n8 PARTITION(part=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
-POSTHOOK: Lineage: srcbucket_mapjoin_part_1_n8 PARTITION(part=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
-PREHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1_n8 CLUSTERED BY (key) INTO 2 BUCKETS
+POSTHOOK: Output: default@srcbucket_mapjoin_part_1@part=1
+POSTHOOK: Lineage: srcbucket_mapjoin_part_1 PARTITION(part=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: srcbucket_mapjoin_part_1 PARTITION(part=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+PREHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1 CLUSTERED BY (key) INTO 2 BUCKETS
 PREHOOK: type: ALTERTABLE_CLUSTER_SORT
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Output: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1_n8 CLUSTERED BY (key) INTO 2 BUCKETS
+PREHOOK: Input: default@srcbucket_mapjoin_part_1
+PREHOOK: Output: default@srcbucket_mapjoin_part_1
+POSTHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1 CLUSTERED BY (key) INTO 2 BUCKETS
 POSTHOOK: type: ALTERTABLE_CLUSTER_SORT
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Output: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1_n8 PARTITION (part='2')
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1
+POSTHOOK: Output: default@srcbucket_mapjoin_part_1
+PREHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1 PARTITION (part='2')
 SELECT * FROM src
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
-PREHOOK: Output: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1_n8 PARTITION (part='2')
+PREHOOK: Output: default@srcbucket_mapjoin_part_1@part=2
+POSTHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_1 PARTITION (part='2')
 SELECT * FROM src
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
-POSTHOOK: Output: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Lineage: srcbucket_mapjoin_part_1_n8 PARTITION(part=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
-POSTHOOK: Lineage: srcbucket_mapjoin_part_1_n8 PARTITION(part=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
-PREHOOK: query: CREATE TABLE srcbucket_mapjoin_part_2_n18 (key INT, value STRING) PARTITIONED BY (part STRING) 
+POSTHOOK: Output: default@srcbucket_mapjoin_part_1@part=2
+POSTHOOK: Lineage: srcbucket_mapjoin_part_1 PARTITION(part=2).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: srcbucket_mapjoin_part_1 PARTITION(part=2).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+PREHOOK: query: CREATE TABLE srcbucket_mapjoin_part_2 (key INT, value STRING) PARTITIONED BY (part STRING) 
 CLUSTERED BY (key) INTO 2 BUCKETS
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
-PREHOOK: Output: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: query: CREATE TABLE srcbucket_mapjoin_part_2_n18 (key INT, value STRING) PARTITIONED BY (part STRING) 
+PREHOOK: Output: default@srcbucket_mapjoin_part_2
+POSTHOOK: query: CREATE TABLE srcbucket_mapjoin_part_2 (key INT, value STRING) PARTITIONED BY (part STRING) 
 CLUSTERED BY (key) INTO 2 BUCKETS
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
-POSTHOOK: Output: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_2_n18 PARTITION (part='1')
+POSTHOOK: Output: default@srcbucket_mapjoin_part_2
+PREHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_2 PARTITION (part='1')
 SELECT * FROM src
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
-PREHOOK: Output: default@srcbucket_mapjoin_part_2_n18@part=1
-POSTHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_2_n18 PARTITION (part='1')
+PREHOOK: Output: default@srcbucket_mapjoin_part_2@part=1
+POSTHOOK: query: INSERT OVERWRITE TABLE srcbucket_mapjoin_part_2 PARTITION (part='1')
 SELECT * FROM src
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
-POSTHOOK: Output: default@srcbucket_mapjoin_part_2_n18@part=1
-POSTHOOK: Lineage: srcbucket_mapjoin_part_2_n18 PARTITION(part=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
-POSTHOOK: Lineage: srcbucket_mapjoin_part_2_n18 PARTITION(part=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
+POSTHOOK: Output: default@srcbucket_mapjoin_part_2@part=1
+POSTHOOK: Lineage: srcbucket_mapjoin_part_2 PARTITION(part=1).key EXPRESSION [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: srcbucket_mapjoin_part_2 PARTITION(part=1).value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 PREHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=1
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=1
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -98,7 +86,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -131,13 +118,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_2_n18
+                    name default.srcbucket_mapjoin_part_2
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -149,24 +136,23 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_2_n18
+                      name default.srcbucket_mapjoin_part_2
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_2_n18
-                  name: default.srcbucket_mapjoin_part_2_n18
+                    name: default.srcbucket_mapjoin_part_2
+                  name: default.srcbucket_mapjoin_part_2
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_2_n18/part=1 [b]
+              /srcbucket_mapjoin_part_2/part=1 [b]
 
   Stage: Stage-1
     Spark
@@ -178,7 +164,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 1000 Data size: 10624 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -197,14 +182,11 @@ STAGE PLANS:
                       Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         aggregations: count()
-                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          bucketingVersion: 2
                           null sort order: 
-                          numBuckets: -1
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           tag: -1
@@ -231,13 +213,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_1_n8
+                    name default.srcbucket_mapjoin_part_1
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -249,22 +231,21 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_1_n8
+                      name default.srcbucket_mapjoin_part_1
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_1_n8
-                  name: default.srcbucket_mapjoin_part_1_n8
+                    name: default.srcbucket_mapjoin_part_1
+                  name: default.srcbucket_mapjoin_part_1
 #### A masked pattern was here ####
                 Partition
                   base file name: part=2
@@ -281,13 +262,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_1_n8
+                    name default.srcbucket_mapjoin_part_1
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -299,25 +280,24 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_1_n8
+                      name default.srcbucket_mapjoin_part_1
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_1_n8
-                  name: default.srcbucket_mapjoin_part_1_n8
+                    name: default.srcbucket_mapjoin_part_1
+                  name: default.srcbucket_mapjoin_part_1
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_1_n8/part=1 [a]
-              /srcbucket_mapjoin_part_1_n8/part=2 [a]
+              /srcbucket_mapjoin_part_1/part=1 [a]
+              /srcbucket_mapjoin_part_1/part=2 [a]
         Reducer 2 
             Needs Tagging: false
             Reduce Operator Tree:
@@ -327,7 +307,6 @@ STAGE PLANS:
                 outputColumnNames: _col0
                 Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
-                  bucketingVersion: 2
                   compressed: false
                   GlobalTableId: 0
 #### A masked pattern was here ####
@@ -338,7 +317,6 @@ STAGE PLANS:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                       properties:
-                        bucketing_version -1
                         columns _col0
                         columns.types bigint
                         escape.delim \
@@ -358,46 +336,36 @@ STAGE PLANS:
         ListSink
 
 PREHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=1
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1@part=1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 POSTHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=1
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1@part=1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 2056
 PREHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key and a.part = '2'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key and a.part = '2'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -412,7 +380,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -450,13 +417,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_2_n18
+                    name default.srcbucket_mapjoin_part_2
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -468,24 +435,23 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_2_n18
+                      name default.srcbucket_mapjoin_part_2
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_2_n18
-                  name: default.srcbucket_mapjoin_part_2_n18
+                    name: default.srcbucket_mapjoin_part_2
+                  name: default.srcbucket_mapjoin_part_2
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_2_n18/part=1 [b]
+              /srcbucket_mapjoin_part_2/part=1 [b]
 
   Stage: Stage-1
     Spark
@@ -497,7 +463,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a
-                  filterExpr: ((part = '2') and key is not null) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -517,14 +482,11 @@ STAGE PLANS:
                       BucketMapJoin: true
                       Group By Operator
                         aggregations: count()
-                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          bucketingVersion: 2
                           null sort order: 
-                          numBuckets: -1
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           tag: -1
@@ -556,13 +518,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_1_n8
+                    name default.srcbucket_mapjoin_part_1
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -574,24 +536,23 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_1_n8
+                      name default.srcbucket_mapjoin_part_1
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_1_n8
-                  name: default.srcbucket_mapjoin_part_1_n8
+                    name: default.srcbucket_mapjoin_part_1
+                  name: default.srcbucket_mapjoin_part_1
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_1_n8/part=2 [a]
+              /srcbucket_mapjoin_part_1/part=2 [a]
         Reducer 2 
             Needs Tagging: false
             Reduce Operator Tree:
@@ -601,7 +562,6 @@ STAGE PLANS:
                 outputColumnNames: _col0
                 Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
-                  bucketingVersion: 2
                   compressed: false
                   GlobalTableId: 0
 #### A masked pattern was here ####
@@ -612,7 +572,6 @@ STAGE PLANS:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                       properties:
-                        bucketing_version -1
                         columns _col0
                         columns.types bigint
                         escape.delim \
@@ -632,52 +591,42 @@ STAGE PLANS:
         ListSink
 
 PREHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key and a.part = '2'
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 POSTHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key and a.part = '2'
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 1028
-PREHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1_n8 drop partition (part = '1')
+PREHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1 drop partition (part = '1')
 PREHOOK: type: ALTERTABLE_DROPPARTS
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Output: default@srcbucket_mapjoin_part_1_n8@part=1
-POSTHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1_n8 drop partition (part = '1')
+PREHOOK: Input: default@srcbucket_mapjoin_part_1
+PREHOOK: Output: default@srcbucket_mapjoin_part_1@part=1
+POSTHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1 drop partition (part = '1')
 POSTHOOK: type: ALTERTABLE_DROPPARTS
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Output: default@srcbucket_mapjoin_part_1_n8@part=1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1
+POSTHOOK: Output: default@srcbucket_mapjoin_part_1@part=1
 PREHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -692,7 +641,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -730,13 +678,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_2_n18
+                    name default.srcbucket_mapjoin_part_2
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -748,24 +696,23 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_2_n18
+                      name default.srcbucket_mapjoin_part_2
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_2_n18
-                  name: default.srcbucket_mapjoin_part_2_n18
+                    name: default.srcbucket_mapjoin_part_2
+                  name: default.srcbucket_mapjoin_part_2
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_2_n18/part=1 [b]
+              /srcbucket_mapjoin_part_2/part=1 [b]
 
   Stage: Stage-1
     Spark
@@ -777,7 +724,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -797,14 +743,11 @@ STAGE PLANS:
                       BucketMapJoin: true
                       Group By Operator
                         aggregations: count()
-                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          bucketingVersion: 2
                           null sort order: 
-                          numBuckets: -1
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           tag: -1
@@ -836,13 +779,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_1_n8
+                    name default.srcbucket_mapjoin_part_1
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -854,24 +797,23 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_1_n8
+                      name default.srcbucket_mapjoin_part_1
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_1_n8
-                  name: default.srcbucket_mapjoin_part_1_n8
+                    name: default.srcbucket_mapjoin_part_1
+                  name: default.srcbucket_mapjoin_part_1
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_1_n8/part=2 [a]
+              /srcbucket_mapjoin_part_1/part=2 [a]
         Reducer 2 
             Needs Tagging: false
             Reduce Operator Tree:
@@ -881,7 +823,6 @@ STAGE PLANS:
                 outputColumnNames: _col0
                 Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
-                  bucketingVersion: 2
                   compressed: false
                   GlobalTableId: 0
 #### A masked pattern was here ####
@@ -892,7 +833,6 @@ STAGE PLANS:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                       properties:
-                        bucketing_version -1
                         columns _col0
                         columns.types bigint
                         escape.delim \
@@ -912,52 +852,42 @@ STAGE PLANS:
         ListSink
 
 PREHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 POSTHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 1028
-PREHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1_n8 CLUSTERED BY (value) INTO 2 BUCKETS
+PREHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1 CLUSTERED BY (value) INTO 2 BUCKETS
 PREHOOK: type: ALTERTABLE_CLUSTER_SORT
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Output: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1_n8 CLUSTERED BY (value) INTO 2 BUCKETS
+PREHOOK: Input: default@srcbucket_mapjoin_part_1
+PREHOOK: Output: default@srcbucket_mapjoin_part_1
+POSTHOOK: query: ALTER TABLE srcbucket_mapjoin_part_1 CLUSTERED BY (value) INTO 2 BUCKETS
 POSTHOOK: type: ALTERTABLE_CLUSTER_SORT
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Output: default@srcbucket_mapjoin_part_1_n8
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1
+POSTHOOK: Output: default@srcbucket_mapjoin_part_1
 PREHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN EXTENDED
 SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -972,7 +902,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -1010,13 +939,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_2_n18
+                    name default.srcbucket_mapjoin_part_2
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -1028,24 +957,23 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name key
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_2_n18
+                      name default.srcbucket_mapjoin_part_2
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_2_n18 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_2 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_2_n18
-                  name: default.srcbucket_mapjoin_part_2_n18
+                    name: default.srcbucket_mapjoin_part_2
+                  name: default.srcbucket_mapjoin_part_2
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_2_n18/part=1 [b]
+              /srcbucket_mapjoin_part_2/part=1 [b]
 
   Stage: Stage-1
     Spark
@@ -1057,7 +985,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -1077,14 +1004,11 @@ STAGE PLANS:
                       BucketMapJoin: true
                       Group By Operator
                         aggregations: count()
-                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          bucketingVersion: 2
                           null sort order: 
-                          numBuckets: -1
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           tag: -1
@@ -1116,13 +1040,13 @@ STAGE PLANS:
                     columns.comments 
                     columns.types int:string
 #### A masked pattern was here ####
-                    name default.srcbucket_mapjoin_part_1_n8
+                    name default.srcbucket_mapjoin_part_1
                     numFiles 2
                     numRows 500
                     partition_columns part
                     partition_columns.types string
                     rawDataSize 5312
-                    serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                    serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                     serialization.format 1
                     serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                     totalSize 5812
@@ -1134,24 +1058,23 @@ STAGE PLANS:
                     properties:
                       bucket_count 2
                       bucket_field_name value
-                      bucketing_version 2
                       column.name.delimiter ,
                       columns key,value
                       columns.comments 
                       columns.types int:string
 #### A masked pattern was here ####
-                      name default.srcbucket_mapjoin_part_1_n8
+                      name default.srcbucket_mapjoin_part_1
                       partition_columns part
                       partition_columns.types string
-                      serialization.ddl struct srcbucket_mapjoin_part_1_n8 { i32 key, string value}
+                      serialization.ddl struct srcbucket_mapjoin_part_1 { i32 key, string value}
                       serialization.format 1
                       serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 #### A masked pattern was here ####
                     serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                    name: default.srcbucket_mapjoin_part_1_n8
-                  name: default.srcbucket_mapjoin_part_1_n8
+                    name: default.srcbucket_mapjoin_part_1
+                  name: default.srcbucket_mapjoin_part_1
             Truncated Path -> Alias:
-              /srcbucket_mapjoin_part_1_n8/part=2 [a]
+              /srcbucket_mapjoin_part_1/part=2 [a]
         Reducer 2 
             Needs Tagging: false
             Reduce Operator Tree:
@@ -1161,7 +1084,6 @@ STAGE PLANS:
                 outputColumnNames: _col0
                 Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
-                  bucketingVersion: 2
                   compressed: false
                   GlobalTableId: 0
 #### A masked pattern was here ####
@@ -1172,7 +1094,6 @@ STAGE PLANS:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                       properties:
-                        bucketing_version -1
                         columns _col0
                         columns.types bigint
                         escape.delim \
@@ -1192,21 +1113,21 @@ STAGE PLANS:
         ListSink
 
 PREHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 PREHOOK: type: QUERY
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-PREHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-PREHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1
+PREHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2
+PREHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 POSTHOOK: query: SELECT /*+ MAPJOIN(b) */ count(*)
-FROM srcbucket_mapjoin_part_1_n8 a JOIN srcbucket_mapjoin_part_2_n18 b
+FROM srcbucket_mapjoin_part_1 a JOIN srcbucket_mapjoin_part_2 b
 ON a.key = b.key
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8
-POSTHOOK: Input: default@srcbucket_mapjoin_part_1_n8@part=2
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18
-POSTHOOK: Input: default@srcbucket_mapjoin_part_2_n18@part=1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1
+POSTHOOK: Input: default@srcbucket_mapjoin_part_1@part=2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2
+POSTHOOK: Input: default@srcbucket_mapjoin_part_2@part=1
 #### A masked pattern was here ####
 1028

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,37 +22,62 @@ package org.apache.hive.hplsql;
  * Table column
  */
 public class Column {
-  private ColumnDefinition definition;
-  private Var value;
-
-  public Column(String name, String type, Var value) {
-    this.definition = new ColumnDefinition(name, ColumnType.parse(type));
-    this.value = value;
+  
+  String name;
+  String type;
+  Var value;
+  
+  int len;
+  int scale;
+  
+  Column(String name, String type) {
+    this.name = name;
+    len = 0;
+    scale = 0;
+    setType(type);
   }
-
+  
+  /**
+   * Set the column type with its length/precision
+   */
+  void setType(String type) {
+    int open = type.indexOf('(');
+    if (open == -1) {
+      this.type = type;
+    }
+    else {
+      this.type = type.substring(0, open);
+      int comma = type.indexOf(',', open);
+      int close = type.indexOf(')', open);
+      if (comma == -1) {
+        len = Integer.parseInt(type.substring(open + 1, close));
+      }
+      else {
+        len = Integer.parseInt(type.substring(open + 1, comma));
+        scale = Integer.parseInt(type.substring(comma + 1, close));
+      }
+    }
+  }
+  
   /**
    * Set the column value
    */
-  public void setValue(Var value) {
+  void setValue(Var value) {
     this.value = value;
   }
 
   /**
    * Get the column name
    */
-  public String getName() {
-    return definition.columnName();
+  String getName() {
+    return name;
   }
   
   /**
    * Get the column type
    */
-  public String getType() {
-    return definition.columnType().typeString();
-  }
-
-  public ColumnDefinition definition() {
-    return definition;
+  String getType() {
+    return type;
   }
     
   /**

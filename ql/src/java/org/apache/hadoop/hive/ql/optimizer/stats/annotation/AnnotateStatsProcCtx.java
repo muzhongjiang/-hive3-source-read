@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,48 +18,40 @@
 
 package org.apache.hadoop.hive.ql.optimizer.stats.annotation;
 
-import java.util.HashSet;
-import java.util.Set;
-
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
-import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.Statistics;
 
 public class AnnotateStatsProcCtx implements NodeProcessorCtx {
 
   private ParseContext pctx;
   private HiveConf conf;
-  private boolean uniformWithinRange;
-  private Statistics andExprStats;
-  private Set<String> affectedColumns;
-
+  private Statistics andExprStats = null;
 
   public AnnotateStatsProcCtx(ParseContext pctx) {
-    this.pctx = pctx;
+    this.setParseContext(pctx);
     if(pctx != null) {
-      this.conf = pctx.getConf();
-      this.uniformWithinRange = HiveConf.getBoolVar(this.conf,
-          HiveConf.ConfVars.HIVE_STATS_RANGE_SELECTIVITY_UNIFORM_DISTRIBUTION);
+      this.setConf(pctx.getConf());
     } else {
-      this.conf = null;
-      this.uniformWithinRange = false;
+      this.setConf(null);
     }
-    this.andExprStats = null;
-    this.affectedColumns = new HashSet<>();
   }
 
   public HiveConf getConf() {
     return conf;
   }
 
-  public boolean isUniformWithinRange() {
-    return uniformWithinRange;
+  public void setConf(HiveConf conf) {
+    this.conf = conf;
   }
 
   public ParseContext getParseContext() {
     return pctx;
+  }
+
+  public void setParseContext(ParseContext pctx) {
+    this.pctx = pctx;
   }
 
   public Statistics getAndExprStats() {
@@ -68,22 +60,6 @@ public class AnnotateStatsProcCtx implements NodeProcessorCtx {
 
   public void setAndExprStats(Statistics andExprStats) {
     this.andExprStats = andExprStats;
-  }
-
-  public void clearAffectedColumns() {
-    affectedColumns.clear();
-  }
-
-  public void addAffectedColumn(ExprNodeColumnDesc column) {
-    affectedColumns.add(column.getColumn());
-  }
-
-  public void addAffectedColumns(Set<String> columns) {
-    affectedColumns.addAll(columns);
-  }
-
-  public Set<String> getAffectedColumns() {
-    return affectedColumns;
   }
 
 }

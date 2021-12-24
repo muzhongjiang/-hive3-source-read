@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,14 +18,31 @@
 
 package org.apache.hadoop.hive.serde2;
 
+import java.util.Properties;
+
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.io.Writable;
 
 /**
  * HiveSerializer is used to serialize data to a Hadoop Writable object. The
- * serialize In addition to the interface below.
+ * serialize In addition to the interface below, all implementations are assume
+ * to have a ctor that takes a single 'Table' object as argument.
+ * All serializers should extend the abstract class AbstractSerializer.
+ * The interface is necessary for SerDes to be able to implement both Serializer and Deserializer.
  */
-public interface Serializer extends SerDe {
+public interface Serializer {
+
+  /**
+   * Initialize the HiveSerializer.
+   *
+   * @param conf
+   *          System properties
+   * @param tbl
+   *          table properties
+   * @throws SerDeException
+   */
+  void initialize(Configuration conf, Properties tbl) throws SerDeException;
 
   /**
    * Returns the Writable class that would be returned by the serialize method.
@@ -41,4 +58,9 @@ public interface Serializer extends SerDe {
    * returned value.
    */
   Writable serialize(Object obj, ObjectInspector objInspector) throws SerDeException;
+
+  /**
+   * Returns statistics collected when serializing
+   */
+  SerDeStats getSerDeStats();
 }

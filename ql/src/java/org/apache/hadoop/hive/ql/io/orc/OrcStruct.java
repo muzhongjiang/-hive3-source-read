@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -40,7 +40,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -189,8 +189,8 @@ final public class OrcStruct implements Writable {
     }
 
     OrcStructInspector(StructTypeInfo info) {
-      List<String> fieldNames = info.getAllStructFieldNames();
-      List<TypeInfo> fieldTypes = info.getAllStructFieldTypeInfos();
+      ArrayList<String> fieldNames = info.getAllStructFieldNames();
+      ArrayList<TypeInfo> fieldTypes = info.getAllStructFieldTypeInfos();
       fields = new ArrayList<StructField>(fieldNames.size());
       for(int i=0; i < fieldNames.size(); ++i) {
         fields.add(new Field(fieldNames.get(i),
@@ -379,7 +379,7 @@ final public class OrcStruct implements Writable {
 
     @Override
     public Object create() {
-      return new LinkedHashMap<Object,Object>();
+      return new HashMap<Object,Object>();
     }
 
     @Override
@@ -542,8 +542,6 @@ final public class OrcStruct implements Writable {
           case DECIMAL:
             return PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector(
                 (PrimitiveTypeInfo)info);
-        case TIMESTAMPLOCALTZ:
-          return PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector((PrimitiveTypeInfo) info);
           default:
             throw new IllegalArgumentException("Unknown primitive type " +
               ((PrimitiveTypeInfo) info).getPrimitiveCategory());

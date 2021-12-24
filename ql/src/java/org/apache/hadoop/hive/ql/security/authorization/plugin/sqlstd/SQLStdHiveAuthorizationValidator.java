@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -95,15 +95,6 @@ public class SQLStdHiveAuthorizationValidator implements HiveAuthorizationValida
       return;
     }
 
-    // Special-casing for ADMIN-level operations that do not require object checking.
-    if (Operation2Privilege.isAdminPrivOperation(hiveOpType)) {
-      // Require ADMIN privilege
-      if (!privController.isUserAdmin()) {
-        deniedMessages.add(SQLPrivTypeGrant.ADMIN_PRIV.toString() + " on " + ioType);
-      }
-      return; // Ignore object, fail if not admin, succeed if admin.
-    }
-
     // Compare required privileges and available privileges for each hive object
     for (HivePrivilegeObject hiveObj : hiveObjects) {
 
@@ -129,18 +120,13 @@ public class SQLStdHiveAuthorizationValidator implements HiveAuthorizationValida
         // ignore partitions
         continue;
       case COMMAND_PARAMS:
-      case SERVICE_NAME:
+      case FUNCTION:
         // operations that have objects of type COMMAND_PARAMS, FUNCTION are authorized
         // solely on the type
         if (privController.isUserAdmin()) {
           availPrivs.addPrivilege(SQLPrivTypeGrant.ADMIN_PRIV);
         }
         break;
-      case FUNCTION:
-        // create/drop functions are marked as ADMIN functions
-        // Usage of available functions in query are not restricted by sql
-        // standard authorization.
-        continue;
       default:
         availPrivs = SQLAuthorizationUtils.getPrivilegesFromMetaStore(metastoreClient, userName,
             hiveObj, privController.getCurrentRoleNames(), privController.isUserAdmin());

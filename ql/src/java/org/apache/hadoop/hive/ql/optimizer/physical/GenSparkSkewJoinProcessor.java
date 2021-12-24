@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -82,7 +82,7 @@ public class GenSparkSkewJoinProcessor {
   }
 
   @SuppressWarnings("unchecked")
-  public static void processSkewJoin(JoinOperator joinOp, Task<?> currTask,
+  public static void processSkewJoin(JoinOperator joinOp, Task<? extends Serializable> currTask,
       ReduceWork reduceWork, ParseContext parseCtx) throws SemanticException {
 
     SparkWork currentWork = ((SparkTask) currTask).getWork();
@@ -91,7 +91,7 @@ public class GenSparkSkewJoinProcessor {
       return;
     }
 
-    List<Task<?>> children = currTask.getChildTasks();
+    List<Task<? extends Serializable>> children = currTask.getChildTasks();
 
     Path baseTmpDir = parseCtx.getContext().getMRTmpPath();
 
@@ -214,16 +214,16 @@ public class GenSparkSkewJoinProcessor {
     joinDescriptor.setKeyTableDesc(keyTblDesc);
 
     // create N-1 map join tasks
-    HashMap<Path, Task<?>> bigKeysDirToTaskMap =
-        new HashMap<Path, Task<?>>();
+    HashMap<Path, Task<? extends Serializable>> bigKeysDirToTaskMap =
+        new HashMap<Path, Task<? extends Serializable>>();
     List<Serializable> listWorks = new ArrayList<Serializable>();
-    List<Task<?>> listTasks = new ArrayList<Task<?>>();
+    List<Task<? extends Serializable>> listTasks = new ArrayList<Task<? extends Serializable>>();
     for (int i = 0; i < numAliases - 1; i++) {
       Byte src = tags[i];
       HiveConf hiveConf = new HiveConf(parseCtx.getConf(),
           GenSparkSkewJoinProcessor.class);
       SparkWork sparkWork = new SparkWork(parseCtx.getConf().getVar(HiveConf.ConfVars.HIVEQUERYID));
-      Task<?> skewJoinMapJoinTask = TaskFactory.get(sparkWork);
+      Task<? extends Serializable> skewJoinMapJoinTask = TaskFactory.get(sparkWork, hiveConf);
       skewJoinMapJoinTask.setFetchSource(currTask.isFetchSource());
 
       // create N TableScans
@@ -231,7 +231,7 @@ public class GenSparkSkewJoinProcessor {
       for (int k = 0; k < tags.length; k++) {
         Operator<? extends OperatorDesc> ts = GenMapRedUtils.createTemporaryTableScanOperator(
             joinOp.getCompilationOpContext(), rowSchemaList.get((byte) k));
-        ((TableScanOperator) ts).setTableDescSkewJoin(tableDescList.get((byte) k));
+        ((TableScanOperator) ts).setTableDesc(tableDescList.get((byte) k));
         parentOps[k] = ts;
       }
 
@@ -240,12 +240,10 @@ public class GenSparkSkewJoinProcessor {
       MapJoinDesc mapJoinDescriptor = new MapJoinDesc(newJoinKeys, keyTblDesc,
           newJoinValues, newJoinValueTblDesc, newJoinValueTblDesc, joinDescriptor
           .getOutputColumnNames(), i, joinDescriptor.getConds(),
-          joinDescriptor.getFilters(), joinDescriptor.getNoOuterJoin(), dumpFilePrefix,
-          joinDescriptor.getMemoryMonitorInfo(), joinDescriptor.getInMemoryDataSize());
+          joinDescriptor.getFilters(), joinDescriptor.getNoOuterJoin(), dumpFilePrefix);
       mapJoinDescriptor.setTagOrder(tags);
       mapJoinDescriptor.setHandleSkewJoin(false);
       mapJoinDescriptor.setNullSafes(joinDescriptor.getNullSafes());
-      mapJoinDescriptor.setColumnExprMap(joinDescriptor.getColumnExprMap());
       // temporarily, mark it as child of all the TS
       MapJoinOperator mapJoinOp = (MapJoinOperator) OperatorFactory
           .getAndMakeChild(joinOp.getCompilationOpContext(), mapJoinDescriptor, null, parentOps);
@@ -328,17 +326,17 @@ public class GenSparkSkewJoinProcessor {
       listTasks.add(skewJoinMapJoinTask);
     }
     if (children != null) {
-      for (Task<?> tsk : listTasks) {
-        for (Task<?> oldChild : children) {
+      for (Task<? extends Serializable> tsk : listTasks) {
+        for (Task<? extends Serializable> oldChild : children) {
           tsk.addDependentTask(oldChild);
         }
       }
-      currTask.setChildTasks(new ArrayList<Task<?>>());
-      for (Task<?> oldChild : children) {
+      currTask.setChildTasks(new ArrayList<Task<? extends Serializable>>());
+      for (Task<? extends Serializable> oldChild : children) {
         oldChild.getParentTasks().remove(currTask);
       }
       listTasks.addAll(children);
-      for (Task<?> oldChild : children) {
+      for (Task<? extends Serializable> oldChild : children) {
         listWorks.add(oldChild.getWork());
       }
     }
@@ -346,11 +344,11 @@ public class GenSparkSkewJoinProcessor {
         new ConditionalResolverSkewJoin.ConditionalResolverSkewJoinCtx(bigKeysDirToTaskMap, children);
 
     ConditionalWork cndWork = new ConditionalWork(listWorks);
-    ConditionalTask cndTsk = (ConditionalTask) TaskFactory.get(cndWork);
+    ConditionalTask cndTsk = (ConditionalTask) TaskFactory.get(cndWork, parseCtx.getConf());
     cndTsk.setListTasks(listTasks);
     cndTsk.setResolver(new ConditionalResolverSkewJoin());
     cndTsk.setResolverCtx(context);
-    currTask.setChildTasks(new ArrayList<Task<?>>());
+    currTask.setChildTasks(new ArrayList<Task<? extends Serializable>>());
     currTask.addDependentTask(cndTsk);
   }
 
@@ -364,7 +362,7 @@ public class GenSparkSkewJoinProcessor {
     HashTableDummyDesc desc = new HashTableDummyDesc();
     HashTableDummyOperator dummyOp = (HashTableDummyOperator) OperatorFactory.get(
         tableScan.getCompilationOpContext(), desc);
-    dummyOp.getConf().setTbl(tableScan.getTableDescSkewJoin());
+    dummyOp.getConf().setTbl(tableScan.getTableDesc());
     MapJoinOperator mapJoinOp = (MapJoinOperator) tableScan.getChildOperators().get(0);
     mapJoinOp.replaceParent(tableScan, dummyOp);
     List<Operator<? extends OperatorDesc>> mapJoinChildren =
@@ -397,7 +395,7 @@ public class GenSparkSkewJoinProcessor {
     hashTableSinkOp.getConf().setTag(tag);
   }
 
-  private static void setMemUsage(MapJoinOperator mapJoinOp, Task<?> task,
+  private static void setMemUsage(MapJoinOperator mapJoinOp, Task<? extends Serializable> task,
       ParseContext parseContext) {
     MapJoinResolver.LocalMapJoinProcCtx context =
         new MapJoinResolver.LocalMapJoinProcCtx(task, parseContext);

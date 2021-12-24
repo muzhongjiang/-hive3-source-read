@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.optimizer;
 
+import java.io.Serializable;
 import java.util.Map;
 import java.util.Stack;
 
@@ -29,7 +30,7 @@ import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.UnionOperator;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.optimizer.GenMRProcContext.GenMRUnionCtx;
 import org.apache.hadoop.hive.ql.optimizer.GenMRProcContext.GenMapRedCtx;
@@ -46,7 +47,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc;
 /**
  * Processor for the rule - TableScan followed by Union.
  */
-public class GenMRUnion1 implements SemanticNodeProcessor {
+public class GenMRUnion1 implements NodeProcessor {
 
   public GenMRUnion1() {
   }
@@ -64,7 +65,7 @@ public class GenMRUnion1 implements SemanticNodeProcessor {
     GenMRUnionCtx uCtxTask = ctx.getUnionTask(union);
     if (uCtxTask != null) {
       // get task associated with this union
-      Task<?> uTask = ctx.getUnionTask(union).getUTask();
+      Task<? extends Serializable> uTask = ctx.getUnionTask(union).getUTask();
       if (uTask != null) {
         if (ctx.getCurrTask() != null && ctx.getCurrTask() != uTask) {
           // if ctx.getCurrTask() is in rootTasks, should be removed
@@ -87,7 +88,7 @@ public class GenMRUnion1 implements SemanticNodeProcessor {
       ctx.setUnionTask(union, uCtxTask);
     }
 
-    Task<?> uTask = ctx.getCurrTask();
+    Task<? extends Serializable> uTask = ctx.getCurrTask();
     if (uTask.getParentTasks() == null
         || uTask.getParentTasks().isEmpty()) {
       if (!ctx.getRootTasks().contains(uTask)) {
@@ -114,7 +115,7 @@ public class GenMRUnion1 implements SemanticNodeProcessor {
   private void processSubQueryUnionCreateIntermediate(
       Operator<? extends OperatorDesc> parent,
       Operator<? extends OperatorDesc> child,
-      Task<?> uTask, GenMRProcContext ctx,
+      Task<? extends Serializable> uTask, GenMRProcContext ctx,
       GenMRUnionCtx uCtxTask) {
     ParseContext parseCtx = ctx.getParseCtx();
 
@@ -140,7 +141,7 @@ public class GenMRUnion1 implements SemanticNodeProcessor {
     // assembled in the union context and later used to initialize the union
     // plan
 
-    Task<?> currTask = ctx.getCurrTask();
+    Task<? extends Serializable> currTask = ctx.getCurrTask();
     currTask.addDependentTask(uTask);
     if (ctx.getRootTasks().contains(uTask)) {
       ctx.getRootTasks().remove(uTask);
@@ -167,7 +168,7 @@ public class GenMRUnion1 implements SemanticNodeProcessor {
       throws SemanticException {
     // The current plan can be thrown away after being merged with the union
     // plan
-    Task<?> uTask = uCtxTask.getUTask();
+    Task<? extends Serializable> uTask = uCtxTask.getUTask();
     ctx.setCurrTask(uTask);
     TableScanOperator topOp = ctx.getCurrTopOp();
     if (topOp != null && !ctx.isSeenOp(uTask, topOp)) {
@@ -219,17 +220,17 @@ public class GenMRUnion1 implements SemanticNodeProcessor {
 
     assert uPrsCtx != null;
 
-    Task<?> currTask = ctx.getCurrTask();
+    Task<? extends Serializable> currTask = ctx.getCurrTask();
     int pos = UnionProcFactory.getPositionParent(union, stack);
 
-    Task<?> uTask = null;
+    Task<? extends Serializable> uTask = null;
     MapredWork uPlan = null;
 
     // union is encountered for the first time
     GenMRUnionCtx uCtxTask = ctx.getUnionTask(union);
     if (uCtxTask == null) {
       uPlan = GenMapRedUtils.getMapRedWork(parseCtx);
-      uTask = TaskFactory.get(uPlan);
+      uTask = TaskFactory.get(uPlan, parseCtx.getConf());
       uCtxTask = new GenMRUnionCtx(uTask);
       ctx.setUnionTask(union, uCtxTask);
     }
@@ -271,7 +272,7 @@ public class GenMRUnion1 implements SemanticNodeProcessor {
   }
 
   private boolean shouldBeRootTask(
-      Task<?> currTask) {
+      Task<? extends Serializable> currTask) {
     return currTask.getParentTasks() == null
         || (currTask.getParentTasks().size() == 0);
   }

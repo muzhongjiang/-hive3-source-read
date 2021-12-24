@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.hadoop.hive.llap.daemon.services.impl;
 
 import java.io.IOException;
@@ -23,6 +22,7 @@ import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 
+import javax.management.MalformedObjectNameException;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -33,10 +33,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.classification.InterfaceAudience;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstanceSet;
+import org.apache.hadoop.hive.llap.registry.ServiceInstance;
 import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
-import org.apache.hadoop.hive.registry.ServiceInstanceSet;
+import org.apache.hadoop.hive.llap.registry.impl.LlapZookeeperRegistryImpl;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.service.CompositeService;
@@ -57,8 +56,8 @@ public class LlapWebServices extends AbstractService {
   static final String ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
   static final String ACCESS_CONTROL_ALLOW_ORIGIN = "Access-Control-Allow-Origin";
 
-  static final String REGISTRY_ATTRIBUTE = "llap.registry";
-  static final String PARENT_ATTRIBUTE = "llap.parent";
+  static final String REGISTRY_ATTRIBUTE="llap.registry";
+  static final String PARENT_ATTRIBUTE="llap.parent";
 
   private int port;
   private HttpServer http;
@@ -83,13 +82,6 @@ public class LlapWebServices extends AbstractService {
     HttpServer.Builder builder =
         new HttpServer.Builder("llap").setPort(this.port).setHost(bindAddress);
     builder.setConf(new HiveConf(conf, HiveConf.class));
-    builder.setDisableDirListing(true);
-    if (conf.getBoolean(ConfVars.LLAP_DAEMON_WEB_XFRAME_ENABLED.varname,
-        ConfVars.LLAP_DAEMON_WEB_XFRAME_ENABLED.defaultBoolVal)) {
-      builder.configureXFrame(true).setXFrameOption(
-          conf.get(ConfVars.LLAP_DAEMON_WEB_XFRAME_VALUE.varname,
-              ConfVars.LLAP_DAEMON_WEB_XFRAME_VALUE.defaultStrVal));
-    }
     if (UserGroupInformation.isSecurityEnabled()) {
       LOG.info("LLAP UI useSSL=" + this.useSSL + ", auto-auth/SPNEGO="
           + this.useSPNEGO + ", port=" + this.port);
@@ -106,16 +98,10 @@ public class LlapWebServices extends AbstractService {
     builder.setContextAttribute(REGISTRY_ATTRIBUTE, registry);
     builder.setContextAttribute(PARENT_ATTRIBUTE, parent);
 
-    // make conf available to the locking stats servle
-    LlapLockingServlet.setConf(conf);
-
     try {
       this.http = builder.build();
       this.http.addServlet("status", "/status", LlapStatusServlet.class);
       this.http.addServlet("peers", "/peers", LlapPeerRegistryServlet.class);
-      this.http.addServlet("iomem", "/iomem", LlapIoMemoryServlet.class);
-      this.http.addServlet("system", "/system", SystemConfigurationServlet.class);
-      this.http.addServlet("locking", "/locking", LlapLockingServlet.class);
     } catch (IOException e) {
       LOG.warn("LLAP web service failed to come up", e);
     }
@@ -242,8 +228,7 @@ public class LlapWebServices extends AbstractService {
           }
           jg.writeStringField("identity", registry.getWorkerIdentity());
           jg.writeArrayFieldStart("peers");
-          ServiceInstanceSet<LlapServiceInstance> instanceSet = registry.getInstances();
-          for (LlapServiceInstance s : ((LlapServiceInstanceSet) instanceSet).getAllInstancesOrdered(false)) {
+          for (ServiceInstance s : registry.getInstances().getAllInstancesOrdered(false)) {
             jg.writeStartObject();
             jg.writeStringField("identity", s.getWorkerIdentity());
             jg.writeStringField("host", s.getHost());

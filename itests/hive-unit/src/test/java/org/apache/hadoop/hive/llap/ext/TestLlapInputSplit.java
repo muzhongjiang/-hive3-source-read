@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,7 +27,7 @@ import java.util.ArrayList;
 import org.apache.hadoop.hive.llap.LlapInputSplit;
 import org.apache.hadoop.hive.llap.Schema;
 import org.apache.hadoop.hive.llap.FieldDesc;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.hadoop.hive.llap.TypeDesc;
 
 import org.apache.hadoop.mapred.SplitLocationInfo;
 import org.junit.Test;
@@ -45,19 +45,14 @@ public class TestLlapInputSplit {
         new SplitLocationInfo("location2", false),
     };
 
-    LlapDaemonInfo daemonInfo1 = new LlapDaemonInfo("host1", 30004, 15003);
-    LlapDaemonInfo daemonInfo2 = new LlapDaemonInfo("host2", 30004, 15003);
-
-    LlapDaemonInfo[] llapDaemonInfos = {daemonInfo1, daemonInfo2};
-
     ArrayList<FieldDesc> colDescs = new ArrayList<FieldDesc>();
-    colDescs.add(new FieldDesc("col1", TypeInfoFactory.stringTypeInfo));
-    colDescs.add(new FieldDesc("col2", TypeInfoFactory.intTypeInfo));
+    colDescs.add(new FieldDesc("col1", new TypeDesc(TypeDesc.Type.STRING)));
+    colDescs.add(new FieldDesc("col2", new TypeDesc(TypeDesc.Type.INT)));
     Schema schema = new Schema(colDescs);
 
     byte[] tokenBytes = new byte[] { 1 };
     LlapInputSplit split1 = new LlapInputSplit(splitNum, planBytes, fragmentBytes, null,
-        locations, llapDaemonInfos, schema, "hive", tokenBytes, "some-dummy-jwt");
+        locations, schema, "hive", tokenBytes);
     ByteArrayOutputStream byteOutStream = new ByteArrayOutputStream();
     DataOutputStream dataOut = new DataOutputStream(byteOutStream);
     split1.write(dataOut);
@@ -88,8 +83,6 @@ public class TestLlapInputSplit {
     assertArrayEquals(split1.getLocations(), split2.getLocations());
     assertEquals(split1.getSchema().toString(), split2.getSchema().toString());
     assertEquals(split1.getLlapUser(), split2.getLlapUser());
-    assertEquals(split1.getJwt(), split2.getJwt());
-    assertArrayEquals(split1.getLlapDaemonInfos(), split2.getLlapDaemonInfos());
   }
 
 }

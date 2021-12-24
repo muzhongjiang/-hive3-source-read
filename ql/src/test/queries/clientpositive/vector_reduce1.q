@@ -6,7 +6,7 @@ set hive.fetch.task.conversion=none;
 
 -- SORT_QUERY_RESULTS
 
-create table vectortab2k_n8(
+create table vectortab2k(
             t tinyint,
             si smallint,
             i int,
@@ -23,9 +23,9 @@ create table vectortab2k_n8(
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../../data/files/vectortab2k' OVERWRITE INTO TABLE vectortab2k_n8;
+LOAD DATA LOCAL INPATH '../../data/files/vectortab2k' OVERWRITE INTO TABLE vectortab2k;
 
-create table vectortab2korc_n7(
+create table vectortab2korc(
             t tinyint,
             si smallint,
             i int,
@@ -41,9 +41,9 @@ create table vectortab2korc_n7(
             dt date)
 STORED AS ORC;
 
-INSERT INTO TABLE vectortab2korc_n7 SELECT * FROM vectortab2k_n8;
+INSERT INTO TABLE vectortab2korc SELECT * FROM vectortab2k;
 
 explain vectorization expression
-select b from vectortab2korc_n7 order by b;
+select b from vectortab2korc order by b;
 
-select b from vectortab2korc_n7 order by b;
+select b from vectortab2korc order by b;

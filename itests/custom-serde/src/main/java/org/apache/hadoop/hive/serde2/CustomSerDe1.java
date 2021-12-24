@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -41,18 +41,16 @@ public class CustomSerDe1 extends AbstractSerDe {
 
   StructObjectInspector rowOI;
   ArrayList<String> row;
-  
+
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
+  public void initialize(Configuration conf, Properties tbl)
       throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
 
     // Read the configuration parameters
-    String columnNameProperty = properties.getProperty(serdeConstants.LIST_COLUMNS);
-    String columnTypeProperty = properties.getProperty(serdeConstants.LIST_COLUMN_TYPES);
-    final String columnNameDelimiter = properties.containsKey(serdeConstants.COLUMN_NAME_DELIMITER)
-        ? properties.getProperty(serdeConstants.COLUMN_NAME_DELIMITER)
-        : String.valueOf(SerDeUtils.COMMA);
+    String columnNameProperty = tbl.getProperty(serdeConstants.LIST_COLUMNS);
+    String columnTypeProperty = tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES);
+    final String columnNameDelimiter = tbl.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? tbl
+        .getProperty(serdeConstants.COLUMN_NAME_DELIMITER) : String.valueOf(SerDeUtils.COMMA);
     // The input column can either be a string or a list of integer values.
     List<String> columnNames = Arrays.asList(columnNameProperty.split(columnNameDelimiter));
     List<TypeInfo> columnTypes = TypeInfoUtils
@@ -105,6 +103,12 @@ public class CustomSerDe1 extends AbstractSerDe {
   @Override
   public Writable serialize(Object obj, ObjectInspector objInspector)
       throws SerDeException {
+    return null;
+  }
+
+  @Override
+  public SerDeStats getSerDeStats() {
+    // no support for statistics
     return null;
   }
 

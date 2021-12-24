@@ -11,6 +11,7 @@ hr                  	string
 	 	 
 # Partition Information	 	 
 # col_name            	data_type           	comment             
+	 	 
 ds                  	string              	                    
 hr                  	string              	                    
 FAILED: SemanticException [Error 10006]: Partition not found {ds=2012-04-08, hr=15}

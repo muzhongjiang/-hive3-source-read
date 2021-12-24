@@ -1,5 +1,5 @@
 SET hive.blobstore.optimizations.enabled=true;
--- SORT_QUERY_RESULTS
+SET hive.exec.dynamic.partition.mode=nonstrict;
 
 -- Single partition with buckets
 DROP TABLE table1;

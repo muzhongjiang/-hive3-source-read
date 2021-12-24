@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,11 +20,13 @@ package org.apache.hadoop.hive.ql.io.orc;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
-import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.orc.TypeDescription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,12 +45,12 @@ public class ReaderImpl extends org.apache.orc.impl.ReaderImpl
   @Override
   public org.apache.hadoop.hive.ql.io.orc.CompressionKind getCompression() {
     for (CompressionKind value: org.apache.hadoop.hive.ql.io.orc.CompressionKind.values()) {
-      if (value.getUnderlying() == this.getCompressionKind()) {
+      if (value.getUnderlying() == compressionKind) {
         return value;
       }
     }
     throw new IllegalArgumentException("Unknown compression kind " +
-        this.getCompressionKind());
+        compressionKind);
   }
 
   /**
@@ -59,7 +61,7 @@ public class ReaderImpl extends org.apache.orc.impl.ReaderImpl
    */
   public ReaderImpl(Path path, OrcFile.ReaderOptions options) throws IOException {
     super(path, options);
-    this.inspector = OrcStruct.createObjectInspector(0, getTypes());
+    this.inspector = OrcStruct.createObjectInspector(0, types);
   }
 
   @Override
@@ -74,15 +76,9 @@ public class ReaderImpl extends org.apache.orc.impl.ReaderImpl
 
   @Override
   public RecordReader rowsOptions(Options options) throws IOException {
-    return rowsOptions(options, null);
-  }
-
-  @Override
-  public RecordReader rowsOptions(Options options, Configuration conf) throws IOException {
     LOG.info("Reading ORC rows from " + path + " with " + options);
-    return new RecordReaderImpl(this, options, conf);
+    return new RecordReaderImpl(this, options);
   }
-
 
 
   @Override

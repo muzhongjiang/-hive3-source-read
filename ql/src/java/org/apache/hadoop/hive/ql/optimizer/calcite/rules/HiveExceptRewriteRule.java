@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,6 +27,7 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -34,13 +35,17 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.optimizer.calcite.CalciteSemanticException;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveCalciteUtil;
 import org.apache.hadoop.hive.ql.optimizer.calcite.TraitsUtil;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveAggregate;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveExcept;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveFilter;
+import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveIntersect;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveRelNode;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableFunctionScan;
@@ -48,7 +53,12 @@ import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveUnion;
 import org.apache.hadoop.hive.ql.optimizer.calcite.translator.SqlFunctionConverter;
 import org.apache.hadoop.hive.ql.optimizer.calcite.translator.TypeConverter;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
+import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,8 +78,8 @@ import com.google.common.collect.Lists;
  * have m+n=a, 2m+n=b where m is the #row in R1 and n is the #row in R2 then
  * m=b-a, n=2a-b, m-n=2b-3a
  * if it is except (distinct)
- * then R5 = Fil (b-a&gt;0 &amp;&amp; 2a-b=0) R6 = select only keys from R5
- * else R5 = Fil (2b-3a&gt; 0) R6 = UDTF (R5) which will explode the tuples based on 2b-3a.
+ * then R5 = Fil (b-a>0 && 2a-b=0) R6 = select only keys from R5
+ * else R5 = Fil (2b-3a>0) R6 = UDTF (R5) which will explode the tuples based on 2b-3a.
  * Note that NULLs are handled the same as other values. Please refer to the test cases.
  */
 public class HiveExceptRewriteRule extends RelOptRule {
@@ -159,7 +169,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
 
     final ImmutableBitSet groupSet = ImmutableBitSet.of(groupSetPositions);
     HiveRelNode aggregateRel = new HiveAggregate(cluster,
-        cluster.traitSetOf(HiveRelNode.CONVENTION), gbInputRel, groupSet, null,
+        cluster.traitSetOf(HiveRelNode.CONVENTION), gbInputRel, false, groupSet, null,
         aggregateCalls);
 
     // the schema after GB is like this
@@ -260,7 +270,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
         TypeInfoFactory.longTypeInfo, input.getRowType().getFieldList().size(), aggFnRetType);
     aggregateCalls.add(aggregateCall);
     return new HiveAggregate(cluster, cluster.traitSetOf(HiveRelNode.CONVENTION), gbInputRel,
-        groupSet, null, aggregateCalls);
+        false, groupSet, null, aggregateCalls);
   }
 
   private RexNode multiply(RexNode r1, RexNode r2, RelOptCluster cluster, RexBuilder rexBuilder)
@@ -275,7 +285,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
         cluster.getTypeFactory()));
     return rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn("*", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), true, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), true),
         childRexNodeLst);
   }
 
@@ -294,7 +304,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
     // a>0
     RexNode aMorethanZero = rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn(">", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false),
         childRexNodeLst);
     childRexNodeLst = new ArrayList<RexNode>();
     RexLiteral two = rexBuilder.makeBigintLiteral(new BigDecimal(2));
@@ -303,7 +313,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
     // 2*a
     RexNode twoa = rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn("*", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false),
         childRexNodeLst);
     childRexNodeLst = new ArrayList<RexNode>();
     RexInputRef b = rexBuilder.makeInputRef(input, columnSize - 1);
@@ -312,7 +322,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
     // 2a=b
     RexNode twoaEqualTob = rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn("=", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false),
         childRexNodeLst);
     childRexNodeLst = new ArrayList<RexNode>();
     childRexNodeLst.add(aMorethanZero);
@@ -320,7 +330,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
     // a>0 && 2a=b
     return rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn("and", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false),
         childRexNodeLst);
   }
 
@@ -338,7 +348,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
     childRexNodeLst.add(a);
     RexNode threea = rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn("*", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false),
         childRexNodeLst);
 
     RexLiteral two = rexBuilder.makeBigintLiteral(new BigDecimal(2));
@@ -350,7 +360,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
     childRexNodeLst.add(b);
     RexNode twob = rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn("*", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false),
         childRexNodeLst);
 
     // 2b-3a
@@ -359,7 +369,7 @@ public class HiveExceptRewriteRule extends RelOptRule {
     childRexNodeLst.add(threea);
     return rexBuilder.makeCall(
         SqlFunctionConverter.getCalciteFn("-", calciteArgTypesBldr.build(),
-            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false, false),
+            TypeConverter.convert(TypeInfoFactory.longTypeInfo, cluster.getTypeFactory()), false),
         childRexNodeLst);
   }
 }

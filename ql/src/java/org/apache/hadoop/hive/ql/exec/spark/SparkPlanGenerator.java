@@ -1,4 +1,4 @@
-/*
+/**
  *  Licensed to the Apache Software Foundation (ASF) under one
  *  or more contributor license agreements.  See the NOTICE file
  *  distributed with this work for additional information
@@ -23,9 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
-import org.apache.spark.util.CallSite;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +40,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
-import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper;
@@ -54,7 +51,6 @@ import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
 import org.apache.hadoop.hive.ql.plan.SparkEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.SparkWork;
-import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.ql.stats.StatsCollectionContext;
 import org.apache.hadoop.hive.ql.stats.StatsFactory;
 import org.apache.hadoop.hive.ql.stats.StatsPublisher;
@@ -68,11 +64,10 @@ import com.google.common.base.Preconditions;
 
 @SuppressWarnings("rawtypes")
 public class SparkPlanGenerator {
-
   private static final String CLASS_NAME = SparkPlanGenerator.class.getName();
+  private final PerfLogger perfLogger = SessionState.getPerfLogger();
   private static final Logger LOG = LoggerFactory.getLogger(SparkPlanGenerator.class);
 
-  private final PerfLogger perfLogger = SessionState.getPerfLogger();
   private final JavaSparkContext sc;
   private final JobConf jobConf;
   private final Context context;
@@ -83,7 +78,6 @@ public class SparkPlanGenerator {
   private final Map<BaseWork, SparkTran> workToParentWorkTranMap;
   // a map from each BaseWork to its cloned JobConf
   private final Map<BaseWork, JobConf> workToJobConf;
-  private final org.apache.spark.serializer.KryoSerializer shuffleSerializer;
 
   public SparkPlanGenerator(
     JavaSparkContext sc,
@@ -100,32 +94,24 @@ public class SparkPlanGenerator {
     this.workToParentWorkTranMap = new HashMap<BaseWork, SparkTran>();
     this.sparkReporter = sparkReporter;
     this.workToJobConf = new HashMap<BaseWork, JobConf>();
-    if (HiveConf.getBoolVar(jobConf, HiveConf.ConfVars.SPARK_OPTIMIZE_SHUFFLE_SERDE)) {
-      this.shuffleSerializer = ShuffleKryoSerializer.getInstance(sc, jobConf);
-    } else {
-      this.shuffleSerializer = null;
-    }
   }
 
   public SparkPlan generate(SparkWork sparkWork) throws Exception {
-    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.SPARK_BUILD_PLAN);
-    SparkPlan sparkPlan = new SparkPlan(this.jobConf, this.sc.sc());
+    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.SPARK_BUILD_PLAN);
+    SparkPlan sparkPlan = new SparkPlan();
     cloneToWork = sparkWork.getCloneToWork();
     workToTranMap.clear();
     workToParentWorkTranMap.clear();
 
     try {
       for (BaseWork work : sparkWork.getAllWork()) {
-        // Run the SparkDynamicPartitionPruner, we run this here instead of inside the
-        // InputFormat so that we don't have to run pruning when creating a Record Reader
-        runDynamicPartitionPruner(work);
-        perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.SPARK_CREATE_TRAN + work.getName());
+        perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.SPARK_CREATE_TRAN + work.getName());
         SparkTran tran = generate(work, sparkWork);
         SparkTran parentTran = generateParentTran(sparkPlan, sparkWork, work);
         sparkPlan.addTran(tran);
         sparkPlan.connect(parentTran, tran);
         workToTranMap.put(work, tran);
-        perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.SPARK_CREATE_TRAN + work.getName());
+        perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.SPARK_CREATE_TRAN + work.getName());
       }
     } finally {
       // clear all ThreadLocal cached MapWork/ReduceWork after plan generation
@@ -133,29 +119,8 @@ public class SparkPlanGenerator {
       Utilities.clearWorkMap(jobConf);
     }
 
-    perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.SPARK_BUILD_PLAN);
+    perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.SPARK_BUILD_PLAN);
     return sparkPlan;
-  }
-
-  /**
-   * Run a {@link SparkDynamicPartitionPruner} on the given {@link BaseWork}. This method only
-   * runs the pruner if the work object is a {@link MapWork}. We do this here because we need to
-   * do it after all previous Spark jobs for the given query have completed, otherwise the input
-   * file for the pruner won't exist. We need to make sure this runs before we serialize the
-   * given work object to a file (so it can be read by individual tasks) because the pruner will
-   * mutate the work work object by removing certain input paths.
-   *
-   * @param work the {@link BaseWork} to run the pruner on
-   */
-  private void runDynamicPartitionPruner(BaseWork work) {
-    if (work instanceof MapWork && HiveConf.isSparkDPPAny(jobConf)) {
-      SparkDynamicPartitionPruner pruner = new SparkDynamicPartitionPruner();
-      try {
-        pruner.prune((MapWork) work, jobConf);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 
   // Generate (possibly get from a cached result) parent SparkTran
@@ -173,10 +138,9 @@ public class SparkPlanGenerator {
       result = generateMapInput(sparkPlan, (MapWork)work);
       sparkPlan.addTran(result);
     } else if (work instanceof ReduceWork) {
-      boolean toCache = cloneToWork.containsKey(work);
       List<BaseWork> parentWorks = sparkWork.getParents(work);
-      SparkEdgeProperty sparkEdgeProperty = sparkWork.getEdgeProperty(parentWorks.get(0), work);
-      result = generate(sparkPlan, sparkEdgeProperty, toCache, work.getName(), work);
+      result = generate(sparkPlan,
+        sparkWork.getEdgeProperty(parentWorks.get(0), work), cloneToWork.containsKey(work));
       sparkPlan.addTran(result);
       for (BaseWork parentWork : parentWorks) {
         sparkPlan.connect(workToTranMap.get(parentWork), result);
@@ -225,8 +189,6 @@ public class SparkPlanGenerator {
     JobConf jobConf = cloneJobConf(mapWork);
     Class ifClass = getInputFormat(jobConf, mapWork);
 
-    sc.sc().setCallSite(CallSite.apply(mapWork.getName(), ""));
-
     JavaPairRDD<WritableComparable, Writable> hadoopRDD;
     if (mapWork.getNumMapTasks() != null) {
       jobConf.setNumMapTasks(mapWork.getNumMapTasks());
@@ -236,35 +198,27 @@ public class SparkPlanGenerator {
       hadoopRDD = sc.hadoopRDD(jobConf, ifClass, WritableComparable.class, Writable.class);
     }
 
-    boolean toCache = false/*cloneToWork.containsKey(mapWork)*/;
-
-    String tables = mapWork.getAllRootOperators().stream()
-            .filter(op -> op instanceof TableScanOperator)
-            .map(ts -> ((TableScanDesc) ts.getConf()).getAlias())
-            .collect(Collectors.joining(", "));
-
-    String rddName = mapWork.getName() + " (" + tables + ", " + hadoopRDD.getNumPartitions() +
-            (toCache ? ", cached)" : ")");
-
     // Caching is disabled for MapInput due to HIVE-8920
-    MapInput result = new MapInput(sparkPlan, hadoopRDD, toCache, rddName, mapWork);
+    MapInput result = new MapInput(sparkPlan, hadoopRDD, false/*cloneToWork.containsKey(mapWork)*/);
     return result;
   }
 
-  private ShuffleTran generate(SparkPlan sparkPlan, SparkEdgeProperty edge, boolean toCache,
-                               String name, BaseWork work) {
-
+  private ShuffleTran generate(SparkPlan sparkPlan, SparkEdgeProperty edge, boolean toCache) {
     Preconditions.checkArgument(!edge.isShuffleNone(),
         "AssertionError: SHUFFLE_NONE should only be used for UnionWork.");
     SparkShuffler shuffler;
     if (edge.isMRShuffle()) {
-      shuffler = new SortByShuffler(false, sparkPlan, shuffleSerializer);
+      shuffler = new SortByShuffler(false, sparkPlan);
     } else if (edge.isShuffleSort()) {
-      shuffler = new SortByShuffler(true, sparkPlan, shuffleSerializer);
+      shuffler = new SortByShuffler(true, sparkPlan);
     } else {
-      shuffler = new GroupByShuffler();
+      boolean useSparkGroupBy = jobConf.getBoolean("hive.spark.use.groupby.shuffle", true);
+      if (!useSparkGroupBy) {
+        LOG.info("hive.spark.use.groupby.shuffle is off. Use repartitin shuffle instead.");
+      }
+      shuffler = useSparkGroupBy ? new GroupByShuffler() : new RepartitionShuffler();
     }
-    return new ShuffleTran(sparkPlan, shuffler, edge.getNumPartitions(), toCache, name, edge, work);
+    return new ShuffleTran(sparkPlan, shuffler, edge.getNumPartitions(), toCache);
   }
 
   private SparkTran generate(BaseWork work, SparkWork sparkWork) throws Exception {
@@ -288,12 +242,12 @@ public class SparkPlanGenerator {
               "Can't make path " + outputPath + " : " + e.getMessage());
         }
       }
-      MapTran mapTran = new MapTran(caching, work.getName(), work);
+      MapTran mapTran = new MapTran(caching);
       HiveMapFunction mapFunc = new HiveMapFunction(confBytes, sparkReporter);
       mapTran.setMapFunction(mapFunc);
       return mapTran;
     } else if (work instanceof ReduceWork) {
-      ReduceTran reduceTran = new ReduceTran(caching, work.getName(), work);
+      ReduceTran reduceTran = new ReduceTran(caching);
       HiveReduceFunction reduceFunc = new HiveReduceFunction(confBytes, sparkReporter);
       reduceTran.setReduceFunction(reduceFunc);
       return reduceTran;
@@ -344,13 +298,12 @@ public class SparkPlanGenerator {
       throw new IllegalArgumentException(msg, e);
     }
     if (work instanceof MapWork) {
-      MapWork mapWork = (MapWork) work;
       cloned.setBoolean("mapred.task.is.map", true);
-      List<Path> inputPaths = Utilities.getInputPaths(cloned, mapWork,
+      List<Path> inputPaths = Utilities.getInputPaths(cloned, (MapWork) work,
           scratchDir, context, false);
       Utilities.setInputPaths(cloned, inputPaths);
-      Utilities.setMapWork(cloned, mapWork, scratchDir, false);
-      Utilities.createTmpDirs(cloned, mapWork);
+      Utilities.setMapWork(cloned, (MapWork) work, scratchDir, false);
+      Utilities.createTmpDirs(cloned, (MapWork) work);
       if (work instanceof MergeFileWork) {
         MergeFileWork mergeFileWork = (MergeFileWork) work;
         cloned.set(Utilities.MAPRED_MAPPER_CLASS, MergeFileMapper.class.getName());
@@ -360,21 +313,9 @@ public class SparkPlanGenerator {
       } else {
         cloned.set(Utilities.MAPRED_MAPPER_CLASS, ExecMapper.class.getName());
       }
-      if (mapWork.getMaxSplitSize() != null) {
-        HiveConf.setLongVar(cloned, HiveConf.ConfVars.MAPREDMAXSPLITSIZE,
-            mapWork.getMaxSplitSize());
-      }
-      if (mapWork.getMinSplitSize() != null) {
+      if (((MapWork) work).getMinSplitSize() != null) {
         HiveConf.setLongVar(cloned, HiveConf.ConfVars.MAPREDMINSPLITSIZE,
-            mapWork.getMinSplitSize());
-      }
-      if (mapWork.getMinSplitSizePerNode() != null) {
-        HiveConf.setLongVar(cloned, HiveConf.ConfVars.MAPREDMINSPLITSIZEPERNODE,
-            mapWork.getMinSplitSizePerNode());
-      }
-      if (mapWork.getMinSplitSizePerRack() != null) {
-        HiveConf.setLongVar(cloned, HiveConf.ConfVars.MAPREDMINSPLITSIZEPERRACK,
-            mapWork.getMinSplitSizePerRack());
+            ((MapWork) work).getMinSplitSize());
       }
       // remember the JobConf cloned for each MapWork, so we won't clone for it again
       workToJobConf.put(work, cloned);
@@ -405,4 +346,5 @@ public class SparkPlanGenerator {
       }
     }
   }
+
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,10 +19,10 @@
 package org.apache.hadoop.hive.contrib.fileformat.base64;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import java.io.UnsupportedEncodingException;
 import java.util.Properties;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator.RecordWriter;
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat;
@@ -89,7 +89,7 @@ public class Base64TextOutputFormat<K extends WritableComparable, V extends Writ
       }
 
       // Encode
-      byte[] output = Base64.getEncoder().encode(wrapped);
+      byte[] output = base64.encode(wrapped);
       bytesWritable.set(output, 0, output.length);
 
       writer.write(bytesWritable);
@@ -101,14 +101,19 @@ public class Base64TextOutputFormat<K extends WritableComparable, V extends Writ
     }
 
     private byte[] signature;
+    private final Base64 base64 = Base64TextInputFormat.createBase64();
 
     @Override
     public void configure(JobConf job) {
-      String signatureString = job.get("base64.text.output.format.signature");
-      if (signatureString != null) {
-        signature = signatureString.getBytes(StandardCharsets.UTF_8);
-      } else {
-        signature = new byte[0];
+      try {
+        String signatureString = job.get("base64.text.output.format.signature");
+        if (signatureString != null) {
+          signature = signatureString.getBytes("UTF-8");
+        } else {
+          signature = new byte[0];
+        }
+      } catch (UnsupportedEncodingException e) {
+        e.printStackTrace();
       }
     }
   }

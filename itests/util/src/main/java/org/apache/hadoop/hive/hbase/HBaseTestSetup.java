@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,25 +19,23 @@
 package org.apache.hadoop.hive.hbase;
 
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.Arrays;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HConnectionManager;
+import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.QTestMiniClusters.QTestSetup;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.zookeeper.Watcher;
 
@@ -45,29 +43,26 @@ import org.apache.zookeeper.Watcher;
  * HBaseTestSetup defines HBase-specific test fixtures which are
  * reused across testcases.
  */
-public class HBaseTestSetup extends QTestSetup {
+public class HBaseTestSetup {
 
   private MiniHBaseCluster hbaseCluster;
-  private HBaseTestingUtility util;
   private int zooKeeperPort;
-  private Connection hbaseConn;
+  private String hbaseRoot;
+  private HConnection hbaseConn;
 
   private static final int NUM_REGIONSERVERS = 1;
 
-  public Connection getConnection() {
+  public HConnection getConnection() {
     return this.hbaseConn;
   }
 
-  @Override
-  public void preTest(HiveConf conf) throws Exception {
-    super.preTest(conf);
+  void preTest(HiveConf conf) throws Exception {
 
     setUpFixtures(conf);
 
-    // Set some properties since HiveConf gets recreated for the new query
-    Path hbaseRoot = util.getDefaultRootDirPath();
-    conf.set(HConstants.HBASE_DIR, hbaseRoot.toUri().toString());
-
+    conf.set("hbase.rootdir", hbaseRoot);
+    conf.set("hbase.master", hbaseCluster.getMaster().getServerName().getHostAndPort());
+    conf.set("hbase.zookeeper.property.clientPort", Integer.toString(zooKeeperPort));
     String auxJars = conf.getAuxJars();
     auxJars = (StringUtils.isBlank(auxJars) ? "" : (auxJars + ",")) + "file://"
       + new JobConf(conf, HBaseConfiguration.class).getJar();
@@ -81,26 +76,30 @@ public class HBaseTestSetup extends QTestSetup {
      * QTestUtil already starts it.
      */
     int zkPort = conf.getInt("hive.zookeeper.client.port", -1);
-    conf.set(HConstants.ZOOKEEPER_CLIENT_PORT, Integer.toString(zkPort));
     if ((zkPort == zooKeeperPort) && (hbaseCluster != null)) {
       return;
     }
     zooKeeperPort = zkPort;
+    String tmpdir =  System.getProperty("test.tmp.dir");
     this.tearDown();
+    conf.set("hbase.master", "local");
 
-    // Fix needed due to dependency for hbase-mapreduce module
-    System.setProperty("org.apache.hadoop.hbase.shaded.io.netty.packagePrefix",
-        "org.apache.hadoop.hbase.shaded.");
+    hbaseRoot = "file:///" + tmpdir + "/hbase";
+    conf.set("hbase.rootdir", hbaseRoot);
 
+    conf.set("hbase.zookeeper.property.clientPort",
+      Integer.toString(zooKeeperPort));
     Configuration hbaseConf = HBaseConfiguration.create(conf);
-    util = new HBaseTestingUtility(hbaseConf);
-
-    util.startMiniDFSCluster(1);
-    hbaseCluster = util.startMiniHBaseCluster(1, NUM_REGIONSERVERS);
-    hbaseConn = util.getConnection();
+    hbaseConf.setInt("hbase.master.port", findFreePort());
+    hbaseConf.setInt("hbase.master.info.port", -1);
+    hbaseConf.setInt("hbase.regionserver.port", findFreePort());
+    hbaseConf.setInt("hbase.regionserver.info.port", -1);
+    hbaseCluster = new MiniHBaseCluster(hbaseConf, NUM_REGIONSERVERS);
+    conf.set("hbase.master", hbaseCluster.getMaster().getServerName().getHostAndPort());
+    hbaseConn = HConnectionManager.createConnection(hbaseConf);
 
     // opening the META table ensures that cluster is running
-    Table meta = null;
+    HTableInterface meta = null;
     try {
       meta = hbaseConn.getTable(TableName.META_TABLE_NAME);
     } finally {
@@ -111,7 +110,7 @@ public class HBaseTestSetup extends QTestSetup {
 
   private void createHBaseTable() throws IOException {
     final String HBASE_TABLE_NAME = "HiveExternalTable";
-    HTableDescriptor htableDesc = new HTableDescriptor(TableName.valueOf(HBASE_TABLE_NAME));
+    HTableDescriptor htableDesc = new HTableDescriptor(HBASE_TABLE_NAME.getBytes());
     HColumnDescriptor hcolDesc = new HColumnDescriptor("cf".getBytes());
     htableDesc.addFamily(hcolDesc);
 
@@ -124,16 +123,16 @@ public class HBaseTestSetup extends QTestSetup {
     float [] floats = new float [] { Float.MIN_VALUE, -1.0F, Float.MAX_VALUE };
     double [] doubles = new double [] { Double.MIN_VALUE, -1.0, Double.MAX_VALUE };
 
-    Admin hbaseAdmin = null;
-    Table htable = null;
+    HBaseAdmin hbaseAdmin = null;
+    HTableInterface htable = null;
     try {
-      hbaseAdmin = hbaseConn.getAdmin();
+      hbaseAdmin = new HBaseAdmin(hbaseConn.getConfiguration());
       if (Arrays.asList(hbaseAdmin.listTables()).contains(htableDesc)) {
         // if table is already in there, don't recreate.
         return;
       }
       hbaseAdmin.createTable(htableDesc);
-      htable = hbaseConn.getTable(TableName.valueOf(HBASE_TABLE_NAME));
+      htable = hbaseConn.getTable(HBASE_TABLE_NAME);
 
       // data
       Put[] puts = new Put[]{
@@ -141,14 +140,14 @@ public class HBaseTestSetup extends QTestSetup {
 
       // store data
       for (int i = 0; i < puts.length; i++) {
-        puts[i].addColumn("cf".getBytes(), "cq-boolean".getBytes(), Bytes.toBytes(booleans[i]));
-        puts[i].addColumn("cf".getBytes(), "cq-byte".getBytes(), new byte[]{bytes[i]});
-        puts[i].addColumn("cf".getBytes(), "cq-short".getBytes(), Bytes.toBytes(shorts[i]));
-        puts[i].addColumn("cf".getBytes(), "cq-int".getBytes(), Bytes.toBytes(ints[i]));
-        puts[i].addColumn("cf".getBytes(), "cq-long".getBytes(), Bytes.toBytes(longs[i]));
-        puts[i].addColumn("cf".getBytes(), "cq-string".getBytes(), Bytes.toBytes(strings[i]));
-        puts[i].addColumn("cf".getBytes(), "cq-float".getBytes(), Bytes.toBytes(floats[i]));
-        puts[i].addColumn("cf".getBytes(), "cq-double".getBytes(), Bytes.toBytes(doubles[i]));
+        puts[i].add("cf".getBytes(), "cq-boolean".getBytes(), Bytes.toBytes(booleans[i]));
+        puts[i].add("cf".getBytes(), "cq-byte".getBytes(), new byte[]{bytes[i]});
+        puts[i].add("cf".getBytes(), "cq-short".getBytes(), Bytes.toBytes(shorts[i]));
+        puts[i].add("cf".getBytes(), "cq-int".getBytes(), Bytes.toBytes(ints[i]));
+        puts[i].add("cf".getBytes(), "cq-long".getBytes(), Bytes.toBytes(longs[i]));
+        puts[i].add("cf".getBytes(), "cq-string".getBytes(), Bytes.toBytes(strings[i]));
+        puts[i].add("cf".getBytes(), "cq-float".getBytes(), Bytes.toBytes(floats[i]));
+        puts[i].add("cf".getBytes(), "cq-double".getBytes(), Bytes.toBytes(doubles[i]));
 
         htable.put(puts[i]);
       }
@@ -158,10 +157,21 @@ public class HBaseTestSetup extends QTestSetup {
     }
   }
 
-  @Override
+  private static int findFreePort() throws IOException {
+    ServerSocket server = new ServerSocket(0);
+    int port = server.getLocalPort();
+    server.close();
+    return port;
+  }
+
   public void tearDown() throws Exception {
+    if (hbaseConn != null) {
+      hbaseConn.close();
+      hbaseConn = null;
+    }
     if (hbaseCluster != null) {
-      util.shutdownMiniCluster();
+      HConnectionManager.deleteAllConnections(true);
+      hbaseCluster.shutdown();
       hbaseCluster = null;
     }
   }

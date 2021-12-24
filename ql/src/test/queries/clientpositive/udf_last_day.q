@@ -12,8 +12,9 @@ last_day('2014-02-28'),
 last_day('2016-02-03'),
 last_day('2016-02-28'),
 last_day('2016-02-29'),
-last_day(cast(null as string));
-
+last_day('2014-01-34'),
+last_day(cast(null as string)),
+last_day('01/29/2014');
 
 select
 last_day('2014-01-01 10:30:45'),
@@ -24,8 +25,9 @@ last_day('2014-02-28 10:30:45'),
 last_day('2016-02-03 10:30:45'),
 last_day('2016-02-28 10:30:45'),
 last_day('2016-02-29 10:30:45'),
-last_day(cast(null as string));
-
+last_day('2014-01-34 10:30:45'),
+last_day(cast(null as string)),
+last_day('01/29/2014 10:30:45');
 
 select
 last_day(cast('2014-01-01' as date)),

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,11 +19,8 @@
 package org.apache.hadoop.hive.ql.io.orc;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -100,19 +97,14 @@ public class OrcFileStripeMergeRecordReader implements
         valueWrapper.setStripeInformation(si);
         if (!iter.hasNext()) {
           valueWrapper.setLastStripeInFile(true);
-          Map<String, ByteBuffer> userMeta = new HashMap<>();
-          for(String key: reader.getMetadataKeys()) {
-            userMeta.put(key, reader.getMetadataValue(key));
-          }
-          valueWrapper.setUserMetadata(userMeta);
+          valueWrapper.setUserMetadata(((ReaderImpl) reader).getOrcProtoUserMetadata());
         }
         keyWrapper.setInputPath(path);
         keyWrapper.setCompression(reader.getCompressionKind());
         keyWrapper.setCompressBufferSize(reader.getCompressionSize());
-        keyWrapper.setFileVersion(reader.getFileVersion());
-        keyWrapper.setWriterVersion(reader.getWriterVersion());
+        keyWrapper.setVersion(reader.getFileVersion());
         keyWrapper.setRowIndexStride(reader.getRowIndexStride());
-        keyWrapper.setFileSchema(reader.getSchema());
+        keyWrapper.setTypes(reader.getTypes());
       } else {
         stripeIdx++;
         continue;

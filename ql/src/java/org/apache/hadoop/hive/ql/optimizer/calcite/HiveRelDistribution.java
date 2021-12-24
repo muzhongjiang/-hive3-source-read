@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,35 +17,16 @@
  */
 package org.apache.hadoop.hive.ql.optimizer.calcite;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import org.apache.calcite.plan.RelMultipleTrait;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTrait;
 import org.apache.calcite.plan.RelTraitDef;
 import org.apache.calcite.rel.RelDistribution;
 import org.apache.calcite.rel.RelDistributionTraitDef;
-import org.apache.calcite.rel.RelFieldCollation;
-import org.apache.calcite.util.mapping.IntPair;
 import org.apache.calcite.util.mapping.Mappings.TargetMapping;
 
-import com.google.common.collect.Ordering;
-
 public class HiveRelDistribution implements RelDistribution {
-
-  private static final Ordering<Iterable<Integer>> ORDERING = Ordering.<Integer>natural().lexicographical();
-
-  public static HiveRelDistribution from(
-          List<RelFieldCollation> fieldCollations, RelDistribution.Type distributionType) {
-    List<Integer> newDistributionKeys = new ArrayList<>(fieldCollations.size());
-    for (RelFieldCollation fieldCollation : fieldCollations) {
-      newDistributionKeys.add(fieldCollation.getFieldIndex());
-    }
-    return new HiveRelDistribution(distributionType, newDistributionKeys);
-  }
 
   List<Integer> keys;
   RelDistribution.Type type;
@@ -83,22 +64,7 @@ public class HiveRelDistribution implements RelDistribution {
     if (keys.isEmpty()) {
       return this;
     }
-    List<Integer> newKeys = new ArrayList<>(keys.size());
-
-    if (Bug.CALCITE_4166_FIXED) {
-      throw new AssertionError("Remove logic in HiveRelDistribution when [CALCITE-4166] "
-          + "has been fixed and use newKeys.add(mapping.getTargetOpt(key)); instead.");
-    }
-
-    Map<Integer, Integer> tmp = new HashMap<>(mapping.getSourceCount());
-    for (IntPair aMapping : mapping) {
-      tmp.put(aMapping.source, aMapping.target);
-    }
-
-    for (Integer key : keys) {
-      newKeys.add(tmp.get(key));
-    }
-    return new HiveRelDistribution(type, newKeys);
+    return new HiveRelDistribution(type, keys);
   }
 
   @Override
@@ -111,29 +77,4 @@ public class HiveRelDistribution implements RelDistribution {
     return type;
   }
 
-  @Override
-  public boolean isTop() {
-    return type == Type.ANY;
-  }
-
-  @Override
-  public int compareTo(RelMultipleTrait o) {
-    final RelDistribution distribution = (RelDistribution) o;
-    if (type == distribution.getType()
-        && (type == Type.HASH_DISTRIBUTED
-            || type == Type.RANGE_DISTRIBUTED)) {
-      return ORDERING.compare(getKeys(), distribution.getKeys());
-    }
-
-    return type.compareTo(distribution.getType());
-  }
-
-  @Override
-  public String toString() {
-    if (keys.isEmpty()) {
-      return type.shortName;
-    } else {
-      return type.shortName + keys;
-    }
-  }
 }

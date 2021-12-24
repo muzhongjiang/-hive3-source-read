@@ -1,7 +1,4 @@
---! qt:dataset:src_thrift
--- SORT_QUERY_RESULTS
-
-CREATE TABLE dest1_n94(key STRING, value STRING) STORED AS TEXTFILE;
+CREATE TABLE dest1(key STRING, value STRING) STORED AS TEXTFILE;
 
 EXPLAIN
 FROM (
@@ -10,7 +7,7 @@ FROM (
          USING 'cat' AS (tkey, tvalue) 
   CLUSTER BY tkey 
 ) tmap
-INSERT OVERWRITE TABLE dest1_n94 SELECT tmap.tkey, tmap.tvalue;
+INSERT OVERWRITE TABLE dest1 SELECT tmap.tkey, tmap.tvalue;
 
 FROM (
   FROM src_thrift
@@ -18,6 +15,6 @@ FROM (
          USING 'cat' AS (tkey, tvalue) 
   CLUSTER BY tkey 
 ) tmap
-INSERT OVERWRITE TABLE dest1_n94 SELECT tmap.tkey, tmap.tvalue;
+INSERT OVERWRITE TABLE dest1 SELECT tmap.tkey, tmap.tvalue;
 
-SELECT dest1_n94.* FROM dest1_n94;
+SELECT dest1.* FROM dest1;

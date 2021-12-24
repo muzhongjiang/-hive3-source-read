@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,21 +22,19 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.junit.Assert;
+import junit.framework.Assert;
 
-import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hadoop.hive.ql.util.DateTimeMath;
-import org.apache.hadoop.hive.serde2.RandomTypeUtil;
+import org.apache.hadoop.hive.common.type.RandomTypeUtil;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
@@ -44,12 +42,10 @@ import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.*;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.*;
 import org.apache.hadoop.hive.ql.util.TimestampUtils;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
+import org.apache.hadoop.hive.serde2.typeinfo.HiveDecimalUtils;
 import org.junit.Test;
 
 /**
@@ -57,20 +53,18 @@ import org.junit.Test;
  */
 public class TestVectorTypeCasts {
 
-  private HiveConf hiveConf = new HiveConf();
-
   @Test
-  public void testVectorCastLongToDouble() throws HiveException {
+  public void testVectorCastLongToDouble() {
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchLongInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new CastLongToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(2.0, resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(2.0, resultV.vector[4]);
   }
 
   @Test
-  public void testVectorCastDoubleToLong() throws HiveException {
+  public void testVectorCastDoubleToLong() {
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchDoubleInLongOut();
     LongColumnVector resultV = (LongColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
@@ -80,45 +74,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastDateToString() throws HiveException {
-    int[] intValues = new int[100];
-    VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchDateInStringOut(intValues);
-    BytesColumnVector resultV = (BytesColumnVector) b.cols[1];
-    b.cols[0].noNulls = true;
-    VectorExpression expr = new CastDateToString(0, 1);
-    expr.evaluate(b);
-
-    SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
-    formatter.setCalendar(DateTimeMath.getProlepticGregorianCalendarUTC());
-
-    String expected, result;
-    for (int i = 0; i < intValues.length; i++) {
-      expected = formatter.format(new java.sql.Date(DateWritableV2.daysToMillis(intValues[i])));
-      byte[] subbyte = Arrays.copyOfRange(resultV.vector[i], resultV.start[i],
-          resultV.start[i] + resultV.length[i]);
-      result = new String(subbyte, StandardCharsets.UTF_8);
-
-      Assert.assertEquals("Index: " + i + " Epoch day value: " + intValues[i], expected, result);
-    }
-  }
-
-  @Test
-  public void testCastDateToTimestamp() throws HiveException {
-    int[] intValues = new int[500];
-    VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchDateInTimestampOut(intValues);
-    TimestampColumnVector resultV = (TimestampColumnVector) b.cols[1];
-    b.cols[0].noNulls = true;
-    VectorExpression expr = new CastDateToTimestamp(0, 1);
-    expr.evaluate(b);
-    for (int i = 0; i < intValues.length; i++) {
-      Timestamp timestamp = resultV.asScratchTimestamp(i);
-      long actual = DateWritableV2.millisToDays(timestamp.getTime());
-      assertEquals(actual, intValues[i]);
-    }
-  }
-
-  @Test
-  public void testCastDoubleToBoolean() throws HiveException {
+  public void testCastDoubleToBoolean() {
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchDoubleInLongOut();
     LongColumnVector resultV = (LongColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
@@ -129,18 +85,18 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastDoubleToTimestamp() throws HiveException {
+  public void testCastDoubleToTimestamp() {
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchDoubleInTimestampOut();
     TimestampColumnVector resultV = (TimestampColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new CastDoubleToTimestamp(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(0.0, TimestampUtils.getDouble(resultV.asScratchTimestamp(3)), Double.MIN_VALUE);
-    Assert.assertEquals(0.5d, TimestampUtils.getDouble(resultV.asScratchTimestamp(4)), Double.MIN_VALUE);
+    Assert.assertEquals(0.0, TimestampUtils.getDouble(resultV.asScratchTimestamp(3)));
+    Assert.assertEquals(0.5d, TimestampUtils.getDouble(resultV.asScratchTimestamp(4)));
   }
 
   @Test
-  public void testCastLongToBoolean() throws HiveException {
+  public void testCastLongToBoolean() {
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchLongInLongOut();
     LongColumnVector inV = (LongColumnVector) b.cols[0];
     inV.vector[0] = 0;  // make one entry produce false in result
@@ -153,24 +109,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastStringToBoolean() throws HiveException {
-    VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchStringInLongOut();
-    LongColumnVector resultV = (LongColumnVector) b.cols[1];
-    b.cols[0].noNulls = true;
-    VectorExpression expr = new CastStringToBoolean(0, 1);
-    expr.evaluate(b);
-    Assert.assertEquals(1, resultV.vector[0]); // true
-    Assert.assertEquals(1, resultV.vector[1]); // true
-    Assert.assertEquals(1, resultV.vector[2]); // true
-    Assert.assertEquals(0, resultV.vector[3]); // false
-    Assert.assertEquals(0, resultV.vector[4]); // false
-    Assert.assertEquals(0, resultV.vector[5]); // false
-    Assert.assertEquals(0, resultV.vector[6]); // false
-    Assert.assertEquals(1, resultV.vector[7]); // true
-  }
-
-  @Test
-  public void testCastLongToTimestamp() throws HiveException {
+  public void testCastLongToTimestamp() {
     long[] longValues = new long[500];
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchLongInTimestampOut(longValues);
     TimestampColumnVector resultV = (TimestampColumnVector) b.cols[1];
@@ -179,23 +118,19 @@ public class TestVectorTypeCasts {
     expr.evaluate(b);
     for (int i = 0; i < longValues.length; i++) {
       Timestamp timestamp = resultV.asScratchTimestamp(i);
-      long actual = TimestampWritableV2.getLong(
-          org.apache.hadoop.hive.common.type.Timestamp.ofEpochMilli(timestamp.getTime(), timestamp.getNanos()));
+      long actual = TimestampWritable.getLong(timestamp);
       assertEquals(actual, longValues[i]);
     }
   }
 
   @Test
-  public void testCastTimestampToLong() throws HiveException {
+  public void testCastTimestampToLong() {
     long[] longValues = new long[500];
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchTimestampInLongOut(longValues);
     TimestampColumnVector inV = (TimestampColumnVector) b.cols[0];
     LongColumnVector resultV = (LongColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new CastTimestampToLong(0, 1);
-    expr.setOutputTypeInfo(TypeInfoFactory.longTypeInfo);
-    expr.setOutputDataTypePhysicalVariation(DataTypePhysicalVariation.NONE);
-    expr.transientInit(hiveConf);
     expr.evaluate(b);
     for (int i = 0; i < longValues.length; i++) {
       long actual = resultV.vector[i];
@@ -207,7 +142,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastTimestampToDouble() throws HiveException {
+  public void testCastTimestampToDouble() {
     double[] doubleValues = new double[500];
     VectorizedRowBatch b = TestVectorMathFunctions.getVectorizedRowBatchTimestampInDoubleOut(doubleValues);
     TimestampColumnVector inV = (TimestampColumnVector) b.cols[0];
@@ -222,31 +157,6 @@ public class TestVectorTypeCasts {
     }
   }
 
-  @Test
-  public void testCastTimestampToString() throws HiveException {
-    int numberToTest = 100;
-    long[] epochSecondValues = new long[numberToTest];
-    int[] nanoValues = new int[numberToTest];
-    VectorizedRowBatch b =
-        TestVectorMathFunctions.getVectorizedRowBatchTimestampInStringOut(epochSecondValues, nanoValues);
-    BytesColumnVector resultV = (BytesColumnVector) b.cols[1];
-    b.cols[0].noNulls = true;
-    VectorExpression expr = new CastTimestampToString(0, 1);
-    expr.evaluate(b);
-
-    String expected, result;
-    for (int i = 0; i < numberToTest; i++) {
-      expected = org.apache.hadoop.hive.common.type.Timestamp
-          .ofEpochSecond(epochSecondValues[i], nanoValues[i]).toString();
-      byte[] subbyte = Arrays.copyOfRange(resultV.vector[i], resultV.start[i],
-          resultV.start[i] + resultV.length[i]);
-      result = new String(subbyte, StandardCharsets.UTF_8);
-      Assert.assertEquals("Index: " +  i + " Seconds since epoch: " + epochSecondValues[i] +
-              " nanoseconds: " + nanoValues[i],
-          expected, result);
-    }
-  }
-
   public byte[] toBytes(String s) {
     byte[] b = null;
     try {
@@ -258,13 +168,11 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastLongToString() throws HiveException {
+  public void testCastLongToString() {
     VectorizedRowBatch b = TestVectorMathFunctions.getBatchForStringMath();
     BytesColumnVector resultV = (BytesColumnVector) b.cols[2];
     b.cols[1].noNulls = true;
     VectorExpression expr = new CastLongToString(1, 2);
-    expr.setInputTypeInfos(new TypeInfo[] {TypeInfoFactory.longTypeInfo});
-    expr.transientInit(hiveConf);
     expr.evaluate(b);
     byte[] num255 = toBytes("255");
     Assert.assertEquals(0,
@@ -273,7 +181,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastBooleanToString() throws HiveException {
+  public void testCastBooleanToString() {
     byte[] t = toBytes("TRUE");
     byte[] f = toBytes("FALSE");
     VectorizedRowBatch b = TestVectorMathFunctions.getBatchForStringMath();
@@ -291,15 +199,15 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastDecimalToLong() throws HiveException {
+  public void testCastDecimalToLong() {
 
     // test basic case
     VectorizedRowBatch b = getBatchDecimalLong();
     VectorExpression expr = new CastDecimalToLong(0, 1);
 
     // With the integer type range checking, we need to know the Hive data type.
-    expr.setOutputTypeInfo(TypeInfoFactory.longTypeInfo);
-    expr.transientInit(hiveConf);
+    expr.setOutputType("bigint");
+
     expr.evaluate(b);
     LongColumnVector r = (LongColumnVector) b.cols[1];
     assertEquals(1, r.vector[0]);
@@ -337,16 +245,12 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  /**
-   * Just spot check the basic case because code path is the same as
+  /* Just spot check the basic case because code path is the same as
    * for cast of decimal to long due to inheritance.
    */
-  public void testCastDecimalToBoolean() throws HiveException {
+  public void testCastDecimalToBoolean() {
     VectorizedRowBatch b = getBatchDecimalLong();
     VectorExpression expr = new CastDecimalToBoolean(0, 1);
-    expr.setInputTypeInfos(new TypeInfo[] {TypeInfoFactory.decimalTypeInfo});
-    expr.setOutputTypeInfo(TypeInfoFactory.booleanTypeInfo);
-    expr.transientInit(hiveConf);
     DecimalColumnVector in = (DecimalColumnVector) b.cols[0];
     in.vector[1].set(HiveDecimal.create(0));
     expr.evaluate(b);
@@ -373,7 +277,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastDecimalToDouble() throws HiveException {
+  public void testCastDecimalToDouble() {
 
     final double eps = 0.000001d; // tolerance to check double equality
 
@@ -433,75 +337,25 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastDecimalToFloat() throws HiveException {
-
-    final double eps = 0.00000000000001d; // tolerance to check float equality
-
-    double f1 = HiveDecimal.create("1.1").floatValue();
-    double f2 = HiveDecimal.create("-2.2").floatValue();
-    double f3 = HiveDecimal.create("9999999999999999.00").floatValue();
-
-    // test basic case
-    VectorizedRowBatch b = getBatchDecimalDouble();
-    VectorExpression expr = new CastDecimalToFloat(0, 1);
-    expr.evaluate(b);
-    DoubleColumnVector r = (DoubleColumnVector) b.cols[1];
-    assertEquals(f1, r.vector[0], eps);
-    assertEquals(f2, r.vector[1], eps);
-    assertEquals(f3, r.vector[2], eps);
-
-    // test with nulls in input
-    b = getBatchDecimalDouble();
-    b.cols[0].noNulls = false;
-    b.cols[0].isNull[1] = true;
-    expr.evaluate(b);
-    r = (DoubleColumnVector) b.cols[1];
-    assertFalse(r.noNulls);
-    assertTrue(r.isNull[1]);
-    assertFalse(r.isNull[0]);
-    assertEquals(f1, r.vector[0], eps);
-
-    // test repeating case
-    b = getBatchDecimalDouble();
-    b.cols[0].isRepeating = true;
-    expr.evaluate(b);
-    r = (DoubleColumnVector) b.cols[1];
-    assertTrue(r.isRepeating);
-    assertEquals(f1, r.vector[0], eps);
-
-    // test repeating nulls case
-    b = getBatchDecimalDouble();
-    b.cols[0].isRepeating = true;
-    b.cols[0].noNulls = false;
-    b.cols[0].isNull[0] = true;
-    expr.evaluate(b);
-    r = (DoubleColumnVector) b.cols[1];
-    assertTrue(r.isRepeating);
-    assertTrue(r.isNull[0]);
-  }
-
-  @Test
-  public void testCastDecimalToString() throws HiveException {
+  public void testCastDecimalToString() {
     VectorizedRowBatch b = getBatchDecimalString();
     VectorExpression expr = new CastDecimalToString(0, 1);
-    expr.setInputTypeInfos(new TypeInfo[] {TypeInfoFactory.decimalTypeInfo});
-    expr.transientInit(hiveConf);
     expr.evaluate(b);
     BytesColumnVector r = (BytesColumnVector) b.cols[1];
 
     // As of HIVE-8745, these decimal values should be trimmed of trailing zeros.
-    byte[] v = toBytes("1.10");
+    byte[] v = toBytes("1.1");
     assertTrue(((Integer) v.length).toString() + " " + r.length[0], v.length == r.length[0]);
     Assert.assertEquals(0,
         StringExpr.compare(v, 0, v.length,
             r.vector[0], r.start[0], r.length[0]));
 
-    v = toBytes("-2.20");
+    v = toBytes("-2.2");
     Assert.assertEquals(0,
         StringExpr.compare(v, 0, v.length,
             r.vector[1], r.start[1], r.length[1]));
 
-    v = toBytes("9999999999999999.00");
+    v = toBytes("9999999999999999");
     Assert.assertEquals(0,
         StringExpr.compare(v, 0, v.length,
             r.vector[2], r.start[2], r.length[2]));
@@ -524,7 +378,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastDecimalToTimestamp() throws HiveException {
+  public void testCastDecimalToTimestamp() {
     double[] doubleValues = new double[500];
     VectorizedRowBatch b = getBatchDecimalTimestamp(doubleValues);
     VectorExpression expr = new CastDecimalToTimestamp(0, 1);
@@ -568,8 +422,7 @@ public class TestVectorTypeCasts {
       Timestamp ts = new Timestamp(millis);
       int nanos = RandomTypeUtil.randomNanos(r);
       ts.setNanos(nanos);
-      TimestampWritableV2 tsw = new TimestampWritableV2(
-          org.apache.hadoop.hive.common.type.Timestamp.ofEpochMilli(ts.getTime(), ts.getNanos()));
+      TimestampWritable tsw = new TimestampWritable(ts);
       double asDouble = tsw.getDouble();
       doubleValues[i] = asDouble;
       HiveDecimal hiveDecimal = HiveDecimal.create(new BigDecimal(asDouble));
@@ -580,7 +433,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastLongToDecimal() throws HiveException {
+  public void testCastLongToDecimal() {
     VectorizedRowBatch b = getBatchLongDecimal();
     VectorExpression expr = new CastLongToDecimal(0, 1);
     expr.evaluate(b);
@@ -633,8 +486,7 @@ public class TestVectorTypeCasts {
       long millis = RandomTypeUtil.randomMillis(r);
       Timestamp ts = new Timestamp(millis);
       ts.setNanos(optionalNanos);
-      TimestampWritableV2 tsw = new TimestampWritableV2(
-          org.apache.hadoop.hive.common.type.Timestamp.ofEpochMilli(ts.getTime(), ts.getNanos()));
+      TimestampWritable tsw = new TimestampWritable(ts);
       hiveDecimalValues[i] = tsw.getHiveDecimal();
 
       tcv.set(i, ts);
@@ -644,7 +496,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastDoubleToDecimal() throws HiveException {
+  public void testCastDoubleToDecimal() {
     VectorizedRowBatch b = getBatchDoubleDecimal();
     VectorExpression expr = new CastDoubleToDecimal(0, 1);
     expr.evaluate(b);
@@ -681,7 +533,7 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastStringToDecimal() throws HiveException {
+  public void testCastStringToDecimal() {
     VectorizedRowBatch b = getBatchStringDecimal();
     VectorExpression expr = new CastStringToDecimal(0, 1);
     expr.evaluate(b);
@@ -711,14 +563,14 @@ public class TestVectorTypeCasts {
   }
 
   @Test
-  public void testCastTimestampToDecimal() throws HiveException {
+  public void testCastTimestampToDecimal() {
 
     // The input timestamps are stored as long values
     // measured in nanoseconds from the epoch.
     HiveDecimal[] hiveDecimalValues = new HiveDecimal[500];
     VectorizedRowBatch b = getBatchTimestampDecimal(hiveDecimalValues);
     VectorExpression expr = new CastTimestampToDecimal(0, 1);
-
+    TimestampColumnVector inT = (TimestampColumnVector) b.cols[0];
     expr.evaluate(b);
     DecimalColumnVector r = (DecimalColumnVector) b.cols[1];
     for (int i = 0; i < hiveDecimalValues.length; i++) {
@@ -748,8 +600,7 @@ public class TestVectorTypeCasts {
     }
   }
 
-  /**
-   * This batch has output decimal column precision 5 and scale 2.
+  /* This batch has output decimal column precision 5 and scale 2.
    * The goal is to allow testing of input long values that, when
    * converted to decimal, will not fit in the given precision.
    * Then it will be possible to check that the results are NULL.

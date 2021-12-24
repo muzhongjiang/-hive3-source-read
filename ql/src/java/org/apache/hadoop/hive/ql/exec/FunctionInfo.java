@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -50,9 +50,9 @@ public class FunctionInfo {
 
   private String className;
 
-  protected GenericUDF genericUDF;
+  private GenericUDF genericUDF;
 
-  protected GenericUDTF genericUDTF;
+  private GenericUDTF genericUDTF;
 
   private GenericUDAFResolver genericUDAFResolver;
 
@@ -111,24 +111,6 @@ public class FunctionInfo {
     this.resources = resources;
   }
 
-  public FunctionInfo(FunctionType functionType, String displayName, Class<? extends TableFunctionResolver> tFnCls,
-      GenericUDF genericUDF, GenericUDTF genericUDTF, GenericUDAFResolver genericUDAFResolver,
-      String className, FunctionResource... resources) {
-    this.functionType = functionType;
-    this.displayName = displayName;
-    this.tableFunctionResolver = tFnCls;
-    PartitionTableFunctionDescription def =
-        (tableFunctionResolver != null)
-	    ? AnnotationUtils.getAnnotation(
-                tableFunctionResolver, PartitionTableFunctionDescription.class)
-            : null;
-    this.genericUDF = genericUDF;
-    this.genericUDTF = genericUDTF;
-    this.genericUDAFResolver = genericUDAFResolver;
-    this.className = className;
-    this.isInternalTableFunction = def != null && def.isInternal();
-    this.resources = resources;
-  }
   /**
    * Get a new GenericUDF object for the function.
    */
@@ -232,10 +214,6 @@ public class FunctionInfo {
     return null != genericUDTF;
   }
 
-  public Class<? extends TableFunctionResolver>  getTableFunctionResolver() {
-    return tableFunctionResolver;
-  }
-
   /**
    * @return TRUE if the function is a Table Function
    */
@@ -261,10 +239,6 @@ public class FunctionInfo {
 
   public String getClassName() {
     return className;
-  }
-
-  public void setClassName(String className) {
-    this.className = className;
   }
 
   public FunctionResource[] getResources() {

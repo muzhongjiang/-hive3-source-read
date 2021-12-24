@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,7 +37,6 @@ public enum OperationState {
 
   private final TOperationState tOperationState;
   private final boolean terminal;
-  private String errorMessage;
 
   OperationState(TOperationState tOperationState, boolean terminal) {
     this.tOperationState = tOperationState;
@@ -109,13 +108,5 @@ public enum OperationState {
 
   public boolean isTerminal() {
     return terminal;
-  }
-
-  public String getErrorMessage() {
-    return errorMessage;
-  }
-
-  public void setErrorMessage(final String errorMessage) {
-    this.errorMessage = errorMessage;
   }
 }

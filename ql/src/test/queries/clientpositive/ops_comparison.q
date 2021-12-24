@@ -1,6 +1,4 @@
---! qt:dataset:src
 set hive.fetch.task.conversion=more;
-set hive.strict.checks.type.safety=false;
 
 select 1.0 < 2.0 from src limit 1;
 select 2.0 < 2.0 from src limit 1;

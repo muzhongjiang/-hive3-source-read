@@ -27,7 +27,6 @@ import static org.junit.Assert.fail;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -36,6 +35,7 @@ import java.util.Map;
 import org.apache.accumulo.core.client.IteratorSetting;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Range;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.hive.accumulo.columns.ColumnEncoding;
 import org.apache.hadoop.hive.accumulo.columns.ColumnMapper;
 import org.apache.hadoop.hive.accumulo.predicate.compare.CompareOp;
@@ -488,7 +488,6 @@ public class TestAccumuloPredicateHandler {
         TypeInfoFactory.intTypeInfo, TypeInfoFactory.stringTypeInfo);
     conf.set(serdeConstants.LIST_COLUMNS, Joiner.on(',').join(columnNames));
     conf.set(serdeConstants.LIST_COLUMN_TYPES, "string,int,string");
-    conf.set(AccumuloSerDeParameters.DEFAULT_STORAGE_TYPE, ColumnEncoding.BINARY.getName());
     String columnMappingStr = "cf:f1,cf:f2,:rowID";
     conf.set(AccumuloSerDeParameters.COLUMN_MAPPINGS, columnMappingStr);
     columnMapper = new ColumnMapper(columnMappingStr, ColumnEncoding.STRING.getName(), columnNames,
@@ -538,7 +537,7 @@ public class TestAccumuloPredicateHandler {
         assertEquals(option.getValue(), "cf:f1");
       } else if (optKey.equals(PrimitiveComparisonFilter.CONST_VAL)) {
         foundConst = true;
-        assertEquals(option.getValue(), Base64.getEncoder().encodeToString("aaa".getBytes()));
+        assertEquals(option.getValue(), new String(Base64.encodeBase64("aaa".getBytes())));
       } else if (optKey.equals(PrimitiveComparisonFilter.COMPARE_OPT_CLASS)) {
         foundCOpt = true;
         assertEquals(option.getValue(), LessThanOrEqual.class.getName());
@@ -563,7 +562,7 @@ public class TestAccumuloPredicateHandler {
         foundConst = true;
         byte[] intVal = new byte[4];
         ByteBuffer.wrap(intVal).putInt(5);
-        assertEquals(option.getValue(), Base64.getEncoder().encodeToString(intVal));
+        assertEquals(option.getValue(), new String(Base64.encodeBase64(intVal)));
       } else if (optKey.equals(PrimitiveComparisonFilter.COMPARE_OPT_CLASS)) {
         foundCOpt = true;
         assertEquals(option.getValue(), GreaterThan.class.getName());
@@ -759,7 +758,7 @@ public class TestAccumuloPredicateHandler {
     String hiveRowIdColumnName = "rid";
 
     Mockito.when(mockHandler.getRanges(conf, columnMapper)).thenCallRealMethod();
-    Mockito.when(mockHandler.generateRanges(conf, columnMapper, hiveRowIdColumnName, root)).thenReturn(null);
+    Mockito.when(mockHandler.generateRanges(columnMapper, hiveRowIdColumnName, root)).thenReturn(null);
     Mockito.when(mockHandler.getExpression(conf)).thenReturn(root);
 
     // A null result from AccumuloRangeGenerator is all ranges
@@ -777,8 +776,7 @@ public class TestAccumuloPredicateHandler {
     String hiveRowIdColumnName = "rid";
 
     Mockito.when(mockHandler.getRanges(conf, columnMapper)).thenCallRealMethod();
-    Mockito.when(mockHandler.generateRanges(conf, columnMapper, hiveRowIdColumnName, root))
-                  .thenReturn(Collections.emptyList());
+    Mockito.when(mockHandler.generateRanges(columnMapper, hiveRowIdColumnName, root)).thenReturn(Collections.emptyList());
     Mockito.when(mockHandler.getExpression(conf)).thenReturn(root);
 
     // A null result from AccumuloRangeGenerator is all ranges
@@ -797,7 +795,7 @@ public class TestAccumuloPredicateHandler {
     Range r = new Range("a");
 
     Mockito.when(mockHandler.getRanges(conf, columnMapper)).thenCallRealMethod();
-    Mockito.when(mockHandler.generateRanges(conf, columnMapper, hiveRowIdColumnName, root)).thenReturn(r);
+    Mockito.when(mockHandler.generateRanges(columnMapper, hiveRowIdColumnName, root)).thenReturn(r);
     Mockito.when(mockHandler.getExpression(conf)).thenReturn(root);
 
     // A null result from AccumuloRangeGenerator is all ranges
@@ -816,8 +814,7 @@ public class TestAccumuloPredicateHandler {
     Range r1 = new Range("a"), r2 = new Range("z");
 
     Mockito.when(mockHandler.getRanges(conf, columnMapper)).thenCallRealMethod();
-    Mockito.when(mockHandler.generateRanges(conf, columnMapper, hiveRowIdColumnName, root))
-                 .thenReturn(Arrays.asList(r1, r2));
+    Mockito.when(mockHandler.generateRanges(columnMapper, hiveRowIdColumnName, root)).thenReturn(Arrays.asList(r1, r2));
     Mockito.when(mockHandler.getExpression(conf)).thenReturn(root);
 
     // A null result from AccumuloRangeGenerator is all ranges

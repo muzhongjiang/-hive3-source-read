@@ -1,7 +1,6 @@
 set hive.mapred.mode=nonstrict;
--- start query 1 in stream 0 using template query69.tpl and seed 797269820
-explain
-select  
+
+explain select  
   cd_gender,
   cd_marital_status,
   cd_education_status,
@@ -45,5 +44,3 @@ select
           cd_purchase_estimate,
           cd_credit_rating
  limit 100;
-
--- end query 1 in stream 0 using template query69.tpl

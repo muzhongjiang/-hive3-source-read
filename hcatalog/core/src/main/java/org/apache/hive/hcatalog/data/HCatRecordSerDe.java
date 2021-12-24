@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,16 +19,19 @@
 package org.apache.hive.hcatalog.data;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeSpec;
+import org.apache.hadoop.hive.serde2.SerDeStats;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -37,43 +40,78 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.Writable;
 import org.apache.hive.hcatalog.common.HCatConstants;
 import org.apache.hive.hcatalog.common.HCatContext;
 import org.apache.hive.hcatalog.data.schema.HCatSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * SerDe class for serializing to and from HCatRecord.
+ * SerDe class for serializing to and from HCatRecord
  */
-@SerDeSpec(schemaProps = { serdeConstants.LIST_COLUMNS, serdeConstants.LIST_COLUMN_TYPES })
+
+@SerDeSpec(schemaProps = {serdeConstants.LIST_COLUMNS,
+                          serdeConstants.LIST_COLUMN_TYPES})
+
 public class HCatRecordSerDe extends AbstractSerDe {
+
+  private static final Logger LOG = LoggerFactory.getLogger(HCatRecordSerDe.class);
 
   public HCatRecordSerDe() throws SerDeException {
   }
 
+  private List<String> columnNames;
+  private List<TypeInfo> columnTypes;
   private StructTypeInfo rowTypeInfo;
 
   private HCatRecordObjectInspector cachedObjectInspector;
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-      throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
+  public void initialize(Configuration conf, Properties tbl)
+    throws SerDeException {
 
-    log.debug("Initializing HCatRecordSerDe");
+    LOG.debug("Initializing HCatRecordSerDe");
+    LOG.debug("props to serde: {}", tbl.entrySet());
 
-    rowTypeInfo = (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(getColumnNames(), getColumnTypes());
+    // Get column names and types
+    String columnNameProperty = tbl.getProperty(serdeConstants.LIST_COLUMNS);
+    String columnTypeProperty = tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES);
+    final String columnNameDelimiter = tbl.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? tbl
+        .getProperty(serdeConstants.COLUMN_NAME_DELIMITER) : String.valueOf(SerDeUtils.COMMA);
+    // all table column names
+    if (columnNameProperty.length() == 0) {
+      columnNames = new ArrayList<String>();
+    } else {
+      columnNames = Arrays.asList(columnNameProperty.split(columnNameDelimiter));
+    }
+
+    // all column types
+    if (columnTypeProperty.length() == 0) {
+      columnTypes = new ArrayList<TypeInfo>();
+    } else {
+      columnTypes = TypeInfoUtils.getTypeInfosFromTypeString(columnTypeProperty);
+    }
+
+
+    LOG.debug("columns: {} {}", columnNameProperty, columnNames);
+    LOG.debug("types: {} {}", columnTypeProperty, columnTypes);
+    assert (columnNames.size() == columnTypes.size());
+
+    rowTypeInfo = (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(columnNames, columnTypes);
     cachedObjectInspector = HCatRecordObjectInspectorFactory.getHCatRecordObjectInspector(rowTypeInfo);
   }
 
   public void initialize(HCatSchema hsch) throws SerDeException {
 
-    log.debug("Initializing HCatRecordSerDe through HCatSchema {}", hsch);
+    LOG.debug("Initializing HCatRecordSerDe through HCatSchema {}.", hsch);
 
     rowTypeInfo = (StructTypeInfo) TypeInfoUtils.getTypeInfoFromTypeString(hsch.getSchemaAsTypeString());
     cachedObjectInspector = HCatRecordObjectInspectorFactory.getHCatRecordObjectInspector(rowTypeInfo);
+
   }
 
 
@@ -181,7 +219,7 @@ public class HCatRecordSerDe extends AbstractSerDe {
   private static Map<?, ?> serializeMap(Object f, MapObjectInspector moi) throws SerDeException {
     ObjectInspector koi = moi.getMapKeyObjectInspector();
     ObjectInspector voi = moi.getMapValueObjectInspector();
-    Map<Object, Object> m = new LinkedHashMap<Object, Object>();
+    Map<Object, Object> m = new HashMap<Object, Object>();
 
     Map<?, ?> readMap = moi.getMap(f);
     if (readMap == null) {
@@ -250,12 +288,12 @@ public class HCatRecordSerDe extends AbstractSerDe {
         conf.getBoolean(
           HCatConstants.HCAT_DATA_TINY_SMALL_INT_PROMOTION,
           HCatConstants.HCAT_DATA_TINY_SMALL_INT_PROMOTION_DEFAULT)) {
-        return Integer.valueOf((Short) f);
+        return new Integer((Short) f);
       } else if (f instanceof Byte &&
         conf.getBoolean(
           HCatConstants.HCAT_DATA_TINY_SMALL_INT_PROMOTION,
           HCatConstants.HCAT_DATA_TINY_SMALL_INT_PROMOTION_DEFAULT)) {
-        return Integer.valueOf((Byte) f);
+        return new Integer((Byte) f);
       }
     }
 
@@ -278,5 +316,12 @@ public class HCatRecordSerDe extends AbstractSerDe {
   public Class<? extends Writable> getSerializedClass() {
     return HCatRecord.class;
   }
+
+  @Override
+  public SerDeStats getSerDeStats() {
+    // no support for statistics yet
+    return null;
+  }
+
 
 }

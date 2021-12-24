@@ -19,7 +19,7 @@
   <parent>
     <groupId>org.apache.hive</groupId>
     <artifactId>hive</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>2.3.9</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -33,7 +33,7 @@
   </properties>
 
   <dependencies>
-    <!-- dependencies are always listed in sorted order by groupId, artifactId -->
+    <!-- dependencies are always listed in sorted order by groupId, artifectId -->
     <!-- intra-project -->
     <dependency>
       <groupId>org.apache.hive.shims</groupId>
@@ -44,40 +44,31 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <version>${hadoop.version}</version>
       <optional>true</optional>
-      <exclusions>
-        <exclusion>
-          <groupId>commons-beanutils</groupId>
-          <artifactId>commons-beanutils</artifactId>
-          </exclusion>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-log4j12</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <version>${hadoop.version}</version>
       <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-api</artifactId>
+      <version>${hadoop.version}</version>
       <optional>true</optional>
    </dependency>
    <dependency>
      <groupId>org.apache.hadoop</groupId>
      <artifactId>hadoop-yarn-common</artifactId>
+     <version>${hadoop.version}</version>
      <optional>true</optional>
    </dependency>
    <dependency>
      <groupId>org.apache.hadoop</groupId>
      <artifactId>hadoop-yarn-client</artifactId>
+     <version>${hadoop.version}</version>
      <optional>true</optional>
    </dependency>
    <dependency>
@@ -85,25 +76,13 @@
      <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
      <version>${hadoop.version}</version>
      <optional>true</optional>
-     <exclusions>
-       <exclusion>
-         <groupId>org.slf4j</groupId>
-         <artifactId>slf4j-log4j12</artifactId>
-       </exclusion>
-     </exclusions>
    </dependency>
    <dependency>
      <groupId>org.apache.hadoop</groupId>
      <artifactId>hadoop-yarn-server-tests</artifactId>
      <version>${hadoop.version}</version>
-     <optional>true</optional>
-     <classifier>tests</classifier>
-     <exclusions>
-       <exclusion>
-         <groupId>com.codahale.metrics</groupId>
-         <artifactId>metrics-core</artifactId>
-       </exclusion>
-     </exclusions>
+      <optional>true</optional>
+     <type>test-jar</type>
    </dependency>
   </dependencies>
 </project>

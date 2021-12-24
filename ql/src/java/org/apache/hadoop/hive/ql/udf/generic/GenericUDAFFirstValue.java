@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,6 +28,8 @@ import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
 import org.apache.hadoop.hive.ql.exec.WindowFunctionDescription;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
+import org.apache.hadoop.hive.ql.parse.WindowingSpec.BoundarySpec;
+import org.apache.hadoop.hive.ql.plan.ptf.BoundaryDef;
 import org.apache.hadoop.hive.ql.plan.ptf.WindowFrameDef;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
@@ -39,32 +41,32 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 
-@Description(
-        name = "first_value",
-        value = "_FUNC_(x)")
 @WindowFunctionDescription(
-        supportsWindow = true,
-        pivotResult = false,
-        impliesOrder = true,
-        supportsNullTreatment = true)
+  description = @Description(
+    name = "first_value",
+    value = "_FUNC_(x)"
+  ),
+  supportsWindow = true,
+  pivotResult = false,
+  impliesOrder = true
+)
 public class GenericUDAFFirstValue extends AbstractGenericUDAFResolver {
 
   static final Logger LOG = LoggerFactory.getLogger(GenericUDAFFirstValue.class.getName());
 
   @Override
-  public GenericUDAFEvaluator getEvaluator(GenericUDAFParameterInfo info) throws SemanticException {
-    TypeInfo[] parameters = info.getParameters();
+  public GenericUDAFEvaluator getEvaluator(TypeInfo[] parameters) throws SemanticException {
     if (parameters.length > 2) {
       throw new UDFArgumentTypeException(2, "At most 2 arguments expected");
     }
     if (parameters.length > 1 && !parameters[1].equals(TypeInfoFactory.booleanTypeInfo)) {
       throw new UDFArgumentTypeException(1, "second argument must be a boolean expression");
     }
-    return createEvaluator(!info.respectNulls());
+    return createEvaluator();
   }
 
-  protected GenericUDAFFirstValueEvaluator createEvaluator(boolean skipNulls) {
-    return new GenericUDAFFirstValueEvaluator(skipNulls);
+  protected GenericUDAFFirstValueEvaluator createEvaluator() {
+    return new GenericUDAFFirstValueEvaluator();
   }
 
   static class FirstValueBuffer implements AggregationBuffer {
@@ -74,15 +76,15 @@ public class GenericUDAFFirstValue extends AbstractGenericUDAFResolver {
     boolean firstRow;
     boolean skipNulls;
 
-    FirstValueBuffer(boolean skipNulls) {
-      init(skipNulls);
+    FirstValueBuffer() {
+      init();
     }
 
-    void init(boolean skipNulls) {
+    void init() {
       val = null;
       valSet = false;
       firstRow = true;
-      this.skipNulls = skipNulls;
+      skipNulls = false;
     }
 
   }
@@ -91,11 +93,6 @@ public class GenericUDAFFirstValue extends AbstractGenericUDAFResolver {
 
     ObjectInspector inputOI;
     ObjectInspector outputOI;
-    final boolean skipNulls;
-
-    public GenericUDAFFirstValueEvaluator(boolean skipNulls) {
-      this.skipNulls = skipNulls;
-    }
 
     @Override
     public ObjectInspector init(Mode m, ObjectInspector[] parameters) throws HiveException {
@@ -111,12 +108,12 @@ public class GenericUDAFFirstValue extends AbstractGenericUDAFResolver {
 
     @Override
     public AggregationBuffer getNewAggregationBuffer() throws HiveException {
-      return new FirstValueBuffer(skipNulls);
+      return new FirstValueBuffer();
     }
 
     @Override
     public void reset(AggregationBuffer agg) throws HiveException {
-      ((FirstValueBuffer) agg).init(skipNulls);
+      ((FirstValueBuffer) agg).init();
     }
 
     @Override

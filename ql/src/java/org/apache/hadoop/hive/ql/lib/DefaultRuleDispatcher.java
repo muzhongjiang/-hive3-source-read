@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,11 +28,11 @@ import org.apache.hadoop.hive.ql.parse.SemanticException;
  * rules with the dispatcher, and the processor corresponding to closest
  * matching rule is fired.
  */
-public class DefaultRuleDispatcher implements SemanticDispatcher {
+public class DefaultRuleDispatcher implements Dispatcher {
 
-  private final Map<SemanticRule, SemanticNodeProcessor> procRules;
+  private final Map<Rule, NodeProcessor> procRules;
   private final NodeProcessorCtx procCtx;
-  private final SemanticNodeProcessor defaultProc;
+  private final NodeProcessor defaultProc;
 
   /**
    * Constructor.
@@ -44,8 +44,8 @@ public class DefaultRuleDispatcher implements SemanticDispatcher {
    * @param procCtx
    *          operator processor context, which is opaque to the dispatcher
    */
-  public DefaultRuleDispatcher(SemanticNodeProcessor defaultProc,
-                               Map<SemanticRule, SemanticNodeProcessor> rules, NodeProcessorCtx procCtx) {
+  public DefaultRuleDispatcher(NodeProcessor defaultProc,
+      Map<Rule, NodeProcessor> rules, NodeProcessorCtx procCtx) {
     this.defaultProc = defaultProc;
     procRules = rules;
     this.procCtx = procCtx;
@@ -66,9 +66,9 @@ public class DefaultRuleDispatcher implements SemanticDispatcher {
 
     // find the firing rule
     // find the rule from the stack specified
-    SemanticRule rule = null;
+    Rule rule = null;
     int minCost = Integer.MAX_VALUE;
-    for (SemanticRule r : procRules.keySet()) {
+    for (Rule r : procRules.keySet()) {
       int cost = r.cost(ndStack);
       if ((cost >= 0) && (cost <= minCost)) {
         minCost = cost;
@@ -76,7 +76,7 @@ public class DefaultRuleDispatcher implements SemanticDispatcher {
       }
     }
 
-    SemanticNodeProcessor proc;
+    NodeProcessor proc;
 
     if (rule == null) {
       proc = defaultProc;

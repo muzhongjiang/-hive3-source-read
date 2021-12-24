@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.optimizer;
 
+import java.io.Serializable;
 import java.util.Map;
 import java.util.Stack;
 
@@ -25,7 +26,7 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.optimizer.GenMRProcContext.GenMapRedCtx;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -34,7 +35,7 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 /**
  * Processor for the rule - reduce sink followed by reduce sink.
  */
-public class GenMRRedSink2 implements SemanticNodeProcessor {
+public class GenMRRedSink2 implements NodeProcessor {
 
   public GenMRRedSink2() {
   }
@@ -55,12 +56,12 @@ public class GenMRRedSink2 implements SemanticNodeProcessor {
     Map<Operator<? extends OperatorDesc>, GenMapRedCtx> mapCurrCtx = ctx
         .getMapCurrCtx();
     GenMapRedCtx mapredCtx = mapCurrCtx.get(op.getParentOperators().get(0));
-    Task<?> currTask = mapredCtx.getCurrTask();
+    Task<? extends Serializable> currTask = mapredCtx.getCurrTask();
     String currAliasId = mapredCtx.getCurrAliasId();
     Operator<? extends OperatorDesc> reducer = op.getChildOperators().get(0);
-    Map<Operator<? extends OperatorDesc>, Task<?>> opTaskMap = ctx
+    Map<Operator<? extends OperatorDesc>, Task<? extends Serializable>> opTaskMap = ctx
         .getOpTaskMap();
-    Task<?> oldTask = opTaskMap.get(reducer);
+    Task<? extends Serializable> oldTask = opTaskMap.get(reducer);
 
     ctx.setCurrAliasId(currAliasId);
     ctx.setCurrTask(currTask);

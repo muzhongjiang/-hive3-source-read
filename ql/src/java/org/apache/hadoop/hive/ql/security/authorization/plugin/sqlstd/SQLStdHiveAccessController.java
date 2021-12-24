@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -31,7 +30,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.metastore.HMSHandler;
+import org.apache.hadoop.hive.metastore.HiveMetaStore;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleRequest;
 import org.apache.hadoop.hive.metastore.api.GetPrincipalsInRoleResponse;
@@ -105,7 +104,7 @@ public class SQLStdHiveAccessController implements HiveAccessController {
     // the interface. this helps in being able to switch the user within a session.
     // so we need to check if the user has changed
     String newUserName = authenticator.getUserName();
-    if (Objects.equals(currentUserName, newUserName)) {
+    if(currentUserName == newUserName){
       //no need to (re-)initialize the currentUserName, currentRoles fields
       return;
     }
@@ -121,7 +120,7 @@ public class SQLStdHiveAccessController implements HiveAccessController {
       getAllRoleAncestors(name2Rolesmap, roles);
       List<HiveRoleGrant> currentRoles = new ArrayList<HiveRoleGrant>(roles.size());
       for (HiveRoleGrant role : name2Rolesmap.values()) {
-        if (!HMSHandler.ADMIN.equalsIgnoreCase(role.getRoleName())) {
+        if (!HiveMetaStore.ADMIN.equalsIgnoreCase(role.getRoleName())) {
           currentRoles.add(role);
         } else {
           this.adminRole = role;
@@ -541,7 +540,7 @@ public class SQLStdHiveAccessController implements HiveAccessController {
       }
     }
     // set to ADMIN role, if user belongs there.
-    if (HMSHandler.ADMIN.equalsIgnoreCase(roleName) && null != this.adminRole) {
+    if (HiveMetaStore.ADMIN.equalsIgnoreCase(roleName) && null != this.adminRole) {
       currentRoles.clear();
       currentRoles.add(adminRole);
       return;
@@ -565,7 +564,7 @@ public class SQLStdHiveAccessController implements HiveAccessController {
     List<HiveRoleGrant> roles;
     roles = getCurrentRoles();
     for (HiveRoleGrant role : roles) {
-      if (role.getRoleName().equalsIgnoreCase(HMSHandler.ADMIN)) {
+      if (role.getRoleName().equalsIgnoreCase(HiveMetaStore.ADMIN)) {
         return true;
       }
     }

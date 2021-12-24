@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.common.io.encoded;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -79,21 +78,13 @@ public class EncodedColumnBatch<BatchKey> {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder();
+      String bufStr = "";
       if (cacheBuffers != null) {
-        Iterator<MemoryBuffer> iter = cacheBuffers.iterator();
-        while (iter.hasNext()) {
-          MemoryBuffer mb = iter.next();
-          sb.append(mb.getClass().getSimpleName());
-          sb.append(" with ");
-          sb.append(mb.getByteBufferRaw().remaining());
-          sb.append(" bytes");
-          if (iter.hasNext()) {
-            sb.append(", ");
-          }
+        for (MemoryBuffer mb : cacheBuffers) {
+          bufStr += mb.getClass().getSimpleName() + " with " + mb.getByteBufferRaw().remaining() + " bytes, ";
         }
       }
-      return "ColumnStreamData [cacheBuffers=[" + sb.toString()
+      return "ColumnStreamData [cacheBuffers=[" + bufStr
           + "], indexBaseOffset=" + indexBaseOffset + "]";
     }
 
@@ -106,10 +97,7 @@ public class EncodedColumnBatch<BatchKey> {
    * For each column, streams are indexed by kind (for ORC), with missing elements being null.
    */
   protected ColumnStreamData[][] columnData;
-  /**
-   * Indicates which columns have data. This is indexed by the column ID in ORC file schema;
-   * the indices that are not included will not have data. Correspond to columnData elements.
-   */
+  /** Indicates which columns have data. Correspond to columnData elements. */
   protected boolean[] hasData;
 
   public void reset() {
@@ -155,9 +143,9 @@ public class EncodedColumnBatch<BatchKey> {
   protected void resetColumnArrays(int columnCount) {
     if (hasData != null && columnCount == hasData.length) {
       Arrays.fill(hasData, false);
-    } else {
-      hasData = new boolean[columnCount];
+      return;
     }
+    hasData = new boolean[columnCount];
     ColumnStreamData[][] columnData = new ColumnStreamData[columnCount][];
     if (this.columnData != null) {
       for (int i = 0; i < Math.min(columnData.length, this.columnData.length); ++i) {

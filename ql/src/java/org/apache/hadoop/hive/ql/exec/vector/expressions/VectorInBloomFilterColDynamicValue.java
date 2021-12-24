@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,61 +18,43 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.concurrent.Callable;
+import java.io.ByteArrayInputStream;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.common.io.NonSyncByteArrayInputStream;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.ObjectCache;
-import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
-import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor.Descriptor;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
+import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.DynamicValue;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.BinaryObjectInspector;
-import org.apache.hadoop.io.IOUtils;
-import org.apache.hive.common.util.BloomKFilter;
+import org.apache.hive.common.util.BloomFilter;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class VectorInBloomFilterColDynamicValue extends VectorExpression {
   private static final long serialVersionUID = 1L;
 
-  protected final DynamicValue bloomFilterDynamicValue;
+  private static final Logger LOG = LoggerFactory.getLogger(VectorInBloomFilterColDynamicValue.class);
 
+  protected int colNum;
+  protected DynamicValue bloomFilterDynamicValue;
   protected transient boolean initialized = false;
-  protected transient BloomKFilter bloomFilter;
+  protected transient BloomFilter bloomFilter;
   protected transient BloomFilterCheck bfCheck;
-  protected transient ColumnVector.Type colVectorType;
-
-  private ObjectCache runtimeCache;
 
   public VectorInBloomFilterColDynamicValue(int colNum, DynamicValue bloomFilterDynamicValue) {
-    super(colNum, -1);
+    this.colNum = colNum;
     this.bloomFilterDynamicValue = bloomFilterDynamicValue;
   }
 
   public VectorInBloomFilterColDynamicValue() {
-    super();
-
-    // Dummy final assignments.
-    bloomFilterDynamicValue = null;
-  }
-
-  @Override
-  public void transientInit(Configuration conf) throws HiveException {
-    super.transientInit(conf);
-
-    colVectorType = VectorizationContext.getColumnVectorTypeFromTypeInfo(inputTypeInfos[0]);
   }
 
   @Override
@@ -81,9 +63,10 @@ public class VectorInBloomFilterColDynamicValue extends VectorExpression {
     bloomFilterDynamicValue.setConf(conf);
 
     // Instantiate BloomFilterCheck based on input column type
-    switch (colVectorType) {
+    VectorExpression.Type colType = this.getInputTypes()[0];
+    switch (colType) {
     case LONG:
-    case DECIMAL_64:
+    case DATE:
       bfCheck = new LongBloomFilterCheck();
       break;
     case DOUBLE:
@@ -92,56 +75,38 @@ public class VectorInBloomFilterColDynamicValue extends VectorExpression {
     case DECIMAL:
       bfCheck = new DecimalBloomFilterCheck();
       break;
-    case BYTES:
+    case STRING:
+    case CHAR:
+    case VARCHAR:
+    case BINARY:
       bfCheck = new BytesBloomFilterCheck();
       break;
     case TIMESTAMP:
       bfCheck = new TimestampBloomFilterCheck();
       break;
     default:
-      throw new IllegalStateException("Unsupported type " + colVectorType);
+      throw new IllegalStateException("Unsupported type " + colType);
     }
-
-    String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEQUERYID);
-    runtimeCache = ObjectCacheFactory.getCache(conf, queryId, false, true);
   }
 
-  private void initValue() {
+  private void initValue()  {
     try {
-      bloomFilter = (BloomKFilter) runtimeCache.retrieve(bloomFilterDynamicValue.getId(),
-          new Callable<Object>() {
-            @Override
-            public Object call() throws IOException {
-              InputStream in = null;
-              try {
-                Object val = bloomFilterDynamicValue.getValue();
-
-                LOG.info("Starting BloomKFilter deserialization for id: {}...",
-                    bloomFilterDynamicValue.getId());
-
-                if (val != null) {
-                  BinaryObjectInspector boi =
-                      (BinaryObjectInspector) bloomFilterDynamicValue.getObjectInspector();
-                  byte[] bytes = boi.getPrimitiveJavaObject(val);
-                  in = new NonSyncByteArrayInputStream(bytes);
-                  BloomKFilter bloomKFilter = BloomKFilter.deserialize(in);
-                  return bloomKFilter;
-                } else {
-                  return new BloomKFilter(1);
-                }
-              } finally {
-                IOUtils.closeStream(in);
-              }
-            }
-          });
-    } catch (HiveException e) {
-      throw new RuntimeException(e);
+      Object val = bloomFilterDynamicValue.getValue();
+      if (val != null) {
+        BinaryObjectInspector boi = (BinaryObjectInspector) bloomFilterDynamicValue.getObjectInspector();
+        byte[] bytes = boi.getPrimitiveJavaObject(val);
+        bloomFilter = BloomFilter.deserialize(new ByteArrayInputStream(bytes));
+      } else {
+        bloomFilter = null;
+      }
+      initialized = true;
+    } catch (Exception err) {
+      throw new RuntimeException(err);
     }
-    initialized = true;
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
@@ -150,7 +115,7 @@ public class VectorInBloomFilterColDynamicValue extends VectorExpression {
       initValue();
     }
 
-    ColumnVector inputColVector = batch.cols[inputColumnNum[0]];
+    ColumnVector inputColVector = batch.cols[colNum];
     int[] sel = batch.selected;
     boolean[] nullPos = inputColVector.isNull;
     int n = batch.size;
@@ -161,7 +126,7 @@ public class VectorInBloomFilterColDynamicValue extends VectorExpression {
     }
 
     // In case the dynamic value resolves to a null value
-    if (bloomFilter == null || bloomFilter.getNumBits() == 0) {
+    if (bloomFilter == null) {
       batch.size = 0;
     }
 
@@ -239,6 +204,24 @@ public class VectorInBloomFilterColDynamicValue extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return -1;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
+  public int getColNum() {
+    return colNum;
+  }
+
+  public void setColNum(int colNum) {
+    this.colNum = colNum;
+  }
+
+  @Override
   public Descriptor getDescriptor() {
     VectorExpressionDescriptor.Builder b = new VectorExpressionDescriptor.Builder();
     b.setMode(VectorExpressionDescriptor.Mode.FILTER)
@@ -298,10 +281,5 @@ public class VectorInBloomFilterColDynamicValue extends VectorExpression {
       TimestampColumnVector col = (TimestampColumnVector) columnVector;
       return bloomFilter.testLong(col.time[idx]);
     }
-  }
-
-  @Override
-  public String vectorExpressionParameters() {
-    return null;
   }
 }

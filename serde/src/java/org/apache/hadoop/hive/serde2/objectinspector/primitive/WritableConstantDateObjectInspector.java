@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,8 +17,9 @@
  */
 package org.apache.hadoop.hive.serde2.objectinspector.primitive;
 
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.ConstantObjectInspector;
+
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 
 /**
  * A WritableConstantDateObjectInspector is a WritableDateObjectInspector
@@ -28,18 +29,18 @@ public class WritableConstantDateObjectInspector extends
     WritableDateObjectInspector implements
     ConstantObjectInspector {
 
-  private DateWritableV2 value;
+  private DateWritable value;
 
   protected WritableConstantDateObjectInspector() {
     super();
   }
-  WritableConstantDateObjectInspector(DateWritableV2 value) {
+  WritableConstantDateObjectInspector(DateWritable value) {
     super();
     this.value = value;
   }
 
   @Override
-  public DateWritableV2 getWritableConstantValue() {
+  public DateWritable getWritableConstantValue() {
     return value;
   }
 }

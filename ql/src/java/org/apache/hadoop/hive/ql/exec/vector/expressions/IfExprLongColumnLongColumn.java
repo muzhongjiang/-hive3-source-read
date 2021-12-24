@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * Compute IF(expr1, expr2, expr3) for 3 input column expressions.
@@ -31,33 +30,34 @@ public class IfExprLongColumnLongColumn extends VectorExpression {
 
   private static final long serialVersionUID = 1L;
 
-  public IfExprLongColumnLongColumn(int arg1Column, int arg2Column, int arg3Column,
-      int outputColumnNum) {
-    super(arg1Column, arg2Column, arg3Column, outputColumnNum);
+  private int arg1Column, arg2Column, arg3Column;
+  private int outputColumn;
+
+  public IfExprLongColumnLongColumn(int arg1Column, int arg2Column, int arg3Column, int outputColumn) {
+    this.arg1Column = arg1Column;
+    this.arg2Column = arg2Column;
+    this.arg3Column = arg3Column;
+    this.outputColumn = outputColumn;
   }
 
   public IfExprLongColumnLongColumn() {
-    super();
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    LongColumnVector arg1ColVector = (LongColumnVector) batch.cols[inputColumnNum[0]];
-    boolean[] arg1IsNull = arg1ColVector.isNull;
-    LongColumnVector arg2ColVector = (LongColumnVector) batch.cols[inputColumnNum[1]];
-    LongColumnVector arg3ColVector = (LongColumnVector) batch.cols[inputColumnNum[2]];
-    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumnNum];
+    LongColumnVector arg1ColVector = (LongColumnVector) batch.cols[arg1Column];
+    LongColumnVector arg2ColVector = (LongColumnVector) batch.cols[arg2Column];
+    LongColumnVector arg3ColVector = (LongColumnVector) batch.cols[arg3Column];
+    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
     boolean[] outputIsNull = outputColVector.isNull;
-
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
+    outputColVector.noNulls = arg2ColVector.noNulls && arg3ColVector.noNulls;
+    outputColVector.isRepeating = false; // may override later
     int n = batch.size;
     long[] vector1 = arg1ColVector.vector;
     long[] vector2 = arg2ColVector.vector;
@@ -76,7 +76,7 @@ public class IfExprLongColumnLongColumn extends VectorExpression {
      * of code paths.
      */
     if (arg1ColVector.isRepeating) {
-      if ((arg1ColVector.noNulls || !arg1IsNull[0]) && vector1[0] == 1) {
+      if (vector1[0] == 1) {
         arg2ColVector.copySelected(batch.selectedInUse, sel, n, outputColVector);
       } else {
         arg3ColVector.copySelected(batch.selectedInUse, sel, n, outputColVector);
@@ -87,9 +87,6 @@ public class IfExprLongColumnLongColumn extends VectorExpression {
     // extend any repeating values and noNulls indicator in the inputs
     arg2ColVector.flatten(batch.selectedInUse, sel, n);
     arg3ColVector.flatten(batch.selectedInUse, sel, n);
-
-    // Carefully handle NULLs...
-    outputColVector.noNulls = false;
 
     if (arg1ColVector.noNulls) {
       if (batch.selectedInUse) {
@@ -110,14 +107,14 @@ public class IfExprLongColumnLongColumn extends VectorExpression {
       if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
-          outputVector[i] = (!arg1IsNull[i] && vector1[i] == 1 ?
+          outputVector[i] = (!arg1ColVector.isNull[i] && vector1[i] == 1 ?
               vector2[i] : vector3[i]);
           outputIsNull[i] = (!arg1ColVector.isNull[i] && vector1[i] == 1 ?
               arg2ColVector.isNull[i] : arg3ColVector.isNull[i]);
         }
       } else {
         for(int i = 0; i != n; i++) {
-          outputVector[i] = (!arg1IsNull[i] && vector1[i] == 1 ?
+          outputVector[i] = (!arg1ColVector.isNull[i] && vector1[i] == 1 ?
               vector2[i] : vector3[i]);
           outputIsNull[i] = (!arg1ColVector.isNull[i] && vector1[i] == 1 ?
               arg2ColVector.isNull[i] : arg3ColVector.isNull[i]);
@@ -131,9 +128,46 @@ public class IfExprLongColumnLongColumn extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "long";
+  }
+
+  public int getArg1Column() {
+    return arg1Column;
+  }
+
+  public void setArg1Column(int colNum) {
+    this.arg1Column = colNum;
+  }
+
+  public int getArg2Column() {
+    return arg2Column;
+  }
+
+  public void setArg2Column(int colNum) {
+    this.arg2Column = colNum;
+  }
+
+  public int getArg3Column() {
+    return arg3Column;
+  }
+
+  public void setArg3Column(int colNum) {
+    this.arg3Column = colNum;
+  }
+
+  public void setOutputColumn(int outputColumn) {
+    this.outputColumn = outputColumn;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", " + getColumnParamString(1, inputColumnNum[1]) +
-        ", " + getColumnParamString(1, inputColumnNum[2]);
+    return "col " + arg1Column + ", col "+ arg2Column + ", col "+ arg3Column;
   }
 
   @Override

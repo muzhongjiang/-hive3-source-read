@@ -15,7 +15,6 @@
 package org.apache.hadoop.hive.llap.protocol;
 
 import org.apache.hadoop.io.ArrayWritable;
-import org.apache.hadoop.io.BooleanWritable;
 
 import java.io.IOException;
 
@@ -38,12 +37,6 @@ public interface LlapTaskUmbilicalProtocol extends VersionedProtocol {
     }
   }
 
-  public class BooleanArray extends ArrayWritable {
-    public BooleanArray() {
-      super(BooleanWritable.class);
-    }
-  }
-
   public static final long versionID = 1L;
 
   // From Tez. Eventually changes over to the LLAP protocol and ProtocolBuffers
@@ -51,8 +44,8 @@ public interface LlapTaskUmbilicalProtocol extends VersionedProtocol {
   public TezHeartbeatResponse heartbeat(TezHeartbeatRequest request)
       throws IOException, TezException;
 
-  public void nodeHeartbeat(Text hostname, Text uniqueId, int port,
-      TezAttemptArray aw, BooleanArray guaranteed) throws IOException;
+  public void nodeHeartbeat(
+      Text hostname, Text uniqueId, int port, TezAttemptArray aw) throws IOException;
 
   public void taskKilled(TezTaskAttemptID taskAttemptId) throws IOException;
 

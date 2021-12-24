@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -34,7 +34,6 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
 import org.apache.hadoop.hive.ql.plan.VectorSelectDesc;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPPlus;
@@ -51,9 +50,9 @@ public class TestVectorSelectOperator {
 
     private static final long serialVersionUID = 1L;
 
-    public ValidatorVectorSelectOperator(CompilationOpContext ctx, OperatorDesc conf,
-        VectorizationContext ctxt, VectorDesc vectorDesc) throws HiveException {
-      super(ctx, conf, ctxt, vectorDesc);
+    public ValidatorVectorSelectOperator(CompilationOpContext ctx,
+        VectorizationContext ctxt, OperatorDesc conf) throws HiveException {
+      super(ctx, ctxt, conf);
 
       initializeOp(null);
     }
@@ -62,8 +61,8 @@ public class TestVectorSelectOperator {
      * Override forward to do validation
      */
     @Override
-    public void vectorForward(VectorizedRowBatch vrg)
-            throws HiveException {
+    public void forward(Object row, ObjectInspector rowInspector) throws HiveException {
+      VectorizedRowBatch vrg = (VectorizedRowBatch) row;
 
       int[] projections = vrg.projectedColumns;
       assertEquals(2, vrg.projectionSize);
@@ -121,7 +120,7 @@ public class TestVectorSelectOperator {
 
     // CONSIDER unwinding ValidatorVectorSelectOperator as a subclass of VectorSelectOperator.
     VectorSelectDesc vectorSelectDesc = new VectorSelectDesc();
-
+    selDesc.setVectorDesc(vectorSelectDesc);
     List<ExprNodeDesc> selectColList = selDesc.getColList();
     VectorExpression[] vectorSelectExprs = new VectorExpression[selectColList.size()];
     for (int i = 0; i < selectColList.size(); i++) {
@@ -133,7 +132,7 @@ public class TestVectorSelectOperator {
     vectorSelectDesc.setProjectedOutputColumns(new int[] {3, 2});
 
     ValidatorVectorSelectOperator vso = new ValidatorVectorSelectOperator(
-        new CompilationOpContext(), selDesc, vc, vectorSelectDesc);
+        new CompilationOpContext(), vc, selDesc);
 
     VectorizedRowBatch vrg = VectorizedRowGroupGenUtil.getVectorizedRowBatch(
         VectorizedRowBatch.DEFAULT_SIZE, 4, 17);

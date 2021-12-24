@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,41 +22,41 @@ import javax.management.MXBean;
 /**
  * MXbean to expose cache allocator related information through JMX.
  */
-@MXBean public interface BuddyAllocatorMXBean {
+@MXBean
+public interface BuddyAllocatorMXBean {
 
   /**
    * Gets if bytebuffers are allocated directly offheap.
    *
    * @return gets if direct bytebuffer allocation
    */
-  boolean getIsDirect();
+  public boolean getIsDirect();
 
   /**
    * Gets minimum allocation size of allocator.
    *
    * @return minimum allocation size
    */
-  int getMinAllocation();
+  public int getMinAllocation();
 
   /**
    * Gets maximum allocation size of allocator.
    *
    * @return maximum allocation size
    */
-  int getMaxAllocation();
+  public int getMaxAllocation();
 
   /**
    * Gets the arena size.
    *
    * @return arena size
    */
-  int getArenaSize();
+  public int getArenaSize();
 
   /**
    * Gets the maximum cache size.
    *
    * @return max cache size
    */
-  long getMaxCacheSize();
-
+  public long getMaxCacheSize();
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,13 +20,12 @@
 package org.apache.hive.hcatalog.mapreduce;
 
 import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.cli.CliSessionState;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
-import org.apache.hadoop.hive.ql.DriverFactory;
-import org.apache.hadoop.hive.ql.IDriver;
+import org.apache.hadoop.hive.ql.Driver;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.util.Shell;
 import org.apache.hive.hcatalog.common.HCatUtil;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
@@ -44,14 +43,14 @@ import java.util.Properties;
 /**
  * Simplify writing HCatalog tests that require a HiveMetaStore.
  */
-public abstract class HCatBaseTest {
+public class HCatBaseTest {
   protected static final Logger LOG = LoggerFactory.getLogger(HCatBaseTest.class);
   public static final String TEST_DATA_DIR = HCatUtil.makePathASafeFileName(System.getProperty("user.dir") +
           "/build/test/data/" + HCatBaseTest.class.getCanonicalName() + "-" + System.currentTimeMillis());
   protected static final String TEST_WAREHOUSE_DIR = TEST_DATA_DIR + "/warehouse";
 
   protected HiveConf hiveConf = null;
-  protected IDriver driver = null;
+  protected Driver driver = null;
   protected HiveMetaStoreClient client = null;
 
   @BeforeClass
@@ -68,7 +67,7 @@ public abstract class HCatBaseTest {
   public void setUp() throws Exception {
     if (driver == null) {
       setUpHiveConf();
-      driver = DriverFactory.newDriver(hiveConf);
+      driver = new Driver(hiveConf);
       client = new HiveMetaStoreClient(hiveConf);
       SessionState.start(new CliSessionState(hiveConf));
     }
@@ -79,16 +78,6 @@ public abstract class HCatBaseTest {
    */
   protected void setUpHiveConf() {
     hiveConf = new HiveConf(this.getClass());
-    Path workDir = new Path(System.getProperty("test.tmp.dir",
-        "target" + File.separator + "test" + File.separator + "tmp"));
-    hiveConf.set("mapred.local.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "local");
-    hiveConf.set("mapred.system.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "system");
-    hiveConf.set("mapreduce.jobtracker.staging.root.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "staging");
-    hiveConf.set("mapred.temp.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "temp");
     hiveConf.setVar(HiveConf.ConfVars.PREEXECHOOKS, "");
     hiveConf.setVar(HiveConf.ConfVars.POSTEXECHOOKS, "");
     hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY, false);
@@ -109,35 +98,18 @@ public abstract class HCatBaseTest {
     server.registerQuery(query, lineNumber);
   }
 
-  public static PigServer createPigServer(boolean stopOnFailure) throws ExecException {
-    return createPigServer(stopOnFailure, new Properties());
-  }
-
   /**
    * creates PigServer in LOCAL mode.
    * http://pig.apache.org/docs/r0.12.0/perf.html#error-handling
    * @param stopOnFailure equivalent of "-stop_on_failure" command line arg, setting to 'true' makes
    *                      debugging easier
    */
-  public static PigServer createPigServer(boolean stopOnFailure, Properties p) throws
-          ExecException {
-    Path workDir = new Path(System.getProperty("test.tmp.dir",
-        "target" + File.separator + "test" + File.separator + "tmp"));
-    String testId = "HCatBaseTest_" + System.currentTimeMillis();
-    p.put("mapred.local.dir", workDir + File.separator + testId
-        + File.separator + "mapred" + File.separator + "local");
-    p.put("mapred.system.dir", workDir + File.separator + testId
-        + File.separator + "mapred" + File.separator + "system");
-    p.put("mapreduce.jobtracker.staging.root.dir", workDir + File.separator + testId
-        + File.separator + "mapred" + File.separator + "staging");
-    p.put("mapred.temp.dir", workDir + File.separator + testId
-        + File.separator + "mapred" + File.separator + "temp");
-    p.put("pig.temp.dir", workDir + File.separator + testId
-        + File.separator + "pig" + File.separator + "temp");
+  public static PigServer createPigServer(boolean stopOnFailure) throws ExecException {
     if(stopOnFailure) {
+      Properties p = new Properties();
       p.put("stop.on.failure", Boolean.TRUE.toString());
       return new PigServer(ExecType.LOCAL, p);
     }
-    return new PigServer(ExecType.LOCAL, p);
+    return new PigServer(ExecType.LOCAL);
   }
 }

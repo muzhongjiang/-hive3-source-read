@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,8 +22,6 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hive.ql.plan.PartitionDesc;
-import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
@@ -60,22 +58,21 @@ public class SparkMapRecordHandler extends SparkRecordHandler {
   private static final Logger LOG = LoggerFactory.getLogger(SparkMapRecordHandler.class);
   private AbstractMapOperator mo;
   private MapredLocalWork localWork = null;
+  private boolean isLogInfoEnabled = false;
   private ExecMapperContext execContext;
 
   @Override
   public <K, V> void init(JobConf job, OutputCollector<K, V> output, Reporter reporter) throws Exception {
-    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.SPARK_INIT_OPERATORS);
+    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.SPARK_INIT_OPERATORS);
     super.init(job, output, reporter);
+
+    isLogInfoEnabled = LOG.isInfoEnabled();
 
     try {
       jc = job;
       execContext = new ExecMapperContext(jc);
       // create map and fetch operators
       MapWork mrwork = Utilities.getMapWork(job);
-      for (PartitionDesc part : mrwork.getAliasToPartnInfo().values()) {
-        TableDesc tableDesc = part.getTableDesc();
-        Utilities.copyJobSecretToTableProperties(tableDesc);
-      }
 
       CompilationOpContext runtimeCtx = new CompilationOpContext();
       if (mrwork.getVectorMode()) {
@@ -100,6 +97,7 @@ public class SparkMapRecordHandler extends SparkRecordHandler {
       mo.initializeLocalWork(jc);
       mo.initializeMapOperator(jc);
 
+      OperatorUtils.setChildrenCollector(mo.getChildOperators(), output);
       mo.setReporter(rp);
 
       if (localWork == null) {
@@ -124,15 +122,11 @@ public class SparkMapRecordHandler extends SparkRecordHandler {
         throw new RuntimeException("Map operator initialization failed: " + e, e);
       }
     }
-    perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.SPARK_INIT_OPERATORS);
+    perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.SPARK_INIT_OPERATORS);
   }
 
   @Override
   public void processRow(Object key, Object value) throws IOException {
-    if (!anyRow) {
-      OperatorUtils.setChildrenCollector(mo.getChildOperators(), oc);
-      anyRow = true;
-    }
     // reset the execContext for each new row
     execContext.resetRow();
 
@@ -140,8 +134,9 @@ public class SparkMapRecordHandler extends SparkRecordHandler {
       // Since there is no concept of a group, we don't invoke
       // startGroup/endGroup for a mapper
       mo.process((Writable) value);
-      incrementRowNumber();
-
+      if (isLogInfoEnabled) {
+        logMemoryInfo();
+      }
     } catch (Throwable e) {
       abort = true;
       Utilities.setMapWork(jc, null);
@@ -163,11 +158,11 @@ public class SparkMapRecordHandler extends SparkRecordHandler {
 
   @Override
   public void close() {
-    super.close();
     // No row was processed
-    if (!anyRow) {
+    if (oc == null) {
       LOG.trace("Close called. no row processed by map.");
     }
+
     // check if there are IOExceptions
     if (!abort) {
       abort = execContext.getIoCxt().getIOExceptions();
@@ -185,6 +180,10 @@ public class SparkMapRecordHandler extends SparkRecordHandler {
         for (Operator<? extends OperatorDesc> dummyOp : dummyOps) {
           dummyOp.close(abort);
         }
+      }
+
+      if (isLogInfoEnabled) {
+        logCloseInfo();
       }
 
       ReportStats rps = new ReportStats(rp, jc);

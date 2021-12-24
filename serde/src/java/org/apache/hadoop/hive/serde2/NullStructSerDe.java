@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hive.serde2;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -69,8 +69,12 @@ public class NullStructSerDe extends AbstractSerDe {
   }
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-      throws SerDeException {
+  public SerDeStats getSerDeStats() {
+    return null;
+  }
+
+  @Override
+  public void initialize(Configuration conf, Properties tbl) throws SerDeException {
   }
 
   @Override
@@ -103,7 +107,7 @@ public class NullStructSerDe extends AbstractSerDe {
 
     @Override
     public List<NullStructField> getAllStructFieldRefs() {
-      return Collections.emptyList();
+      return new ArrayList<NullStructField>();
     }
 
     @Override
@@ -113,7 +117,7 @@ public class NullStructSerDe extends AbstractSerDe {
 
     @Override
     public List<Object> getStructFieldsDataAsList(Object data) {
-      return Collections.emptyList();
+      return new ArrayList<Object>();
     }
   }
 

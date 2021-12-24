@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
+import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionHandler;
 import org.apache.hadoop.hive.ql.exec.persistence.HashMapWrapper;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinEagerRowContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinKeyObject;
@@ -47,6 +48,7 @@ import org.apache.hadoop.hive.ql.plan.api.OperatorType;
 import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption;
@@ -101,7 +103,7 @@ public class HashTableSinkOperator extends TerminalOperator<HashTableSinkDesc> i
   private long rowNumber = 0;
   protected transient LogHelper console;
   private long hashTableScale;
-  private MemoryExhaustionChecker memoryExhaustionChecker;
+  private MapJoinMemoryExhaustionHandler memoryExhaustionHandler;
 
   /** Kryo ctor. */
   protected HashTableSinkOperator() {
@@ -124,7 +126,7 @@ public class HashTableSinkOperator extends TerminalOperator<HashTableSinkDesc> i
     super.initializeOp(hconf);
     boolean isSilent = HiveConf.getBoolVar(hconf, HiveConf.ConfVars.HIVESESSIONSILENT);
     console = new LogHelper(LOG, isSilent);
-    memoryExhaustionChecker = MemoryExhaustionCheckerFactory.getChecker(console, hconf, conf);
+    memoryExhaustionHandler = new MapJoinMemoryExhaustionHandler(console, conf.getHashtableMemoryUsage());
     emptyRowContainer.addRow(emptyObjectArray);
 
     // for small tables only; so get the big table position first
@@ -178,18 +180,18 @@ public class HashTableSinkOperator extends TerminalOperator<HashTableSinkDesc> i
     }
     try {
       TableDesc keyTableDesc = conf.getKeyTblDesc();
-      AbstractSerDe keySerDe = (AbstractSerDe) ReflectionUtils.newInstance(keyTableDesc.getSerDeClass(),
+      AbstractSerDe keySerde = (AbstractSerDe) ReflectionUtils.newInstance(keyTableDesc.getDeserializerClass(),
           null);
-      keySerDe.initialize(null, keyTableDesc.getProperties(), null);
-      MapJoinObjectSerDeContext keyContext = new MapJoinObjectSerDeContext(keySerDe, false);
+      SerDeUtils.initializeSerDe(keySerde, null, keyTableDesc.getProperties(), null);
+      MapJoinObjectSerDeContext keyContext = new MapJoinObjectSerDeContext(keySerde, false);
       for (Byte pos : order) {
         if (pos == posBigTableAlias) {
           continue;
         }
         mapJoinTables[pos] = new HashMapWrapper(hconf, -1);
         TableDesc valueTableDesc = conf.getValueTblFilteredDescs().get(pos);
-        AbstractSerDe valueSerDe = (AbstractSerDe) ReflectionUtils.newInstance(valueTableDesc.getSerDeClass(), null);
-        valueSerDe.initialize(null, valueTableDesc.getProperties(), null);
+        AbstractSerDe valueSerDe = (AbstractSerDe) ReflectionUtils.newInstance(valueTableDesc.getDeserializerClass(), null);
+        SerDeUtils.initializeSerDe(valueSerDe, null, valueTableDesc.getProperties(), null);
         mapJoinTableSerdes[pos] = new MapJoinTableContainerSerDe(keyContext, new MapJoinObjectSerDeContext(
             valueSerDe, hasFilter(pos)));
       }
@@ -253,7 +255,9 @@ public class HashTableSinkOperator extends TerminalOperator<HashTableSinkDesc> i
         rowContainer = emptyRowContainer;
       }
       rowNumber++;
-      memoryExhaustionChecker.checkMemoryOverhead(rowNumber, hashTableScale, tableContainer.size());
+      if (rowNumber > hashTableScale && rowNumber % hashTableScale == 0) {
+        memoryExhaustionHandler.checkMemoryStatus(tableContainer.size(), rowNumber);
+      }
       tableContainer.put(key, rowContainer);
     } else if (rowContainer == emptyRowContainer) {
       rowContainer = rowContainer.copy();
@@ -271,7 +275,9 @@ public class HashTableSinkOperator extends TerminalOperator<HashTableSinkDesc> i
   public void closeOp(boolean abort) throws HiveException {
     try {
       if (mapJoinTables == null) {
-        LOG.debug("mapJoinTables is null");
+        if (isLogDebugEnabled) {
+          LOG.debug("mapJoinTables is null");
+        }
       } else {
         flushToFile();
       }
@@ -286,7 +292,9 @@ public class HashTableSinkOperator extends TerminalOperator<HashTableSinkDesc> i
   protected void flushToFile() throws IOException, HiveException {
     // get tmp file URI
     Path tmpURI = getExecContext().getLocalWork().getTmpPath();
-    LOG.info("Temp URI for side table: {}", tmpURI);
+    if (isLogInfoEnabled) {
+      LOG.info("Temp URI for side table: " + tmpURI);
+    }
     for (byte tag = 0; tag < mapJoinTables.length; tag++) {
       // get the key and value
       MapJoinPersistableTableContainer tableContainer = mapJoinTables[tag];
@@ -297,18 +305,13 @@ public class HashTableSinkOperator extends TerminalOperator<HashTableSinkDesc> i
       String bigBucketFileName = getExecContext().getCurrentBigBucketFile();
       String fileName = getExecContext().getLocalWork().getBucketFileName(bigBucketFileName);
       // get the tmp URI path; it will be a hdfs path if not local mode
-      // TODO [MM gap?]: this doesn't work, however this is MR only.
-      //      The path for writer and reader mismatch:
-      //      Dump the side-table for tag ... -local-10004/HashTable-Stage-1/MapJoin-a-00-(ds%3D2008-04-08)mm_2.hashtable
-      //      Load back 1 hashtable file      -local-10004/HashTable-Stage-1/MapJoin-a-00-srcsortbucket3outof4.txt.hashtable
-      //      Hive3 probably won't support MR so do we really care? 
       String dumpFilePrefix = conf.getDumpFilePrefix();
       Path path = Utilities.generatePath(tmpURI, dumpFilePrefix, tag, fileName);
       console.printInfo(Utilities.now() + "\tDump the side-table for tag: " + tag +
           " with group count: " + tableContainer.size() + " into file: " + path);
       // get the hashtable file and path
       FileSystem fs = path.getFileSystem(hconf);
-      ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(fs.create(path)));
+      ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(fs.create(path), 4096));
       try {
         mapJoinTableSerdes[tag].persist(out, tableContainer);
       } finally {

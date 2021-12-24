@@ -1,29 +1,14 @@
-create table test_n4 (`x,y` int);
+create table test (`x,y` int);
 
-insert into test_n4 values (1),(2);
+insert into test values (1),(2);
 
-explain vectorization
-select `x,y` from test_n4 where `x,y` >=2;
-select `x,y` from test_n4 where `x,y` >=2;
+select `x,y` from test where `x,y` >=2 ;
 
-SET hive.fetch.task.conversion=none;
-explain vectorization
-select `x,y` from test_n4 where `x,y` >=2;
-select `x,y` from test_n4 where `x,y` >=2;
+drop table test; 
 
-drop table test_n4;
+create table test (`x,y` int) stored as orc;
 
-SET hive.fetch.task.conversion=more;
+insert into test values (1),(2);
 
-create table test_n4 (`x,y` int) stored as orc;
+select `x,y` from test where `x,y` <2 ;
 
-insert into test_n4 values (1),(2);
-
-explain vectorization
-select `x,y` from test_n4 where `x,y` <2;
-select `x,y` from test_n4 where `x,y` <2;
-
-SET hive.fetch.task.conversion=none;
-explain vectorization
-select `x,y` from test_n4 where `x,y` <2;
-select `x,y` from test_n4 where `x,y` <2;

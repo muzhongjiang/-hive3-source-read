@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,15 +18,14 @@
 
 package org.apache.hadoop.hive.ql.optimizer.lineage;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hive.common.ObjectPair;
 import org.apache.hadoop.hive.ql.exec.ColumnInfo;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
@@ -48,14 +47,15 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
  */
 public class LineageCtx implements NodeProcessorCtx {
 
-  public static class Index implements Serializable {
+  public static class Index {
 
     /**
      * The map contains an index from the (operator, columnInfo) to the
      * dependency vector for that tuple. This is used to generate the
      * dependency vectors during the walk of the operator tree.
      */
-    private final Map<Operator<? extends OperatorDesc>, Map<ColumnInfo, Dependency>> depMap;
+    private final Map<Operator<? extends OperatorDesc>,
+                      LinkedHashMap<ColumnInfo, Dependency>> depMap;
 
     /**
      * A map from operator to the conditions strings.
@@ -66,17 +66,18 @@ public class LineageCtx implements NodeProcessorCtx {
      * A map from a final select operator id to the select operator
      * and the corresponding target table in case an insert into query.
      */
-    private Map<String, Pair<SelectOperator, Table>> finalSelectOps;
+    private LinkedHashMap<String, ObjectPair<SelectOperator, Table>> finalSelectOps;
 
     /**
      * Constructor.
      */
     public Index() {
       depMap =
-        new LinkedHashMap<Operator<? extends OperatorDesc>, Map<ColumnInfo, Dependency>>();
+        new LinkedHashMap<Operator<? extends OperatorDesc>,
+                          LinkedHashMap<ColumnInfo, Dependency>>();
       condMap = new HashMap<Operator<? extends OperatorDesc>, Set<Predicate>>();
       finalSelectOps =
-        new LinkedHashMap<String, Pair<SelectOperator, Table>>();
+        new LinkedHashMap<String, ObjectPair<SelectOperator, Table>>();
     }
 
     /**
@@ -126,7 +127,7 @@ public class LineageCtx implements NodeProcessorCtx {
      */
     public void putDependency(Operator<? extends OperatorDesc> op,
         ColumnInfo col, Dependency dep) {
-      Map<ColumnInfo, Dependency> colMap = depMap.get(op);
+      LinkedHashMap<ColumnInfo, Dependency> colMap = depMap.get(op);
       if (colMap == null) {
         colMap = new LinkedHashMap<ColumnInfo, Dependency>();
         depMap.put(op, colMap);
@@ -202,11 +203,13 @@ public class LineageCtx implements NodeProcessorCtx {
           FileSinkOperator fso = (FileSinkOperator) sinkOp;
           table = fso.getConf().getTable();
         }
-        finalSelectOps.put(operatorId, Pair.of(sop, table));
+        finalSelectOps.put(operatorId,
+          new ObjectPair<SelectOperator, Table>(sop, table));
       }
     }
 
-    public Map<String, Pair<SelectOperator, Table>> getFinalSelectOps() {
+    public LinkedHashMap<String,
+        ObjectPair<SelectOperator, Table>> getFinalSelectOps() {
       return finalSelectOps;
     }
 

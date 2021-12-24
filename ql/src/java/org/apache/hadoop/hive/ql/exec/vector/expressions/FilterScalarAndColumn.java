@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,30 +20,25 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 public class FilterScalarAndColumn extends VectorExpression {
 
   private static final long serialVersionUID = 1L;
-  private final long value;
-  private final int colNum;
+  private long value;
+  private int colNum;
 
   public FilterScalarAndColumn() {
     super();
-
-    // Dummy final assignments.
-    value = 0;
-    colNum = -1;
   }
 
   public FilterScalarAndColumn(long scalarVal, int colNum) {
-    super();
-    this.value = scalarVal;
+    this();
     this.colNum = colNum;
+    this.value = scalarVal;
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
     if (value == 0) {
       batch.size = 0;
       return;
@@ -52,8 +47,34 @@ public class FilterScalarAndColumn extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return -1;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
+  public int getColNum() {
+    return colNum;
+  }
+
+  public void setColNum(int colNum) {
+    this.colNum = colNum;
+  }
+
+  public double getValue() {
+    return value;
+  }
+
+  public void setValue(long value) {
+    this.value = value;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return "val " + value + ", " + getColumnParamString(1, colNum);
+    return "val " + value + ", col " + colNum;
   }
 
   @Override

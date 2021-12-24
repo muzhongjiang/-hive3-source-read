@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,21 +21,11 @@ package org.apache.hadoop.hive.ql.io.orc;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.PrintStream;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -43,7 +33,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.io.AcidOutputFormat;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
-import org.apache.hadoop.hive.ql.io.BucketCodec;
 import org.apache.hadoop.hive.ql.io.RecordIdentifier;
 import org.apache.hadoop.hive.ql.io.RecordUpdater;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -63,9 +52,9 @@ public class TestOrcRecordUpdater {
     OrcStruct event = new OrcStruct(OrcRecordUpdater.FIELDS);
     event.setFieldValue(OrcRecordUpdater.OPERATION,
         new IntWritable(OrcRecordUpdater.INSERT_OPERATION));
-    event.setFieldValue(OrcRecordUpdater.CURRENT_WRITEID,
+    event.setFieldValue(OrcRecordUpdater.CURRENT_TRANSACTION,
         new LongWritable(100));
-    event.setFieldValue(OrcRecordUpdater.ORIGINAL_WRITEID,
+    event.setFieldValue(OrcRecordUpdater.ORIGINAL_TRANSACTION,
         new LongWritable(50));
     event.setFieldValue(OrcRecordUpdater.BUCKET, new IntWritable(200));
     event.setFieldValue(OrcRecordUpdater.ROW_ID, new LongWritable(300));
@@ -111,8 +100,8 @@ public class TestOrcRecordUpdater {
         .filesystem(fs)
         .bucket(10)
         .writingBase(false)
-        .minimumWriteId(10)
-        .maximumWriteId(19)
+        .minimumTransactionId(10)
+        .maximumTransactionId(19)
         .inspector(inspector)
         .reporter(Reporter.NULL)
         .finalDestination(root);
@@ -135,7 +124,6 @@ public class TestOrcRecordUpdater {
     // read the stopping point for the first flush and make sure we only see
     // 3 rows
     long len = side.readLong();
-    len = side.readLong();
     Reader reader = OrcFile.createReader(bucketPath,
         new OrcFile.ReaderOptions(conf).filesystem(fs).maxLength(len));
     assertEquals(3, reader.getNumberOfRows());
@@ -155,27 +143,27 @@ public class TestOrcRecordUpdater {
         OrcRecordUpdater.getOperation(row));
     assertEquals(11, OrcRecordUpdater.getCurrentTransaction(row));
     assertEquals(11, OrcRecordUpdater.getOriginalTransaction(row));
-    assertEquals(10, getBucketId(row));
+    assertEquals(10, OrcRecordUpdater.getBucket(row));
     assertEquals(0, OrcRecordUpdater.getRowId(row));
     assertEquals("first",
         OrcRecordUpdater.getRow(row).getFieldValue(0).toString());
     assertEquals(true, rows.hasNext());
     row = (OrcStruct) rows.next(null);
     assertEquals(1, OrcRecordUpdater.getRowId(row));
-    assertEquals(10, getBucketId(row));
+    assertEquals(10, OrcRecordUpdater.getBucket(row));
     assertEquals("second",
         OrcRecordUpdater.getRow(row).getFieldValue(0).toString());
     assertEquals(true, rows.hasNext());
     row = (OrcStruct) rows.next(null);
     assertEquals(2, OrcRecordUpdater.getRowId(row));
-    assertEquals(10, getBucketId(row));
+    assertEquals(10, OrcRecordUpdater.getBucket(row));
     assertEquals("third",
         OrcRecordUpdater.getRow(row).getFieldValue(0).toString());
     assertEquals(true, rows.hasNext());
     row = (OrcStruct) rows.next(null);
     assertEquals(12, OrcRecordUpdater.getCurrentTransaction(row));
     assertEquals(12, OrcRecordUpdater.getOriginalTransaction(row));
-    assertEquals(10, getBucketId(row));
+    assertEquals(10, OrcRecordUpdater.getBucket(row));
     assertEquals(0, OrcRecordUpdater.getRowId(row));
     assertEquals("fourth",
         OrcRecordUpdater.getRow(row).getFieldValue(0).toString());
@@ -196,11 +184,7 @@ public class TestOrcRecordUpdater {
 
     assertEquals(false, fs.exists(sidePath));
   }
-  private static int getBucketId(OrcStruct row) {
-    int bucketValue = OrcRecordUpdater.getBucket(row);
-    return
-      BucketCodec.determineVersion(bucketValue).decodeWriterId(bucketValue);
-  }
+
   @Test
   public void testWriterTblProperties() throws Exception {
     Path root = new Path(workDir, "testWriterTblProperties");
@@ -220,8 +204,8 @@ public class TestOrcRecordUpdater {
         .filesystem(fs)
         .bucket(10)
         .writingBase(false)
-        .minimumWriteId(10)
-        .maximumWriteId(19)
+        .minimumTransactionId(10)
+        .maximumTransactionId(19)
         .inspector(inspector)
         .reporter(Reporter.NULL)
         .finalDestination(root)
@@ -262,8 +246,8 @@ public class TestOrcRecordUpdater {
         .filesystem(fs)
         .bucket(bucket)
         .writingBase(false)
-        .minimumWriteId(100)
-        .maximumWriteId(100)
+        .minimumTransactionId(100)
+        .maximumTransactionId(100)
         .inspector(inspector)
         .reporter(Reporter.NULL)
         .recordIdColumn(1)
@@ -277,91 +261,28 @@ public class TestOrcRecordUpdater {
 
     Reader reader = OrcFile.createReader(bucketPath,
         new OrcFile.ReaderOptions(conf).filesystem(fs));
-    assertEquals(1, reader.getNumberOfRows());
+    assertEquals(2, reader.getNumberOfRows());
 
     RecordReader rows = reader.rows();
 
     // check the contents of the file
     assertEquals(true, rows.hasNext());
     OrcStruct row = (OrcStruct) rows.next(null);
-    assertEquals(OrcRecordUpdater.INSERT_OPERATION,
+    assertEquals(OrcRecordUpdater.UPDATE_OPERATION,
         OrcRecordUpdater.getOperation(row));
     assertEquals(100, OrcRecordUpdater.getCurrentTransaction(row));
-    assertEquals(100, OrcRecordUpdater.getOriginalTransaction(row));
-    int bucketProperty = OrcRecordUpdater.getBucket(row);
-    assertEquals(bucket, BucketCodec.determineVersion(bucketProperty).decodeWriterId(bucketProperty));
-    assertEquals(0, OrcRecordUpdater.getRowId(row));
+    assertEquals(10, OrcRecordUpdater.getOriginalTransaction(row));
+    assertEquals(20, OrcRecordUpdater.getBucket(row));
+    assertEquals(30, OrcRecordUpdater.getRowId(row));
     assertEquals("update",
         OrcRecordUpdater.getRow(row).getFieldValue(0).toString());
-    rows.close();
-
-    options.writingDeleteDelta(true);
-    bucketPath = AcidUtils.createFilename(root, options);
-    reader = OrcFile.createReader(bucketPath,
-      new OrcFile.ReaderOptions(conf).filesystem(fs));
-    assertEquals(2, reader.getNumberOfRows());
-
-    rows = reader.rows();
     assertEquals(true, rows.hasNext());
     row = (OrcStruct) rows.next(null);
-    assertEquals(OrcRecordUpdater.DELETE_OPERATION, OrcRecordUpdater.getOperation(row));
-    assertEquals(100, OrcRecordUpdater.getCurrentTransaction(row));
-    assertEquals(10, OrcRecordUpdater.getOriginalTransaction(row));
-    bucketProperty = OrcRecordUpdater.getBucket(row);
-    assertEquals(bucket, BucketCodec.determineVersion(bucketProperty).decodeWriterId(bucketProperty));
-    assertEquals(30, OrcRecordUpdater.getRowId(row));
-    assertNull(OrcRecordUpdater.getRow(row));
-
-    assertEquals(true, rows.hasNext());
-    row = (OrcStruct) rows.next(null);
-    assertEquals(OrcRecordUpdater.DELETE_OPERATION, OrcRecordUpdater.getOperation(row));
     assertEquals(100, OrcRecordUpdater.getCurrentTransaction(row));
     assertEquals(40, OrcRecordUpdater.getOriginalTransaction(row));
-    bucketProperty = OrcRecordUpdater.getBucket(row);
-    assertEquals(bucket, BucketCodec.determineVersion(bucketProperty).decodeWriterId(bucketProperty));
+    assertEquals(20, OrcRecordUpdater.getBucket(row));
     assertEquals(60, OrcRecordUpdater.getRowId(row));
     assertNull(OrcRecordUpdater.getRow(row));
-
     assertEquals(false, rows.hasNext());
-  }
-
-  /*
-    CharsetDecoder instances are not thread safe, so it can end up in an inconsistent state when reading multiple
-    buffers parallel.
-    E.g:
-    java.lang.IllegalStateException: Current state = FLUSHED, new state = CODING_END
-  */
-  @Test
-  public void testConcurrentParseKeyIndex() throws Exception {
-
-    // Given
-    Reader mockReader = mock(Reader.class);
-    when(mockReader.hasMetadataValue(OrcRecordUpdater.ACID_KEY_INDEX_NAME)).thenReturn(true);
-
-    // Create a large buffer
-    final StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < 3000; i++) {
-      sb.append("100000,200000,300000;");
-    }
-    when(mockReader.getMetadataValue(OrcRecordUpdater.ACID_KEY_INDEX_NAME)).thenReturn(
-            ByteBuffer.wrap(sb.toString().getBytes()));
-
-    // When
-    // Hit OrcRecordUpdater.parseKeyIndex with large parallelism
-    final int parallelism = 4000;
-    Callable<RecordIdentifier[]>[] r = new Callable[parallelism];
-    for (int i = 0; i < parallelism; i++) {
-      r[i] = () -> {
-        return OrcRecordUpdater.parseKeyIndex(mockReader);
-      };
-    }
-    ExecutorService executorService = Executors.newFixedThreadPool(parallelism);
-    List<Future<RecordIdentifier[]>> res = executorService.invokeAll(Arrays.asList(r));
-
-    // Then
-    // Check for exceptions
-    for (Future<RecordIdentifier[]> ri : res) {
-      ri.get();
-    }
   }
 }

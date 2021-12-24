@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,8 +22,6 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelShuttle;
 import org.apache.calcite.rel.core.Filter;
-import org.apache.calcite.rel.core.Join;
-import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexFieldAccess;
@@ -34,36 +32,8 @@ import org.apache.hadoop.hive.ql.optimizer.calcite.TraitsUtil;
 import org.apache.calcite.rel.core.CorrelationId;
 import java.util.Set;
 import java.util.HashSet;
-
+ 
 public class HiveFilter extends Filter implements HiveRelNode {
-
-  public static class StatEnhancedHiveFilter extends HiveFilter {
-
-    private long rowCount;
-
-    // FIXME: use a generic proxy wrapper to create runtimestat enhanced nodes
-    public StatEnhancedHiveFilter(RelOptCluster cluster, RelTraitSet traits, RelNode child, RexNode condition,
-        long rowCount) {
-      super(cluster, traits, child, condition);
-      this.rowCount = rowCount;
-    }
-
-    public long getRowCount() {
-      return rowCount;
-    }
-
-    @Override
-    public double estimateRowCount(RelMetadataQuery mq) {
-      return rowCount;
-    }
-
-    @Override
-    public Filter copy(RelTraitSet traitSet, RelNode input, RexNode condition) {
-      assert traitSet.containsIfApplicable(HiveRelNode.CONVENTION);
-      return new StatEnhancedHiveFilter(getCluster(), traitSet, input, condition, rowCount);
-    }
-
-  }
 
   public HiveFilter(RelOptCluster cluster, RelTraitSet traits, RelNode child, RexNode condition) {
     super(cluster, TraitsUtil.getDefaultTraitSet(cluster), child, condition);
@@ -104,12 +74,10 @@ public class HiveFilter extends Filter implements HiveRelNode {
           RelNode input = ((RexSubQuery)node).rel.getInput(0);
           while(input != null && !(input instanceof HiveFilter)
                   && input.getInputs().size() >=1) {
-              //we don't expect corr vars within UNION for now
+              //we don't expect corr vars withing JOIN or UNION for now
+              // we only expect cor vars in top level filter
               if(input.getInputs().size() > 1) {
-                if (input instanceof HiveJoin) {
-                  findCorrelatedVar(((HiveJoin) input).getJoinFilter(), allVars);
-                }
-                return;
+                  return;
               }
               input = input.getInput(0);
           }
@@ -141,7 +109,6 @@ public class HiveFilter extends Filter implements HiveRelNode {
       return allCorrVars;
   }
 
-  @Override
   public RelNode accept(RelShuttle shuttle) {
     if (shuttle instanceof HiveRelShuttle) {
       return ((HiveRelShuttle)shuttle).visit(this);

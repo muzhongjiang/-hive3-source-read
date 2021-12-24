@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,27 +19,29 @@
 package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Properties;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator.Counter;
 import org.apache.hadoop.hive.ql.exec.TerminalOperator;
-import org.apache.hadoop.hive.ql.exec.TopNHash;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizationOperator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
+import org.apache.hadoop.hive.ql.exec.vector.keyseries.VectorKeySeriesSerialized;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
+import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.VectorReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.VectorReduceSinkInfo;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
@@ -50,22 +52,22 @@ import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerialize
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.OutputCollector;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.base.Preconditions;
+import org.apache.hive.common.util.HashCodeUtil;
 
 /**
  * This class is common operator class for native vectorized reduce sink.
  */
 public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<ReduceSinkDesc>
-    implements Serializable, TopNHash.BinaryCollector,
-    VectorizationOperator, VectorizationContextRegion {
+    implements VectorizationContextRegion {
 
   private static final long serialVersionUID = 1L;
   private static final String CLASS_NAME = VectorReduceSinkCommonOperator.class.getName();
-  private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
+  private static final Log LOG = LogFactory.getLog(CLASS_NAME);
+
+  protected VectorReduceSinkDesc vectorDesc;
 
   /**
    * Information about our native vectorized reduce sink created by the Vectorizer class during
@@ -74,7 +76,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected VectorReduceSinkInfo vectorReduceSinkInfo;
 
   protected VectorizationContext vContext;
-  protected VectorReduceSinkDesc vectorDesc;
 
   /**
    * Reduce sink key vector expressions.
@@ -82,7 +83,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // This is map of which vectorized row batch columns are the key columns.
   // And, their types.
-  protected boolean isEmptyKey;
   protected int[] reduceSinkKeyColumnMap;
   protected TypeInfo[] reduceSinkKeyTypeInfos;
 
@@ -91,7 +91,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // This is map of which vectorized row batch columns are the value columns.
   // And, their types.
-  protected boolean isEmptyValue;
   protected int[] reduceSinkValueColumnMap;
   protected TypeInfo[] reduceSinkValueTypeInfos;
 
@@ -123,14 +122,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected transient HiveKey keyWritable;
   protected transient BytesWritable valueBytesWritable;
 
-  // Picks topN K:V pairs from input.
-  protected transient TopNHash reducerHash;
-
   // Where to write our key and value pairs.
   private transient OutputCollector out;
 
+  private transient long numRows = 0;
   private transient long cntr = 1;
   private transient long logEveryNRows = 0;
+  private final transient LongWritable recordCounter = new LongWritable();
 
   // For debug tracing: the name of the map or reduce task.
   protected transient String taskName;
@@ -149,31 +147,27 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     super(ctx);
   }
 
-  public VectorReduceSinkCommonOperator(CompilationOpContext ctx, OperatorDesc conf,
-      VectorizationContext vContext, VectorDesc vectorDesc) throws HiveException {
+  public VectorReduceSinkCommonOperator(CompilationOpContext ctx,
+      VectorizationContext vContext, OperatorDesc conf) throws HiveException {
     this(ctx);
+
+    LOG.info("VectorReduceSinkCommonOperator constructor");
 
     ReduceSinkDesc desc = (ReduceSinkDesc) conf;
     this.conf = desc;
+    vectorDesc = (VectorReduceSinkDesc) desc.getVectorDesc();
+    vectorReduceSinkInfo = vectorDesc.getVectorReduceSinkInfo();
     this.vContext = vContext;
-    this.vectorDesc = (VectorReduceSinkDesc) vectorDesc;
-    vectorReduceSinkInfo = this.vectorDesc.getVectorReduceSinkInfo();
 
-    isEmptyKey = this.vectorDesc.getIsEmptyKey();
-    if (!isEmptyKey) {
-      // Since a key expression can be a calculation and the key will go into a scratch column,
-      // we need the mapping and type information.
-      reduceSinkKeyColumnMap = vectorReduceSinkInfo.getReduceSinkKeyColumnMap();
-      reduceSinkKeyTypeInfos = vectorReduceSinkInfo.getReduceSinkKeyTypeInfos();
-      reduceSinkKeyExpressions = vectorReduceSinkInfo.getReduceSinkKeyExpressions();
-    }
+    // Since a key expression can be a calculation and the key will go into a scratch column,
+    // we need the mapping and type information.
+    reduceSinkKeyColumnMap = vectorReduceSinkInfo.getReduceSinkKeyColumnMap();
+    reduceSinkKeyTypeInfos = vectorReduceSinkInfo.getReduceSinkKeyTypeInfos();
+    reduceSinkKeyExpressions = vectorReduceSinkInfo.getReduceSinkKeyExpressions();
 
-    isEmptyValue = this.vectorDesc.getIsEmptyValue();
-    if (!isEmptyValue) {
-      reduceSinkValueColumnMap = vectorReduceSinkInfo.getReduceSinkValueColumnMap();
-      reduceSinkValueTypeInfos = vectorReduceSinkInfo.getReduceSinkValueTypeInfos();
-      reduceSinkValueExpressions = vectorReduceSinkInfo.getReduceSinkValueExpressions();
-    }
+    reduceSinkValueColumnMap = vectorReduceSinkInfo.getReduceSinkValueColumnMap();
+    reduceSinkValueTypeInfos = vectorReduceSinkInfo.getReduceSinkValueTypeInfos();
+    reduceSinkValueExpressions = vectorReduceSinkInfo.getReduceSinkValueExpressions();
   }
 
   // Get the sort order
@@ -247,8 +241,46 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
-    VectorExpression.doTransientInit(reduceSinkKeyExpressions, hconf);
-    VectorExpression.doTransientInit(reduceSinkValueExpressions, hconf);
+
+    if (isLogDebugEnabled) {
+      LOG.debug("useUniformHash " + vectorReduceSinkInfo.getUseUniformHash());
+  
+      LOG.debug("reduceSinkKeyColumnMap " +
+          (vectorReduceSinkInfo.getReduceSinkKeyColumnMap() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkKeyColumnMap())));
+      LOG.debug("reduceSinkKeyTypeInfos " +
+          (vectorReduceSinkInfo.getReduceSinkKeyTypeInfos() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkKeyTypeInfos())));
+      LOG.debug("reduceSinkKeyColumnVectorTypes " +
+          (vectorReduceSinkInfo.getReduceSinkKeyColumnVectorTypes() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkKeyColumnVectorTypes())));
+      LOG.debug("reduceSinkKeyExpressions " +
+          (vectorReduceSinkInfo.getReduceSinkKeyExpressions() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkKeyExpressions())));
+  
+      LOG.debug("reduceSinkValueColumnMap " +
+          (vectorReduceSinkInfo.getReduceSinkValueColumnMap() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkValueColumnMap())));
+      LOG.debug("reduceSinkValueTypeInfos " +
+          (vectorReduceSinkInfo.getReduceSinkValueTypeInfos() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkValueTypeInfos())));
+      LOG.debug("reduceSinkValueColumnVectorTypes " +
+          (vectorReduceSinkInfo.getReduceSinkValueColumnVectorTypes() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkValueColumnVectorTypes())));
+      LOG.debug("reduceSinkValueExpressions " +
+          (vectorReduceSinkInfo.getReduceSinkValueExpressions() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkValueExpressions())));
+  
+      LOG.debug("reduceSinkBucketColumnMap " +
+          (vectorReduceSinkInfo.getReduceSinkBucketColumnMap() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkBucketColumnMap())));
+      LOG.debug("reduceSinkBucketTypeInfos " +
+          (vectorReduceSinkInfo.getReduceSinkBucketTypeInfos() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkBucketTypeInfos())));
+      LOG.debug("reduceSinkBucketColumnVectorTypes " +
+          (vectorReduceSinkInfo.getReduceSinkBucketColumnVectorTypes() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkBucketColumnVectorTypes())));
+      LOG.debug("reduceSinkBucketExpressions " +
+          (vectorReduceSinkInfo.getReduceSinkBucketExpressions() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkBucketExpressions())));
+  
+      LOG.debug("reduceSinkPartitionColumnMap " +
+          (vectorReduceSinkInfo.getReduceSinkPartitionColumnMap() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkPartitionColumnMap())));
+      LOG.debug("reduceSinkPartitionTypeInfos " +
+          (vectorReduceSinkInfo.getReduceSinkPartitionTypeInfos() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkPartitionTypeInfos())));
+      LOG.debug("reduceSinkPartitionColumnVectorTypes " +
+          (vectorReduceSinkInfo.getReduceSinkPartitionColumnVectorTypes() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkPartitionColumnVectorTypes())));
+      LOG.debug("reduceSinkPartitionExpressions " +
+          (vectorReduceSinkInfo.getReduceSinkPartitionExpressions() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkPartitionExpressions())));
+    }
 
     if (LOG.isDebugEnabled()) {
       // Determine the name of our map or reduce task for debug tracing.
@@ -263,94 +295,49 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     if (context != null && !context.isEmpty()) {
       context = "_" + context.replace(" ","_");
     }
+    statsMap.put(Counter.RECORDS_OUT_INTERMEDIATE + context, recordCounter);
 
     reduceSkipTag = conf.getSkipTag();
     reduceTagByte = (byte) conf.getTag();
 
-    LOG.info("Using tag = " + reduceTagByte);
-
-    if (!isEmptyKey) {
-      keyBinarySortableSerializeWrite = BinarySortableSerializeWrite.with(
-              conf.getKeySerializeInfo().getProperties(), reduceSinkKeyColumnMap.length);
+    if (isLogInfoEnabled) {
+      LOG.info("Using tag = " + (int) reduceTagByte);
     }
 
-    if (!isEmptyValue) {
-      valueLazyBinarySerializeWrite = new LazyBinarySerializeWrite(reduceSinkValueColumnMap.length);
+    TableDesc keyTableDesc = conf.getKeySerializeInfo();
+    boolean[] columnSortOrder =
+        getColumnSortOrder(keyTableDesc.getProperties(), reduceSinkKeyColumnMap.length);
+    byte[] columnNullMarker =
+        getColumnNullMarker(keyTableDesc.getProperties(), reduceSinkKeyColumnMap.length, columnSortOrder);
+    byte[] columnNotNullMarker =
+        getColumnNotNullMarker(keyTableDesc.getProperties(), reduceSinkKeyColumnMap.length, columnSortOrder);
 
-      valueVectorSerializeRow =
-          new VectorSerializeRow<LazyBinarySerializeWrite>(
-              valueLazyBinarySerializeWrite);
-      valueVectorSerializeRow.init(reduceSinkValueTypeInfos, reduceSinkValueColumnMap);
+    keyBinarySortableSerializeWrite = new BinarySortableSerializeWrite(columnSortOrder,
+            columnNullMarker, columnNotNullMarker);
 
-      valueOutput = new Output();
-      valueVectorSerializeRow.setOutput(valueOutput);
-    }
+    valueLazyBinarySerializeWrite = new LazyBinarySerializeWrite(reduceSinkValueColumnMap.length);
+
+    valueVectorSerializeRow =
+        new VectorSerializeRow<LazyBinarySerializeWrite>(
+            valueLazyBinarySerializeWrite);
+    valueVectorSerializeRow.init(reduceSinkValueTypeInfos, reduceSinkValueColumnMap);
+
+    valueOutput = new Output();
+    valueVectorSerializeRow.setOutput(valueOutput);
 
     keyWritable = new HiveKey();
 
     valueBytesWritable = new BytesWritable();
 
-    int limit = conf.getTopN();
-    float memUsage = conf.getTopNMemoryUsage();
-
-    if (limit >= 0 && memUsage > 0) {
-      reducerHash = new TopNHash();
-      reducerHash.initialize(limit, memUsage, conf.isMapGroupBy(), this, conf, hconf);
-    }
-
     batchCounter = 0;
   }
 
-  protected void initializeEmptyKey(int tag) {
-
-    // Use the same logic as ReduceSinkOperator.toHiveKey.
-    //
-    if (tag == -1 || reduceSkipTag) {
-      keyWritable.setSize(0);
-    } else {
-      keyWritable.setSize(1);
-      keyWritable.get()[0] = reduceTagByte;
-    }
-    keyWritable.setDistKeyLength(0);
-    keyWritable.setHashCode(0);
-  }
-
-  // The collect method override for TopNHash.BinaryCollector
-  @Override
-  public void collect(byte[] key, byte[] value, int hash) throws IOException {
-    HiveKey keyWritable = new HiveKey(key, hash);
-    BytesWritable valueWritable = new BytesWritable(value);
-    doCollect(keyWritable, valueWritable);
-  }
-
-  protected void collect(HiveKey keyWritable, BytesWritable valueWritable)
-      throws HiveException, IOException {
-    if (reducerHash != null) {
-      // NOTE: partColsIsNull is only used for PTF, which isn't supported yet.
-      final int firstIndex =
-          reducerHash.tryStoreKey(keyWritable, /* partColsIsNull */ false);
-
-      if (firstIndex == TopNHash.EXCLUDE) {
-        return; // Nothing to do.
-      }
-
-      if (firstIndex == TopNHash.FORWARD) {
-        doCollect(keyWritable, valueWritable);
-      } else {
-        Preconditions.checkState(firstIndex >= 0);
-        reducerHash.storeValue(firstIndex, keyWritable.hashCode(), valueWritable, false);
-      }
-    } else {
-      doCollect(keyWritable, valueWritable);
-    }
-  }
-
-  private void doCollect(HiveKey keyWritable, BytesWritable valueWritable) throws IOException {
+  protected void collect(BytesWritable keyWritable, Writable valueWritable) throws IOException {
     // Since this is a terminal operator, update counters explicitly -
     // forward is not called
     if (null != out) {
       numRows++;
-      if (LOG.isInfoEnabled()) {
+      if (isLogInfoEnabled) {
         if (numRows == cntr) {
           cntr = logEveryNRows == 0 ? cntr * 10 : numRows + logEveryNRows;
           if (cntr < 0 || numRows < 0) {
@@ -373,15 +360,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   @Override
   protected void closeOp(boolean abort) throws HiveException {
-    if (!abort && reducerHash != null) {
-      reducerHash.flush();
-    }
-    runTimeNumRows = numRows;
     super.closeOp(abort);
     out = null;
-    reducerHash = null;
-    LOG.info(this + ": records written - " + numRows);
-    this.runTimeNumRows = numRows;
+    if (isLogInfoEnabled) {
+      LOG.info(toString() + ": records written - " + numRows);
+    }
+    recordCounter.set(numRows);
   }
 
   /**
@@ -402,7 +386,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   @Override
-  public VectorizationContext getOutputVectorizationContext() {
+  public VectorizationContext getOuputVectorizationContext() {
     return vContext;
   }
 
@@ -419,15 +403,5 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = _out;
-  }
-
-  @Override
-  public VectorizationContext getInputVectorizationContext() {
-    return vContext;
-  }
-
-  @Override
-  public VectorDesc getVectorDesc() {
-    return vectorDesc;
   }
 }

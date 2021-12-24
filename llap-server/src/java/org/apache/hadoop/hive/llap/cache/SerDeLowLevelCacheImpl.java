@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,47 +15,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.hadoop.hive.llap.cache;
 
-import com.google.common.base.Function;
-
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Predicate;
 
-import org.apache.hadoop.conf.Configurable;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.io.Allocator;
 import org.apache.hadoop.hive.common.io.DataCache.BooleanRef;
 import org.apache.hadoop.hive.common.io.DataCache.DiskRangeListFactory;
 import org.apache.hadoop.hive.common.io.encoded.MemoryBuffer;
-import org.apache.hadoop.hive.common.io.CacheTag;
 import org.apache.hadoop.hive.llap.DebugUtils;
 import org.apache.hadoop.hive.llap.cache.LowLevelCache.Priority;
 import org.apache.hadoop.hive.llap.io.api.impl.LlapIoImpl;
 import org.apache.hadoop.hive.llap.metrics.LlapDaemonCacheMetrics;
-import org.apache.hadoop.hive.llap.metrics.LlapMetricsSystem;
-import org.apache.hadoop.hive.llap.metrics.ReadWriteLockMetrics;
-import org.apache.hadoop.metrics2.MetricsSource;
-import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hive.common.util.Ref;
 import org.apache.orc.OrcProto;
 import org.apache.orc.OrcProto.ColumnEncoding;
 
-public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDump, Configurable {
+import com.google.common.base.Function;
+
+public class SerDeLowLevelCacheImpl implements LlapOomDebugDump {
   private static final int DEFAULT_CLEANUP_INTERVAL = 600;
-  private Configuration conf;
   private final Allocator allocator;
   private final AtomicInteger newEvictions = new AtomicInteger(0);
   private Thread cleanupThread = null;
@@ -63,27 +52,6 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
   private final LowLevelCachePolicy cachePolicy;
   private final long cleanupInterval;
   private final LlapDaemonCacheMetrics metrics;
-
-  /// Shared singleton MetricsSource instance for all FileData locks
-  private static final MetricsSource LOCK_METRICS;
-
-  static {
-    // create and register the MetricsSource for lock metrics
-    MetricsSystem ms = LlapMetricsSystem.instance();
-    ms.register("FileDataLockMetrics",
-                "Lock metrics for R/W locks around FileData instances",
-                LOCK_METRICS =
-                    ReadWriteLockMetrics.createLockMetricsSource("FileData"));
-  }
-
-  public static final class LlapSerDeDataBuffer extends BaseLlapDataBuffer {
-    public boolean isCached = false;
-
-    @Override
-    public void notifyEvicted(EvictionDispatcher evictionDispatcher, boolean isProactiveEviction) {
-      evictionDispatcher.notifyEvicted(this, isProactiveEviction);
-    }
-  }
 
   private static final class StripeInfoComparator implements
       Comparator<StripeData> {
@@ -106,18 +74,14 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
      * TODO: make more granular? We only care that each one reader sees consistent boundaries.
      *       So, we could shallow-copy the stripes list, then have individual locks inside each.
      */
-    private final ReadWriteLock rwLock;
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Object fileKey;
     private final int colCount;
     private ArrayList<StripeData> stripes;
 
-    public FileData(Configuration conf, Object fileKey, int colCount) {
+    public FileData(Object fileKey, int colCount) {
       this.fileKey = fileKey;
       this.colCount = colCount;
-
-      rwLock = ReadWriteLockMetrics.wrap(conf,
-                                         new ReentrantReadWriteLock(),
-                                         LOCK_METRICS);
     }
 
     public void toString(StringBuilder sb) {
@@ -165,7 +129,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
 
     private final long rowCount;
     private final OrcProto.ColumnEncoding[] encodings;
-    private LlapSerDeDataBuffer[][][] data; // column index, stream type, buffers
+    private LlapDataBuffer[][][] data; // column index, stream type, buffers
 
     public StripeData(long knownTornStart, long firstStart, long lastStart, long lastEnd,
         long rowCount, ColumnEncoding[] encodings) {
@@ -175,7 +139,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
       this.lastEnd = lastEnd;
       this.encodings = encodings;
       this.rowCount = rowCount;
-      this.data = encodings == null ? null : new LlapSerDeDataBuffer[encodings.length][][];
+      this.data = encodings == null ? null : new LlapDataBuffer[encodings.length][][];
     }
  
     @Override
@@ -208,7 +172,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
       return encodings;
     }
 
-    public LlapSerDeDataBuffer[][][] getData() {
+    public LlapDataBuffer[][][] getData() {
       return data;
     }
 
@@ -227,18 +191,18 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
     }
   }
 
-  public static String toString(LlapSerDeDataBuffer[][][] data) {
+  public static String toString(LlapDataBuffer[][][] data) {
     if (data == null) return "null";
     StringBuilder sb = new StringBuilder("[");
     for (int i = 0; i < data.length; ++i) {
-      LlapSerDeDataBuffer[][] colData = data[i];
+      LlapDataBuffer[][] colData = data[i];
       if (colData == null) {
         sb.append("null, ");
         continue;
       }
       sb.append("colData [");
       for (int j = 0; j < colData.length; ++j) {
-        LlapSerDeDataBuffer[] streamData = colData[j];
+        LlapDataBuffer[] streamData = colData[j];
         if (streamData == null) {
           sb.append("null, ");
           continue;
@@ -256,18 +220,19 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
   }
   
 
-  public static String toString(LlapSerDeDataBuffer[][] data) {
+  public static String toString(LlapDataBuffer[][] data) {
     if (data == null) return "null";
     StringBuilder sb = new StringBuilder("[");
     for (int j = 0; j < data.length; ++j) {
-      LlapSerDeDataBuffer[] streamData = data[j];
+      LlapDataBuffer[] streamData = data[j];
       if (streamData == null) {
         sb.append("null, ");
         continue;
       }
       sb.append("[");
       for (int k = 0; k < streamData.length; ++k) {
-        sb.append(streamData[k]);
+        LlapDataBuffer s = streamData[k];
+        sb.append(LlapDataBuffer.toDataString(s));
       }
       sb.append("], ");
     }
@@ -318,7 +283,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
           throw new IOException("Includes " + DebugUtils.toString(includes) + " for "
               + cached.colCount + " columns");
         }
-        FileData result = new FileData(conf, cached.fileKey, cached.colCount);
+        FileData result = new FileData(cached.fileKey, cached.colCount);
         if (gotAllData != null) {
           gotAllData.value = true;
         }
@@ -440,11 +405,11 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
         continue;
       }
       stripe.encodings[colIx] = cStripe.encodings[colIx];
-      LlapSerDeDataBuffer[][] cColData = cStripe.data[colIx];
+      LlapDataBuffer[][] cColData = cStripe.data[colIx];
       assert cColData != null;
       for (int streamIx = 0;
           cColData != null && streamIx < cColData.length; ++streamIx) {
-        LlapSerDeDataBuffer[] streamData = cColData[streamIx];
+        LlapDataBuffer[] streamData = cColData[streamIx];
         // Note: this relies on the fact that we always evict the entire column, so if
         //       we have the column data, we assume we have all the streams we need.
         if (streamData == null) continue;
@@ -506,7 +471,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
     }
   }
 
-  private boolean lockBuffer(LlapSerDeDataBuffer buffer, boolean doNotifyPolicy) {
+  private boolean lockBuffer(LlapDataBuffer buffer, boolean doNotifyPolicy) {
     int rc = buffer.incRef();
     if (rc > 0) {
       metrics.incrCacheNumLockedBuffers();
@@ -518,42 +483,8 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
     return rc > 0;
   }
 
-  public long markBuffersForProactiveEviction(Predicate<CacheTag> predicate, boolean isInstantDeallocation) {
-    long markedBytes = 0;
-    // Proactive eviction does not need to be perfectly accurate - the iterator returned here might be missing some
-    // concurrent inserts / removals but it's fine for us here.
-    Collection<FileCache<FileData>> fileCaches = cache.values();
-    for (FileCache<FileData> fileCache : fileCaches) {
-      if (predicate.test(fileCache.getTag()) && fileCache.incRef()) {
-        // Locked on subcache so that the async cleaner won't pull out buffers in an unlikely scenario.
-        try {
-          ArrayList<StripeData> stripeDataList = fileCache.getCache().getData();
-          for (StripeData stripeData : stripeDataList) {
-            for (int i = 0; i < stripeData.getData().length; ++i) {
-              LlapSerDeDataBuffer[][] colData = stripeData.getData()[i];
-              if (colData == null) continue;
-              for (int j = 0; j < colData.length; ++j) {
-                LlapSerDeDataBuffer[] streamData = colData[j];
-                if (streamData == null) continue;
-                for (int k = 0; k < streamData.length; ++k) {
-                  markedBytes += streamData[k].markForEviction();
-                  if (isInstantDeallocation) {
-                    allocator.deallocate(streamData[k]);
-                  }
-                }
-              }
-            }
-          }
-        } finally {
-          fileCache.decRef();
-        }
-      }
-    }
-    return markedBytes;
-  }
-
   public void putFileData(final FileData data, Priority priority,
-      LowLevelCacheCounters qfCounters, CacheTag tag) {
+      LowLevelCacheCounters qfCounters) {
     // TODO: buffers are accounted for at allocation time, but ideally we should report the memory
     //       overhead from the java objects to memory manager and remove it when discarding file.
     if (data.stripes == null || data.stripes.isEmpty()) {
@@ -570,7 +501,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
         public FileData apply(Void input) {
           return data; // If we don't have a file cache, we will add this one as is.
         }
-      }, tag);
+      });
       cached = subCache.getCache();
     } finally {
       if (data != cached) {
@@ -583,7 +514,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
       }
       try {
         for (StripeData si : data.stripes) {
-          lockAllBuffersForPut(si, priority, subCache);
+          lockAllBuffersForPut(si, priority);
         }
         if (data == cached) {
           if (LlapIoImpl.CACHE_LOGGER.isTraceEnabled()) {
@@ -628,31 +559,30 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
     }
   }
 
-  private void lockAllBuffersForPut(StripeData si, Priority priority, FileCache cache) {
+  private void lockAllBuffersForPut(StripeData si, Priority priority) {
     for (int i = 0; i < si.data.length; ++i) {
-      LlapSerDeDataBuffer[][] colData = si.data[i];
+      LlapDataBuffer[][] colData = si.data[i];
       if (colData == null) continue;
       for (int j = 0; j < colData.length; ++j) {
-        LlapSerDeDataBuffer[] streamData = colData[j];
+        LlapDataBuffer[] streamData = colData[j];
         if (streamData == null) continue;
         for (int k = 0; k < streamData.length; ++k) {
           boolean canLock = lockBuffer(streamData[k], false); // false - not in cache yet
           assert canLock;
-          streamData[k].setFileCache(cache);
           cachePolicy.cache(streamData[k], priority);
-          streamData[k].isCached = true;
+          streamData[k].declaredCachedLength = streamData[k].getByteBufferRaw().remaining();
         }
       }
     }
   }
 
   private void handleRemovedStripeInfo(StripeData removed) {
-    for (LlapSerDeDataBuffer[][] colData : removed.data) {
+    for (LlapDataBuffer[][] colData : removed.data) {
       handleRemovedColumnData(colData);
     }
   }
 
-  private void handleRemovedColumnData(LlapSerDeDataBuffer[][] removed) {
+  private void handleRemovedColumnData(LlapDataBuffer[][] removed) {
     // TODO: could we tell the policy that we don't care about these and have them evicted? or we
     //       could just deallocate them when unlocked, and free memory + handle that in eviction.
     //       For now, just abandon the blocks - eventually, they'll get evicted.
@@ -673,7 +603,7 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
           && !to.encodings[colIx].equals(from.encodings[colIx])) {
         throw new RuntimeException("Different encodings at " + colIx + ": " + from + "; " + to);
       }
-      LlapSerDeDataBuffer[][] fromColData = from.data[colIx];
+      LlapDataBuffer[][] fromColData = from.data[colIx];
       if (fromColData != null) {
         if (to.data[colIx] != null) {
           // Note: we assume here that the data that was returned to the caller from cache will not
@@ -686,22 +616,12 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
     } 
   }
 
-  @Override
-  public void decRefBuffer(MemoryBuffer buffer) {
-    unlockBuffer((LlapSerDeDataBuffer)buffer, true);
-  }
-
-  @Override
-  public void decRefBuffers(List<MemoryBuffer> cacheBuffers) {
-    for (MemoryBuffer b : cacheBuffers) {
-      unlockBuffer((LlapSerDeDataBuffer)b, true);
-    }
-  }
-
-  private void unlockBuffer(LlapSerDeDataBuffer buffer, boolean handleLastDecRef) {
+  private void unlockBuffer(LlapDataBuffer buffer, boolean handleLastDecRef) {
     boolean isLastDecref = (buffer.decRef() == 0);
     if (handleLastDecRef && isLastDecref) {
-      if (buffer.isCached) {
+      // This is kind of not pretty, but this is how we detect whether buffer was cached.
+      // We would always set this for lookups at put time.
+      if (buffer.declaredCachedLength != LlapDataBuffer.UNKNOWN_CACHED_LENGTH) {
         cachePolicy.notifyUnlock(buffer);
       } else {
         if (LlapIoImpl.CACHE_LOGGER.isTraceEnabled()) {
@@ -713,13 +633,15 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
     metrics.decrCacheNumLockedBuffers();
   }
 
+  private static final ByteBuffer fakeBuf = ByteBuffer.wrap(new byte[1]);
+  public static LlapDataBuffer allocateFake() {
+    LlapDataBuffer fake = new LlapDataBuffer();
+    fake.initialize(-1, fakeBuf, 0, 1);
+    return fake;
+  }
+
   public final void notifyEvicted(MemoryBuffer buffer) {
     newEvictions.incrementAndGet();
-
-    // FileCacheCleanupThread might we waiting for eviction increment
-    synchronized(newEvictions) {
-      newEvictions.notifyAll();
-    }
   }
 
   private final class CleanupThread extends FileCacheCleanupThread<FileData> {
@@ -742,14 +664,14 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
       try {
         for (StripeData sd : fd.stripes) {
           for (int colIx = 0; colIx < sd.data.length; ++colIx) {
-            LlapSerDeDataBuffer[][] colData = sd.data[colIx];
+            LlapDataBuffer[][] colData = sd.data[colIx];
             if (colData == null) continue;
             boolean hasAllData = true;
             for (int j = 0; (j < colData.length) && hasAllData; ++j) {
-              LlapSerDeDataBuffer[] streamData = colData[j];
+              LlapDataBuffer[] streamData = colData[j];
               if (streamData == null) continue;
               for (int k = 0; k < streamData.length; ++k) {
-                LlapSerDeDataBuffer buf = streamData[k];
+                LlapDataBuffer buf = streamData[k];
                 hasAllData = hasAllData && lockBuffer(buf, false);
                 if (!hasAllData) break;
                 unlockBuffer(buf, true);
@@ -769,84 +691,19 @@ public class SerDeLowLevelCacheImpl implements BufferUsageManager, LlapIoDebugDu
   }
 
   @Override
-  public boolean incRefBuffer(MemoryBuffer buffer) {
-    // notifyReused implies that buffer is already locked; it's also called once for new
-    // buffers that are not cached yet. Don't notify cache policy.
-    return lockBuffer(((LlapSerDeDataBuffer)buffer), false);
-  }
-
-  @Override
-  public Allocator getAllocator() {
-    return allocator;
-  }
-
-  @Override
-  public void setConf(Configuration newConf) {
-    this.conf = newConf;
-  }
-
-  @Override
-  public Configuration getConf() {
-    return conf;
-  }
-
-  @Override
-  public void debugDumpShort(StringBuilder sb) {
-    sb.append("\nSerDe cache state ");
-    int allLocked = 0, allUnlocked = 0, allEvicted = 0, allMoving = 0, allMarked = 0;
+  public String debugDumpForOom() {
+    StringBuilder sb = new StringBuilder("File cache state ");
     for (Map.Entry<Object, FileCache<FileData>> e : cache.entrySet()) {
       if (!e.getValue().incRef()) continue;
       try {
-        FileData fd = e.getValue().getCache();
-        int fileLocked = 0, fileUnlocked = 0, fileEvicted = 0, fileMoving = 0, fileMarked = 0;
-        for (StripeData stripe : fd.stripes) {
-          if (stripe.data == null) continue;
-          for (int i = 0; i < stripe.data.length; ++i) {
-            LlapSerDeDataBuffer[][] colData = stripe.data[i];
-            if (colData == null) continue;
-            for (int j = 0; j < colData.length; ++j) {
-              LlapSerDeDataBuffer[] streamData = colData[j];
-              if (streamData == null) continue;
-              for (int k = 0; k < streamData.length; ++k) {
-                int newRc = streamData[k].incRef();
-                if (newRc < 0) {
-                  if (newRc == LlapAllocatorBuffer.INCREF_EVICTED) {
-                    ++fileEvicted;
-                  } else if (newRc == LlapAllocatorBuffer.INCREF_FAILED) {
-                    ++fileMoving;
-                  }
-                  continue;
-                }
-                if (streamData[k].isMarkedForEviction()) {
-                  ++fileMarked;
-                }
-                try {
-                  if (newRc > 1) { // We hold one refcount.
-                    ++fileLocked;
-                  } else {
-                    ++fileUnlocked;
-                  }
-                } finally {
-                  streamData[k].decRef();
-                }
-              }
-            }
-          }
-        }
-        allLocked += fileLocked;
-        allUnlocked += fileUnlocked;
-        allEvicted += fileEvicted;
-        allMoving += fileMoving;
-        allMarked += fileMarked;
-        sb.append("\n  file " + e.getKey() + ": " + fileLocked + " locked, " + fileUnlocked
-            + " unlocked, " + fileEvicted + " evicted, " + fileMoving + " being moved, " + fileMarked
-            + " marked for eviction; ");
-        sb.append(fd.colCount).append(" columns, ").append(fd.stripes.size()).append(" stripes");
+        sb.append("\n  file " + e.getKey());
+        sb.append("\n    [");
+        e.getValue().getCache().toString(sb);
+        sb.append("]");
       } finally {
         e.getValue().decRef();
       }
     }
-    sb.append("\nSerDe cache summary: " + allLocked + " locked, " + allUnlocked + " unlocked, "
-        + allEvicted + " evicted, " + allMoving + " being moved, " + allMarked + " marked for eviction");
+    return sb.toString();
   }
 }

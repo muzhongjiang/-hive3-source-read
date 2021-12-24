@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,8 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import org.apache.hadoop.hive.ql.exec.FilterOperator;
 import org.apache.hadoop.hive.ql.exec.JoinOperator;
@@ -37,12 +35,12 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.SelectOperator;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -62,12 +60,12 @@ public class NonBlockingOpDeDupProc extends Transform {
     // 1. We apply the transformation
     String SEL = SelectOperator.getOperatorName();
     String FIL = FilterOperator.getOperatorName();
-    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
     opRules.put(new RuleRegExp("R1", SEL + "%" + SEL + "%"), new SelectDedup(pctx));
     opRules.put(new RuleRegExp("R2", FIL + "%" + FIL + "%"), new FilterDedup());
 
-    SemanticDispatcher disp = new DefaultRuleDispatcher(null, opRules, null);
-    SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+    Dispatcher disp = new DefaultRuleDispatcher(null, opRules, null);
+    GraphWalker ogw = new DefaultGraphWalker(disp);
 
     List<Node> topNodes = new ArrayList<Node>();
     topNodes.addAll(pctx.getTopOps().values());
@@ -75,11 +73,7 @@ public class NonBlockingOpDeDupProc extends Transform {
     return pctx;
   }
 
-  public static <K, V> Map<K, V> zipToMap(List<K> keys, List<V> values) {
-    return IntStream.range(0, keys.size()).boxed().collect(Collectors.toMap(keys::get, values::get));
-  }
-
-  private class SelectDedup implements SemanticNodeProcessor {
+  private class SelectDedup implements NodeProcessor {
 
     private ParseContext pctx;
 
@@ -116,8 +110,6 @@ public class NonBlockingOpDeDupProc extends Transform {
           // we do not need to update the ColumnExprMap in the parent SelectOperator.
           pSEL.getConf().setColList(ExprNodeDescUtils.backtrack(cSELColList, cSEL, pSEL, true));
           pSEL.getConf().setOutputColumnNames(cSELOutputColumnNames);
-
-          pSEL.setColumnExprMap(zipToMap(cSELOutputColumnNames, pSEL.getConf().getColList()));
         } else {
           // If the child SelectOperator has the ColumnExprMap,
           // we need to update the ColumnExprMap in the parent SelectOperator.
@@ -219,7 +211,7 @@ public class NonBlockingOpDeDupProc extends Transform {
     }
   }
 
-  private class FilterDedup implements SemanticNodeProcessor {
+  private class FilterDedup implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,

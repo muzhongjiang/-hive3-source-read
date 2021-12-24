@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.avro.Schema;
@@ -100,17 +101,6 @@ public class TestAvroObjectInspectorGenerator {
       "  ]\n" +
       "}";
   public static final String NULLABLE_RECORD_SCHEMA = "[\"null\", " + RECORD_SCHEMA + "]";
-  public static final String SINGLE_ITEM_UNION_SCHEMA = "{\n" +
-      "  \"namespace\": \"test.a.rossa\",\n" +
-      "  \"name\": \"oneUnion\",\n" +
-      "  \"type\": \"record\",\n" +
-      "  \"fields\": [\n" +
-      "    {\n" +
-      "      \"name\":\"aUnion\",\n" +
-      "      \"type\":[\"string\"]\n" +
-      "    }\n" +
-      "  ]\n" +
-      "}";
   public static final String UNION_SCHEMA = "{\n" +
       "  \"namespace\": \"test.a.rossa\",\n" +
       "  \"name\": \"oneUnion\",\n" +
@@ -218,16 +208,6 @@ public class TestAvroObjectInspectorGenerator {
       "  \"name\": \"bytesTest\",\n" +
       "  \"fields\" : [\n" +
       "    {\"name\":\"bytesField\", \"type\":\"bytes\"}\n" +
-      "  ]\n" +
-      "}";
-
-  public static final String TIMESTAMP_SCHEMA = "{\n" +
-      "  \"type\": \"record\", \n" +
-      "  \"name\": \"timestampTest\",\n" +
-      "  \"fields\" : [\n" +
-      "    {\"name\":\"timestampField\", " +
-      "     \"type\":\"" + AvroSerDe.AVRO_LONG_TYPE_NAME + "\", " +
-      "         \"logicalType\":\"" + AvroSerDe.TIMESTAMP_TYPE_NAME + "\"}" +
       "  ]\n" +
       "}";
 
@@ -467,8 +447,8 @@ public class TestAvroObjectInspectorGenerator {
     StructTypeInfo structTypeInfo = (StructTypeInfo)typeInfo;
 
     // Check individual elements of subrecord
-    List<String> allStructFieldNames = structTypeInfo.getAllStructFieldNames();
-    List<TypeInfo> allStructFieldTypeInfos = structTypeInfo.getAllStructFieldTypeInfos();
+    ArrayList<String> allStructFieldNames = structTypeInfo.getAllStructFieldNames();
+    ArrayList<TypeInfo> allStructFieldTypeInfos = structTypeInfo.getAllStructFieldTypeInfos();
     assertEquals(allStructFieldNames.size(), 3);
     String[] names = new String[]{"int1", "boolean1", "long1"};
     String [] typeInfoStrings = new String [] {"int", "boolean", "bigint"};

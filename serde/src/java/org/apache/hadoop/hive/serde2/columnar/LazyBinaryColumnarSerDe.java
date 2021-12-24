@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -61,12 +61,9 @@ public class LazyBinaryColumnarSerDe extends ColumnarSerDeBase {
   }
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-      throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
-
-    LazySerDeParameters serdeParams = new LazySerDeParameters(configuration, properties, getClass().getName());
-
+  public void initialize(Configuration conf, Properties tbl) throws SerDeException {
+    LazySerDeParameters serdeParams = new LazySerDeParameters(conf, tbl, getClass().getName());
+    
     columnNames = serdeParams.getColumnNames();
     columnTypes = serdeParams.getColumnTypes();
 
@@ -74,12 +71,12 @@ public class LazyBinaryColumnarSerDe extends ColumnarSerDeBase {
         columnNames, columnTypes);
     int size = columnTypes.size();
     List<Integer> notSkipIDs = new ArrayList<Integer>();
-    if (!this.configuration.isPresent() || ColumnProjectionUtils.isReadAllColumns(this.configuration.get())) {
-      for (int i = 0; i < size; i++) {
+    if (conf == null || ColumnProjectionUtils.isReadAllColumns(conf)) {
+      for (int i = 0; i < size; i++ ) {
         notSkipIDs.add(i);
       }
     } else {
-      notSkipIDs = ColumnProjectionUtils.getReadColumnIDs(this.configuration.get());
+      notSkipIDs = ColumnProjectionUtils.getReadColumnIDs(conf);
     }
     cachedLazyStruct = new LazyBinaryColumnarStruct(cachedObjectInspector, notSkipIDs);
 

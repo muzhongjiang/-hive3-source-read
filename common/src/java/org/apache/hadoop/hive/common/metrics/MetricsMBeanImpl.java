@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -75,10 +75,9 @@ public class MetricsMBeanImpl implements  MetricsMBean {
           synchronized(metricsMap) {
             attributeInfos = new MBeanAttributeInfo[metricsMap.size()];
             int i = 0;
-            for (Map.Entry<String, Object> entry : metricsMap.entrySet()) {
-              attributeInfos[i] = new MBeanAttributeInfo(entry.getKey(),
-                      metricsMap.get(entry.getKey()).getClass().getName(), entry.getKey(),
-                      true, true/*writable*/, false);
+            for (String key : metricsMap.keySet()) {
+              attributeInfos[i] = new MBeanAttributeInfo(
+                  key, metricsMap.get(key).getClass().getName(), key, true, true/*writable*/, false);
               i++;
             }
             dirtyAttributeInfoCache = false;

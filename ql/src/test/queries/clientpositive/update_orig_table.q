@@ -1,4 +1,3 @@
---! qt:dataset:alltypesorc
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 
@@ -22,12 +21,8 @@ create table acid_uot(
     cboolean1 BOOLEAN,
     cboolean2 BOOLEAN) clustered by (cint) into 1 buckets stored as orc location '${system:test.tmp.dir}/update_orig_table' TBLPROPERTIES ('transactional'='true');
 
-select * from acid_uot where cint < -1070551679;
-
 update acid_uot set cstring1 = 'fred' where cint < -1070551679;
 
 select * from acid_uot where cstring1 = 'fred';
-
-select * from acid_uot where cint < -1070551679;
 
 dfs -rmr ${system:test.tmp.dir}/update_orig_table;

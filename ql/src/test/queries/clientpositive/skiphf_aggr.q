@@ -1,4 +1,3 @@
-SET hive.vectorized.execution.enabled=false;
 DROP TABLE IF EXISTS skipHTbl;
 
 CREATE TABLE skipHTbl (a int) 

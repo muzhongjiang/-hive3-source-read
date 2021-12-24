@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.ql.parse.SemanticException;
  * Rule interface for Nodes Used in Node dispatching to dispatch process/visitor
  * functions for Nodes.
  */
-public class RuleRegExp implements SemanticRule {
+public class RuleRegExp implements Rule {
 
   private final String ruleName;
   private final Pattern patternWithWildCardChar;
@@ -80,9 +80,6 @@ public class RuleRegExp implements SemanticRule {
       if (wildCards.contains(pc)) {
         hasWildCard = true;
         ret = ret && (pc == wcc);
-        if (!ret) {
-          return false;
-        }
       }
     }
     return ret && hasWildCard;
@@ -90,7 +87,7 @@ public class RuleRegExp implements SemanticRule {
 
   /**
    * The rule specified by the regular expression. Note that, the regular
-   * expression is specified in terms of Node name. For eg: TS.*RS -&gt; means
+   * expression is specified in terms of Node name. For eg: TS.*RS -> means
    * TableScan Node followed by anything any number of times followed by
    * ReduceSink
    * 

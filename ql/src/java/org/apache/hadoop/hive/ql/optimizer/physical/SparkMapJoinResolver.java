@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -35,13 +35,12 @@ import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.ConditionalTask;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
-import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.apache.hadoop.hive.ql.exec.SparkHashTableSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.spark.SparkTask;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
 import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.lib.TaskGraphWalker;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -61,12 +60,12 @@ import org.apache.hadoop.hive.ql.plan.SparkWork;
 public class SparkMapJoinResolver implements PhysicalPlanResolver {
 
   // prevents a task from being processed multiple times
-  private final Set<Task<?>> visitedTasks = new HashSet<>();
+  private final Set<Task<? extends Serializable>> visitedTasks = new HashSet<>();
 
   @Override
   public PhysicalContext resolve(PhysicalContext pctx) throws SemanticException {
 
-    SemanticDispatcher dispatcher = new SparkMapJoinTaskDispatcher(pctx);
+    Dispatcher dispatcher = new SparkMapJoinTaskDispatcher(pctx);
     TaskGraphWalker graphWalker = new TaskGraphWalker(dispatcher);
 
     ArrayList<Node> topNodes = new ArrayList<Node>();
@@ -78,7 +77,7 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
   // Check whether the specified BaseWork's operator tree contains a operator
   // of the specified operator class
   private boolean containsOp(BaseWork work, Class<?> clazz) {
-    Set<Operator<?>> matchingOps = OperatorUtils.getOp(work, clazz);
+    Set<Operator<?>> matchingOps = getOp(work, clazz);
     return matchingOps != null && !matchingOps.isEmpty();
   }
 
@@ -91,8 +90,36 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
     return false;
   }
 
+  public static Set<Operator<?>> getOp(BaseWork work, Class<?> clazz) {
+    Set<Operator<?>> ops = new HashSet<Operator<?>>();
+    if (work instanceof MapWork) {
+      Collection<Operator<?>> opSet = ((MapWork) work).getAliasToWork().values();
+      Stack<Operator<?>> opStack = new Stack<Operator<?>>();
+      opStack.addAll(opSet);
+
+      while (!opStack.empty()) {
+        Operator<?> op = opStack.pop();
+        ops.add(op);
+        if (op.getChildOperators() != null) {
+          opStack.addAll(op.getChildOperators());
+        }
+      }
+    } else {
+      ops.addAll(work.getAllOperators());
+    }
+
+    Set<Operator<? extends OperatorDesc>> matchingOps =
+      new HashSet<Operator<? extends OperatorDesc>>();
+    for (Operator<? extends OperatorDesc> op : ops) {
+      if (clazz.isInstance(op)) {
+        matchingOps.add(op);
+      }
+    }
+    return matchingOps;
+  }
+
   @SuppressWarnings("unchecked")
-  class SparkMapJoinTaskDispatcher implements SemanticDispatcher {
+  class SparkMapJoinTaskDispatcher implements Dispatcher {
 
     private final PhysicalContext physicalContext;
 
@@ -166,7 +193,7 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
               containsOp(work, MapJoinOperator.class)) {
             work.setMapRedLocalWork(new MapredLocalWork());
           }
-          Set<Operator<?>> ops = OperatorUtils.getOp(work, MapJoinOperator.class);
+          Set<Operator<?>> ops = getOp(work, MapJoinOperator.class);
           if (ops == null || ops.isEmpty()) {
             continue;
           }
@@ -196,7 +223,7 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
 
           for (BaseWork parentWork : originalWork.getParents(work)) {
             Set<Operator<?>> hashTableSinkOps =
-                OperatorUtils.getOp(parentWork, SparkHashTableSinkOperator.class);
+                getOp(parentWork, SparkHashTableSinkOperator.class);
             if (hashTableSinkOps == null || hashTableSinkOps.isEmpty()) {
               continue;
             }
@@ -236,7 +263,7 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
         return createdTaskMap.get(sparkWork);
       }
       SparkTask resultTask = originalTask.getWork() == sparkWork ?
-          originalTask : (SparkTask) TaskFactory.get(sparkWork);
+          originalTask : (SparkTask) TaskFactory.get(sparkWork, physicalContext.conf);
       if (!dependencyGraph.get(sparkWork).isEmpty()) {
         for (SparkWork parentWork : dependencyGraph.get(sparkWork)) {
           SparkTask parentTask =
@@ -245,11 +272,11 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
         }
       } else {
         if (originalTask != resultTask) {
-          List<Task<?>> parentTasks = originalTask.getParentTasks();
+          List<Task<? extends Serializable>> parentTasks = originalTask.getParentTasks();
           if (parentTasks != null && parentTasks.size() > 0) {
             // avoid concurrent modification
-            originalTask.setParentTasks(new ArrayList<Task<?>>());
-            for (Task<?> parentTask : parentTasks) {
+            originalTask.setParentTasks(new ArrayList<Task<? extends Serializable>>());
+            for (Task<? extends Serializable> parentTask : parentTasks) {
               parentTask.addDependentTask(resultTask);
               parentTask.removeDependentTask(originalTask);
             }
@@ -271,12 +298,12 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
     @Override
     public Object dispatch(Node nd, Stack<Node> stack, Object... nos)
         throws SemanticException {
-      Task<?> currentTask = (Task<?>) nd;
+      Task<? extends Serializable> currentTask = (Task<? extends Serializable>) nd;
       if(currentTask.isMapRedTask()) {
         if (currentTask instanceof ConditionalTask) {
-          List<Task<?>> taskList =
+          List<Task<? extends Serializable>> taskList =
               ((ConditionalTask) currentTask).getListTasks();
-          for (Task<?> tsk : taskList) {
+          for (Task<? extends Serializable> tsk : taskList) {
             if (tsk instanceof SparkTask) {
               processCurrentTask((SparkTask) tsk, (ConditionalTask) currentTask);
               visitedTasks.add(tsk);
@@ -350,7 +377,7 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
       ConditionalWork conditionalWork = conditionalTask.getWork();
       SparkWork originWork = originalTask.getWork();
       SparkWork newWork = newTask.getWork();
-      List<Task<?>> listTask = conditionalTask.getListTasks();
+      List<Task<? extends Serializable>> listTask = conditionalTask.getListTasks();
       List<Serializable> listWork = (List<Serializable>) conditionalWork.getListWorks();
       int taskIndex = listTask.indexOf(originalTask);
       int workIndex = listWork.indexOf(originWork);
@@ -365,15 +392,15 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
         ConditionalResolverSkewJoin.ConditionalResolverSkewJoinCtx context =
             (ConditionalResolverSkewJoin.ConditionalResolverSkewJoinCtx) conditionalTask
                 .getResolverCtx();
-        HashMap<Path, Task<?>> bigKeysDirToTaskMap = context
+        HashMap<Path, Task<? extends Serializable>> bigKeysDirToTaskMap = context
             .getDirToTaskMap();
         // to avoid concurrent modify the hashmap
-        HashMap<Path, Task<?>> newbigKeysDirToTaskMap =
-            new HashMap<Path, Task<?>>();
+        HashMap<Path, Task<? extends Serializable>> newbigKeysDirToTaskMap =
+            new HashMap<Path, Task<? extends Serializable>>();
         // reset the resolver
-        for (Map.Entry<Path, Task<?>> entry :
+        for (Map.Entry<Path, Task<? extends Serializable>> entry :
             bigKeysDirToTaskMap.entrySet()) {
-          Task<?> task = entry.getValue();
+          Task<? extends Serializable> task = entry.getValue();
           Path bigKeyDir = entry.getKey();
           if (task.equals(originalTask)) {
             newbigKeysDirToTaskMap.put(bigKeyDir, newTask);
@@ -384,7 +411,7 @@ public class SparkMapJoinResolver implements PhysicalPlanResolver {
         context.setDirToTaskMap(newbigKeysDirToTaskMap);
         // update no skew task
         if (context.getNoSkewTask() != null && context.getNoSkewTask().equals(originalTask)) {
-          List<Task<?>> noSkewTask = new ArrayList<>();
+          List<Task<? extends Serializable>> noSkewTask = new ArrayList<>();
           noSkewTask.add(newTask);
           context.setNoSkewTask(noSkewTask);
         }

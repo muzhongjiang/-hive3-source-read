@@ -1,6 +1,3 @@
---! qt:dataset:srcpart
---! qt:dataset:src1
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 explain
 select srcpart.key, src1.value from

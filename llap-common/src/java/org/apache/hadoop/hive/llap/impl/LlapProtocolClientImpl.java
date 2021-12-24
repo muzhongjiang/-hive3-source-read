@@ -23,7 +23,6 @@ import java.security.PrivilegedExceptionAction;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.QueryCompleteRequestProto;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.QueryCompleteResponseProto;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.SourceStateUpdatedRequestProto;
@@ -32,8 +31,6 @@ import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.SubmitWor
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.SubmitWorkResponseProto;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.TerminateFragmentRequestProto;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.TerminateFragmentResponseProto;
-import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.UpdateFragmentRequestProto;
-import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.UpdateFragmentResponseProto;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.ProtocolProxy;
@@ -76,20 +73,9 @@ public class LlapProtocolClientImpl implements LlapProtocolBlockingPB {
   }
 
   @Override
-  public LlapDaemonProtocolProtos.RegisterDagResponseProto registerDag(
-      RpcController controller,
-      LlapDaemonProtocolProtos.RegisterDagRequestProto request)
-      throws ServiceException {
-    try {
-      return getProxy().registerDag(null, request);
-    } catch (IOException e) {
-      throw new ServiceException(e);
-    }
-  }
-
-  @Override
-  public SubmitWorkResponseProto submitWork(
-      RpcController controller, SubmitWorkRequestProto request) throws ServiceException {
+  public SubmitWorkResponseProto submitWork(RpcController controller,
+                                                                     SubmitWorkRequestProto request) throws
+      ServiceException {
     try {
       return getProxy().submitWork(null, request);
     } catch (IOException e) {
@@ -99,7 +85,8 @@ public class LlapProtocolClientImpl implements LlapProtocolBlockingPB {
 
   @Override
   public SourceStateUpdatedResponseProto sourceStateUpdated(RpcController controller,
-      SourceStateUpdatedRequestProto request) throws ServiceException {
+                                                            SourceStateUpdatedRequestProto request) throws
+      ServiceException {
     try {
       return getProxy().sourceStateUpdated(null, request);
     } catch (IOException e) {
@@ -124,16 +111,6 @@ public class LlapProtocolClientImpl implements LlapProtocolBlockingPB {
       TerminateFragmentRequestProto request) throws ServiceException {
     try {
       return getProxy().terminateFragment(null, request);
-    } catch (IOException e) {
-      throw new ServiceException(e);
-    }
-  }
-
-  @Override
-  public UpdateFragmentResponseProto updateFragment(RpcController controller,
-      UpdateFragmentRequestProto request) throws ServiceException {
-    try {
-      return getProxy().updateFragment(null, request);
     } catch (IOException e) {
       throw new ServiceException(e);
     }

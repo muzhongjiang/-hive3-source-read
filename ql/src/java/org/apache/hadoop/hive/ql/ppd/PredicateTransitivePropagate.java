@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -35,13 +35,13 @@ import org.apache.hadoop.hive.ql.exec.OperatorFactory;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.LevelOrderWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.optimizer.Transform;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
@@ -64,7 +64,7 @@ public class PredicateTransitivePropagate extends Transform {
   public ParseContext transform(ParseContext pctx) throws SemanticException {
     pGraphContext = pctx;
 
-    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
     opRules.put(new RuleRegExp("R1", "(" +
         FilterOperator.getOperatorName() + "%" +
         ReduceSinkOperator.getOperatorName() + "%" +
@@ -73,8 +73,8 @@ public class PredicateTransitivePropagate extends Transform {
     // The dispatcher fires the processor corresponding to the closest matching
     // rule and passes the context along
     TransitiveContext context = new TransitiveContext();
-    SemanticDispatcher disp = new DefaultRuleDispatcher(null, opRules, context);
-    SemanticGraphWalker ogw = new LevelOrderWalker(disp, 2);
+    Dispatcher disp = new DefaultRuleDispatcher(null, opRules, context);
+    GraphWalker ogw = new LevelOrderWalker(disp, 2);
 
     // Create a list of topop nodes
     List<Node> topNodes = new ArrayList<Node>();
@@ -134,7 +134,7 @@ public class PredicateTransitivePropagate extends Transform {
     }
   }
 
-  private static class JoinTransitive implements SemanticNodeProcessor {
+  private static class JoinTransitive implements NodeProcessor {
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
         Object... nodeOutputs) throws SemanticException {
@@ -203,7 +203,6 @@ public class PredicateTransitivePropagate extends Transform {
           vector.add(right, left);
           break;
         case JoinDesc.LEFT_OUTER_JOIN:
-        case JoinDesc.ANTI_JOIN:
           vector.add(left, right);
           break;
         case JoinDesc.RIGHT_OUTER_JOIN:

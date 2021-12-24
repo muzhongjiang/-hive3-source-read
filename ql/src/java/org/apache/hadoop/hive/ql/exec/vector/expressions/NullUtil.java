@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -284,56 +284,25 @@ public class NullUtil {
   }
 
   /*
-   * Propagate null values for a two-input operator and set isRepeating and noNulls appropriately.
+   * Propagate null values for a two-input operator.
    */
   public static void propagateNullsColCol(ColumnVector inputColVector1,
       ColumnVector inputColVector2, ColumnVector outputColVector, int[] sel,
       int n, boolean selectedInUse) {
 
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
+    outputColVector.noNulls = inputColVector1.noNulls && inputColVector2.noNulls;
 
-    if (inputColVector1.noNulls && inputColVector2.noNulls) {
-      if (inputColVector1.isRepeating && inputColVector2.isRepeating) {
-        outputColVector.isNull[0] = false;
-        outputColVector.isRepeating = true;
-      } else {
-        if (selectedInUse) {
-          for(int j = 0; j != n; j++) {
-            int i = sel[j];
-            outputColVector.isNull[i] = false;
-          }
-        } else {
-          Arrays.fill(outputColVector.isNull, 0, n, false);
-        }
-      }
-    } else if (inputColVector1.noNulls && !inputColVector2.noNulls) {
+    if (outputColVector.noNulls) {
+      // the inputs might not always have isNull initialized for
+      // inputColVector1.isNull[i] || inputColVector2.isNull[i] to be valid
+      Arrays.fill(outputColVector.isNull, false);
+      return;
+    }
 
-      if (inputColVector1.isRepeating && inputColVector2.isRepeating) {
-        if (!inputColVector2.isNull[0]) {
-          outputColVector.isNull[0] = false;
-        } else {
-          outputColVector.isNull[0] = true;
-          outputColVector.noNulls = false;
-        }
-        outputColVector.isRepeating = true;
-      } else if (inputColVector2.isRepeating) {
-        if (!inputColVector2.isNull[0]) {
-          if (selectedInUse) {
-            for(int j = 0; j != n; j++) {
-              int i = sel[j];
-              outputColVector.isNull[i] = false;
-            }
-          } else {
-            Arrays.fill(outputColVector.isNull, 0, n, false);
-          }
-        } else {
-          outputColVector.isNull[0] = true;
-          outputColVector.noNulls = false;
-          outputColVector.isRepeating = true;   // Because every value will be NULL.
-        }
+    if (inputColVector1.noNulls && !inputColVector2.noNulls) {
+      if (inputColVector2.isRepeating) {
+        outputColVector.isNull[0] = inputColVector2.isNull[0];
       } else {
-        outputColVector.noNulls = false;
         if (selectedInUse) {
           for(int j = 0; j != n; j++) {
             int i = sel[j];
@@ -344,32 +313,9 @@ public class NullUtil {
         }
       }
     } else if (!inputColVector1.noNulls && inputColVector2.noNulls) {
-
-      if (inputColVector1.isRepeating && inputColVector2.isRepeating) {
-        if (!inputColVector1.isNull[0]) {
-          outputColVector.isNull[0] = false;
-        } else {
-          outputColVector.isNull[0] = true;
-          outputColVector.noNulls = false;
-        }
-        outputColVector.isRepeating = true;
-      } else if (inputColVector1.isRepeating) {
-        if (!inputColVector1.isNull[0]) {
-          if (selectedInUse) {
-            for(int j = 0; j != n; j++) {
-              int i = sel[j];
-              outputColVector.isNull[i] = false;
-            }
-          } else {
-            Arrays.fill(outputColVector.isNull, 0, n, false);
-          }
-        } else {
-          outputColVector.isNull[0] = true;
-          outputColVector.noNulls = false;
-          outputColVector.isRepeating = true;   // Because every value will be NULL.
-        }
+      if (inputColVector1.isRepeating) {
+        outputColVector.isNull[0] = inputColVector1.isNull[0];
       } else {
-        outputColVector.noNulls = false;
         if (selectedInUse) {
           for(int j = 0; j != n; j++) {
             int i = sel[j];
@@ -380,23 +326,18 @@ public class NullUtil {
         }
       }
     } else if (!inputColVector1.noNulls && !inputColVector2.noNulls) {
-
       if (inputColVector1.isRepeating && inputColVector2.isRepeating) {
-        if (!inputColVector1.isNull[0] && !inputColVector2.isNull[0]) {
-          outputColVector.isNull[0] = false;
-        } else {
-          outputColVector.isNull[0] = true;
-          outputColVector.noNulls = false;
+        outputColVector.isNull[0] = inputColVector1.isNull[0] || inputColVector2.isNull[0];
+        if (outputColVector.isNull[0]) {
+          outputColVector.isRepeating = true;
+          return;
         }
-        outputColVector.isRepeating = true;
       } else if (inputColVector1.isRepeating && !inputColVector2.isRepeating) {
-
         if (inputColVector1.isNull[0]) {
           outputColVector.isNull[0] = true;
-          outputColVector.noNulls = false;
-          outputColVector.isRepeating = true;   // Because every value will be NULL.
+          outputColVector.isRepeating = true;   // because every value will be NULL
+          return;
         } else {
-          outputColVector.noNulls = false;
           if (selectedInUse) {
              for(int j = 0; j != n; j++) {
                int i = sel[j];
@@ -411,10 +352,9 @@ public class NullUtil {
       } else if (!inputColVector1.isRepeating && inputColVector2.isRepeating) {
         if (inputColVector2.isNull[0]) {
           outputColVector.isNull[0] = true;
-          outputColVector.noNulls = false;
-          outputColVector.isRepeating = true;   // Because every value will be NULL.
+          outputColVector.isRepeating = true;   // because every value will be NULL
+          return;
         } else {
-          outputColVector.noNulls = false;
           if (selectedInUse) {
              for(int j = 0; j != n; j++) {
                int i = sel[j];
@@ -426,7 +366,6 @@ public class NullUtil {
           }
         }
       } else {                      // neither side is repeating
-        outputColVector.noNulls = false;
         if (selectedInUse) {
           for(int j = 0; j != n; j++) {
             int i = sel[j];

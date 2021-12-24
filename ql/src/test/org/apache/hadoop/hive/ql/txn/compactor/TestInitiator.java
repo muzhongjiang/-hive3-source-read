@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,17 +17,15 @@
  */
 package org.apache.hadoop.hive.ql.txn.compactor;
 
-import org.apache.hadoop.hive.common.ServerUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.TransactionalValidationListener;
 import org.apache.hadoop.hive.metastore.api.AbortTxnRequest;
 import org.apache.hadoop.hive.metastore.api.CommitTxnRequest;
 import org.apache.hadoop.hive.metastore.api.CompactionRequest;
 import org.apache.hadoop.hive.metastore.api.CompactionType;
 import org.apache.hadoop.hive.metastore.api.DataOperationType;
+import org.apache.hadoop.hive.metastore.api.GetOpenTxnsResponse;
 import org.apache.hadoop.hive.metastore.api.LockComponent;
 import org.apache.hadoop.hive.metastore.api.LockLevel;
-import org.apache.hadoop.hive.metastore.api.LockState;
 import org.apache.hadoop.hive.metastore.api.LockRequest;
 import org.apache.hadoop.hive.metastore.api.LockResponse;
 import org.apache.hadoop.hive.metastore.api.LockType;
@@ -36,30 +34,30 @@ import org.apache.hadoop.hive.metastore.api.ShowCompactRequest;
 import org.apache.hadoop.hive.metastore.api.ShowCompactResponse;
 import org.apache.hadoop.hive.metastore.api.ShowCompactResponseElement;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
+import org.apache.hadoop.hive.metastore.txn.TxnStore;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import org.mockito.Mockito;
 
 /**
  * Tests for the compactor Initiator thread.
  */
 public class TestInitiator extends CompactorTest {
+  static final private String CLASS_NAME = TestInitiator.class.getName();
+  static final private Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
+
+  public TestInitiator() throws Exception {
+    super();
+  }
 
   @Test
   public void nothing() throws Exception {
@@ -78,8 +76,8 @@ public class TestInitiator extends CompactorTest {
     rqst = new CompactionRequest("default", "rflw2", CompactionType.MINOR);
     txnHandler.compact(rqst);
 
-    txnHandler.findNextToCompact(ServerUtils.hostname() + "-193892", "4.0.0");
-    txnHandler.findNextToCompact("nosuchhost-193892", "4.0.0");
+    txnHandler.findNextToCompact(Worker.hostname() + "-193892");
+    txnHandler.findNextToCompact("nosuchhost-193892");
 
     startInitiator();
 
@@ -105,7 +103,7 @@ public class TestInitiator extends CompactorTest {
     CompactionRequest rqst = new CompactionRequest("default", "rfrw1", CompactionType.MINOR);
     txnHandler.compact(rqst);
 
-    txnHandler.findNextToCompact("nosuchhost-193892", "4.0.0");
+    txnHandler.findNextToCompact("nosuchhost-193892");
 
     conf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_WORKER_TIMEOUT, 1L, TimeUnit.MILLISECONDS);
 
@@ -207,48 +205,35 @@ public class TestInitiator extends CompactorTest {
     Assert.assertEquals(0, rsp.getCompactsSize());
   }
 
-  /**
-   * Test that HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD triggers compaction.
-   *
-   * @throws Exception
-   */
   @Test
-  public void compactExpiredAbortedTxns() throws Exception {
-    Table t = newTable("default", "expiredAbortedTxns", false);
-    // abort a txn
+  public void cleanEmptyAbortedTxns() throws Exception {
+    // Test that we are cleaning aborted transactions with no components left in txn_components.
+    // Put one aborted transaction with an entry in txn_components to make sure we don't
+    // accidently clean it too.
+    Table t = newTable("default", "ceat", false);
+
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
-    comp.setOperationType(DataOperationType.DELETE);
-    comp.setTablename("expiredAbortedTxns");
+    comp.setTablename("ceat");
+    comp.setOperationType(DataOperationType.UPDATE);
     List<LockComponent> components = new ArrayList<LockComponent>(1);
     components.add(comp);
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
-    txnHandler.lock(req);
+    LockResponse res = txnHandler.lock(req);
     txnHandler.abortTxn(new AbortTxnRequest(txnid));
 
-    // before setting, check that no compaction is queued
-    initiateAndVerifyCompactionQueueLength(0);
+    for (int i = 0; i < TxnStore.TIMED_OUT_TXN_ABORT_BATCH_SIZE  + 50; i++) {
+      txnid = openTxn();
+      txnHandler.abortTxn(new AbortTxnRequest(txnid));
+    }
+    GetOpenTxnsResponse openTxns = txnHandler.getOpenTxns();
+    Assert.assertEquals(TxnStore.TIMED_OUT_TXN_ABORT_BATCH_SIZE + 50 + 1, openTxns.getOpen_txnsSize());
 
-    // negative number disables threshold check
-    conf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, -1,
-        TimeUnit.MILLISECONDS);
-    Thread.sleep(1L);
-    initiateAndVerifyCompactionQueueLength(0);
-
-    // set to 1 ms, wait 1 ms, and check that minor compaction is queued
-    conf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, 1, TimeUnit.MILLISECONDS);
-    Thread.sleep(1L);
-    ShowCompactResponse rsp = initiateAndVerifyCompactionQueueLength(1);
-    Assert.assertEquals(CompactionType.MINOR, rsp.getCompacts().get(0).getType());
-  }
-
-  private ShowCompactResponse initiateAndVerifyCompactionQueueLength(int expectedLength)
-      throws Exception {
     startInitiator();
-    ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
-    Assert.assertEquals(expectedLength, rsp.getCompactsSize());
-    return rsp;
+
+    openTxns = txnHandler.getOpenTxns();
+    Assert.assertEquals(1, openTxns.getOpen_txnsSize());
   }
 
   @Test
@@ -351,7 +336,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, null, 21L, 22L, 2);
     addDeltaFile(t, null, 23L, 24L, 2);
 
-    burnThroughTransactions("default", "cthdp", 23);
+    burnThroughTransactions(23);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
@@ -362,8 +347,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "cthdp", txnid);
-    Assert.assertEquals(24, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -385,7 +368,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, p, 21L, 22L, 2);
     addDeltaFile(t, p, 23L, 24L, 2);
 
-    burnThroughTransactions("default", "cphdp", 23);
+    burnThroughTransactions(23);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
@@ -397,8 +380,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "cphdp", txnid);
-    Assert.assertEquals(24, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -413,42 +394,6 @@ public class TestInitiator extends CompactorTest {
   }
 
   @Test
-  public void compactCamelCasePartitionValue() throws Exception {
-    Table t = newTable("default", "test_table", true);
-    Partition p = newPartition(t, "ToDay");
-
-    addBaseFile(t, p, 20L, 20);
-    addDeltaFile(t, p, 21L, 22L, 2);
-    addDeltaFile(t, p, 23L, 24L, 2);
-
-    burnThroughTransactions("default", "test_table", 23);
-
-    long txnid = openTxn();
-    LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
-    comp.setTablename("test_table");
-    comp.setPartitionname("dS=ToDay");
-    comp.setOperationType(DataOperationType.UPDATE);
-    List<LockComponent> components = new ArrayList<LockComponent>(1);
-    components.add(comp);
-    LockRequest req = new LockRequest(components, "me", "localhost");
-    req.setTxnid(txnid);
-    LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "test_table", txnid);
-    Assert.assertEquals(24, writeid);
-    txnHandler.commitTxn(new CommitTxnRequest(txnid));
-
-    startInitiator();
-
-    ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
-    List<ShowCompactResponseElement> compacts = rsp.getCompacts();
-    Assert.assertEquals(1, compacts.size());
-    Assert.assertEquals("initiated", compacts.get(0).getState());
-    Assert.assertEquals("test_table", compacts.get(0).getTablename());
-    Assert.assertEquals("ds=ToDay", compacts.get(0).getPartitionname());
-    Assert.assertEquals(CompactionType.MAJOR, compacts.get(0).getType());
-  }
-
-  @Test
   public void noCompactTableDeltaPctNotHighEnough() throws Exception {
     Table t = newTable("default", "nctdpnhe", false);
 
@@ -456,7 +401,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, null, 21L, 22L, 2);
     addDeltaFile(t, null, 23L, 24L, 2);
 
-    burnThroughTransactions("default", "nctdpnhe", 53);
+    burnThroughTransactions(53);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
@@ -467,8 +412,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "nctdpnhe", txnid);
-    Assert.assertEquals(54, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -494,7 +437,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, null, 210L, 210L, 1);
     addDeltaFile(t, null, 211L, 211L, 1);
 
-    burnThroughTransactions("default", "cttmd", 210);
+    burnThroughTransactions(210);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
@@ -505,8 +448,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "cttmd", txnid);
-    Assert.assertEquals(211, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -537,7 +478,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, p, 210L, 210L, 1);
     addDeltaFile(t, p, 211L, 211L, 1);
 
-    burnThroughTransactions("default", "cptmd", 210);
+    burnThroughTransactions(210);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
@@ -549,8 +490,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "cptmd", txnid);
-    Assert.assertEquals(211, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -572,7 +511,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, null, 201L, 205L, 5);
     addDeltaFile(t, null, 206L, 211L, 6);
 
-    burnThroughTransactions("default", "nctned", 210);
+    burnThroughTransactions(210);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
@@ -583,8 +522,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "nctned", txnid);
-    Assert.assertEquals(211, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -610,7 +547,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, null, 300L, 310L, 11);
     addDeltaFile(t, null, 311L, 321L, 11);
 
-    burnThroughTransactions("default", "cmomwbv", 320);
+    burnThroughTransactions(320);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
@@ -621,8 +558,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "cmomwbv", txnid);
-    Assert.assertEquals(321, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -652,7 +587,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, p, 210L, 210L, 1);
     addDeltaFile(t, p, 211L, 211L, 1);
 
-    burnThroughTransactions("default", "ednb", 210);
+    burnThroughTransactions(210);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
@@ -664,8 +599,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "ednb", txnid);
-    Assert.assertEquals(211, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -688,7 +621,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, p, 21L, 22L, 2);
     addDeltaFile(t, p, 23L, 24L, 2);
 
-    burnThroughTransactions("default", "ttospgocr", 23);
+    burnThroughTransactions(23);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
@@ -700,8 +633,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "ttospgocr", txnid);
-    Assert.assertEquals(24, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     txnid = openTxn();
@@ -714,8 +645,6 @@ public class TestInitiator extends CompactorTest {
     req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     res = txnHandler.lock(req);
-    writeid = allocateWriteId("default", "ttospgocr", txnid);
-    Assert.assertEquals(25, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -738,7 +667,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, p, 21L, 22L, 2);
     addDeltaFile(t, p, 23L, 24L, 2);
 
-    burnThroughTransactions("default", "nctdp", 23);
+    burnThroughTransactions(23);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
@@ -749,8 +678,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "nctdp", txnid);
-    Assert.assertEquals(24, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     startInitiator();
@@ -768,7 +695,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, null, 21L, 22L, 2);
     addDeltaFile(t, null, 23L, 24L, 2);
 
-    burnThroughTransactions("default", "dt", 23);
+    burnThroughTransactions(23);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
@@ -779,8 +706,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "dt", txnid);
-    Assert.assertEquals(24, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     ms.dropTable("default", "dt");
@@ -801,7 +726,7 @@ public class TestInitiator extends CompactorTest {
     addDeltaFile(t, p, 21L, 22L, 2);
     addDeltaFile(t, p, 23L, 24L, 2);
 
-    burnThroughTransactions("default", "dp", 23);
+    burnThroughTransactions(23);
 
     long txnid = openTxn();
     LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
@@ -813,8 +738,6 @@ public class TestInitiator extends CompactorTest {
     LockRequest req = new LockRequest(components, "me", "localhost");
     req.setTxnid(txnid);
     LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "dp", txnid);
-    Assert.assertEquals(24, writeid);
     txnHandler.commitTxn(new CommitTxnRequest(txnid));
 
     ms.dropPartition("default", "dp", Collections.singletonList("today"), true);
@@ -825,248 +748,6 @@ public class TestInitiator extends CompactorTest {
     List<ShowCompactResponseElement> compacts = rsp.getCompacts();
     Assert.assertEquals(0, compacts.size());
   }
-
-  @Test
-  public void processCompactionCandidatesInParallel() throws Exception {
-    Table t = newTable("default", "dp", true);
-    List<LockComponent> components = new ArrayList<>();
-
-    for (int i = 0; i < 10; i++) {
-      Partition p = newPartition(t, "part" + (i + 1));
-      addBaseFile(t, p, 20L, 20);
-      addDeltaFile(t, p, 21L, 22L, 2);
-      addDeltaFile(t, p, 23L, 24L, 2);
-
-      LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.PARTITION, "default");
-      comp.setTablename("dp");
-      comp.setPartitionname("ds=part" + (i + 1));
-      comp.setOperationType(DataOperationType.UPDATE);
-      components.add(comp);
-    }
-    burnThroughTransactions("default", "dp", 23);
-    long txnid = openTxn();
-
-    LockRequest req = new LockRequest(components, "me", "localhost");
-    req.setTxnid(txnid);
-    LockResponse res = txnHandler.lock(req);
-    Assert.assertEquals(LockState.ACQUIRED, res.getState());
-
-    long writeid = allocateWriteId("default", "dp", txnid);
-    Assert.assertEquals(24, writeid);
-    txnHandler.commitTxn(new CommitTxnRequest(txnid));
-
-    conf.setIntVar(HiveConf.ConfVars.HIVE_COMPACTOR_REQUEST_QUEUE, 3);
-    startInitiator();
-
-    ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
-    List<ShowCompactResponseElement> compacts = rsp.getCompacts();
-    Assert.assertEquals(10, compacts.size());
-  }
-
-
-  @Test
-  public void compactTableWithMultipleBase() throws Exception {
-    Table t = newTable("default", "nctdpnhe", false);
-
-    addBaseFile(t, null, 50L, 50);
-    addBaseFile(t, null, 100L, 50);
-
-    burnThroughTransactions("default", "nctdpnhe", 102);
-
-    long txnid = openTxn();
-    LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
-    comp.setTablename("nctdpnhe");
-    comp.setOperationType(DataOperationType.UPDATE);
-    List<LockComponent> components = new ArrayList<LockComponent>(1);
-    components.add(comp);
-    LockRequest req = new LockRequest(components, "me", "localhost");
-    req.setTxnid(txnid);
-    LockResponse res = txnHandler.lock(req);
-    long writeid = allocateWriteId("default", "nctdpnhe", txnid);
-    txnHandler.commitTxn(new CommitTxnRequest(txnid));
-
-    startInitiator();
-
-    ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
-    Assert.assertEquals(1, rsp.getCompactsSize());
-    Assert.assertEquals("initiated",rsp.getCompacts().get(0).getState());
-
-    startWorker();
-    Thread.sleep(1L);
-    ShowCompactResponse response = txnHandler.showCompact(new ShowCompactRequest());
-    Assert.assertEquals("ready for cleaning",response.getCompacts().get(0).getState());
-  }
-
-  /**
-   * Tests org.apache.hadoop.hive.ql.txn.compactor.CompactorThread#findUserToRunAs(java.lang.String, org.apache.hadoop
-   * .hive.metastore.api.Table).
-   * Used by Worker and Initiator.
-   * Initiator caches this via Initiator#resolveUserToRunAs.
-   * @throws Exception
-   */
-  @Test
-  public void testFindUserToRunAs() throws Exception {
-    Table t = newTable("default", "tfutra", false);
-
-    CompactorThread initiator = new Initiator();
-    initiator.setConf(conf);
-    
-    String userFromConf = "randomUser123";
-
-    // user set in config
-    MetastoreConf.setVar(conf, MetastoreConf.ConfVars.COMPACTOR_RUN_AS_USER, userFromConf);
-    initiator.setConf(conf);
-    Assert.assertEquals(userFromConf, initiator.findUserToRunAs(t.getSd().getLocation(), t));
-
-    // table dir owner (is probably not "randomUser123")
-    MetastoreConf.setVar(conf, MetastoreConf.ConfVars.COMPACTOR_RUN_AS_USER, "");
-    // simulate restarting Initiator
-    initiator.setConf(conf);
-    Assert.assertNotEquals(userFromConf, initiator.findUserToRunAs(t.getSd().getLocation(), t));
-  }
-
-  /**
-   * Tests org.apache.hadoop.hive.ql.txn.compactor.Initiator#resolveUserToRunAs(java.util.Map, 
-   * org.apache.hadoop.hive.metastore.api.Table, org.apache.hadoop.hive.metastore.api.Partition)
-   * Used by Initiator only.
-   * @throws Exception
-   */
-  @Test
-  public void resolveUserToRunAs() throws Exception {
-    Table t = newTable("default", "tfutra", false);
-
-    Map<String, String> tblNameOwners = new HashMap<>();
-    Initiator initiator = new Initiator();
-
-    String userFromConf = "randomUser123";
-
-    // user set in config
-    MetastoreConf.setVar(conf, MetastoreConf.ConfVars.COMPACTOR_RUN_AS_USER, userFromConf);
-    initiator.setConf(conf);
-    Assert.assertEquals(userFromConf, initiator.resolveUserToRunAs(tblNameOwners, t, null));
-
-    
-    // table dir owner (is probably not "randomUser123")
-    // config changes can happen on Initiator restart; a restart would clear cache
-    tblNameOwners = new HashMap<>();
-    MetastoreConf.setVar(conf, MetastoreConf.ConfVars.COMPACTOR_RUN_AS_USER, "");
-    initiator.setConf(conf);
-    Assert.assertNotEquals(userFromConf, initiator.resolveUserToRunAs(tblNameOwners, t, null));
-    // table dir owner again, retrieved from cache
-    Assert.assertNotEquals(userFromConf, initiator.resolveUserToRunAs(tblNameOwners, t, null));
-  }
-
-  @Test public void testInitiatorFailure() throws Exception {
-    String tableName = "my_table";
-    Table t = newTable("default", tableName, false);
-
-    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_THRESHOLD, 1);
-
-    // 2 aborts
-    for (int i = 0; i < 2; i++) {
-      long txnid = openTxn();
-      LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
-      comp.setTablename(tableName);
-      comp.setOperationType(DataOperationType.UPDATE);
-      List<LockComponent> components = new ArrayList<LockComponent>(1);
-      components.add(comp);
-      LockRequest req = new LockRequest(components, "me", "localhost");
-      req.setTxnid(txnid);
-      LockResponse res = txnHandler.lock(req);
-      txnHandler.abortTxn(new AbortTxnRequest(txnid));
-    }
-
-    // run and fail initiator
-    Initiator initiator = Mockito.spy(new Initiator());
-    initiator.setThreadId((int) t.getId());
-    initiator.setConf(conf);
-    initiator.init(new AtomicBoolean(true));
-    doThrow(new RuntimeException("This was thrown on purpose by testInitiatorFailure"))
-        .when(initiator).resolveTable(any());
-    initiator.run();
-
-    // verify status of table compaction
-    ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
-    List<ShowCompactResponseElement> compacts = rsp.getCompacts();
-    Assert.assertEquals(1, compacts.size());
-    Assert.assertEquals("did not initiate", compacts.get(0).getState());
-    Assert.assertEquals(tableName, compacts.get(0).getTablename());
-  }
-
-  @Test
-  public void noCompactForInsertOnly() throws Exception {
-    Map<String, String> parameters = new HashMap<String, String>(1);
-    parameters.put(hive_metastoreConstants.TABLE_TRANSACTIONAL_PROPERTIES,
-        TransactionalValidationListener.INSERTONLY_TRANSACTIONAL_PROPERTY);
-    newTable("default", "ncfio", false, parameters);
-
-    HiveConf.setBoolVar(conf, HiveConf.ConfVars.HIVE_COMPACTOR_COMPACT_MM, false);
-    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_THRESHOLD, 1);
-
-    // 2 aborts
-    for (int i = 0; i < 2; i++) {
-      long txnid = openTxn();
-      LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
-      comp.setTablename("ncfio");
-      comp.setOperationType(DataOperationType.UPDATE);
-      List<LockComponent> components = new ArrayList<LockComponent>(1);
-      components.add(comp);
-      LockRequest req = new LockRequest(components, "me", "localhost");
-      req.setTxnid(txnid);
-      txnHandler.lock(req);
-      txnHandler.abortTxn(new AbortTxnRequest(txnid));
-    }
-
-    startInitiator();
-
-    ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
-    Assert.assertEquals(0, rsp.getCompactsSize());
-  }
-
-
-  @Test
-  public void testInitiatorHostAndVersion() throws Exception {
-    String tableName = "my_table";
-    Table t = newTable("default", tableName, false);
-
-    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_THRESHOLD, 1);
-
-    // 2 aborts
-    for (int i = 0; i < 2; i++) {
-      long txnid = openTxn();
-      LockComponent comp = new LockComponent(LockType.SHARED_WRITE, LockLevel.TABLE, "default");
-      comp.setTablename(tableName);
-      comp.setOperationType(DataOperationType.UPDATE);
-      List<LockComponent> components = new ArrayList<>(1);
-      components.add(comp);
-      LockRequest req = new LockRequest(components, "me", "localhost");
-      req.setTxnid(txnid);
-      txnHandler.lock(req);
-      txnHandler.abortTxn(new AbortTxnRequest(txnid));
-    }
-
-    // need to mock the runtime version, because the manifest file won't be there in the mvn test setup
-    Initiator initiator = Mockito.spy(new Initiator());
-    initiator.setThreadId((int) t.getId());
-    initiator.setConf(conf);
-    String runtimeVersion = "4.0.0-SNAPSHOT";
-    doReturn(runtimeVersion).when(initiator).getRuntimeVersion();
-    initiator.init(new AtomicBoolean(true));
-    initiator.run();
-
-    // verify status of table compaction
-    ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
-    List<ShowCompactResponseElement> compacts = rsp.getCompacts();
-    Assert.assertEquals(1, compacts.size());
-    Assert.assertEquals("initiated", compacts.get(0).getState());
-    Assert.assertEquals(tableName, compacts.get(0).getTablename());
-    Assert.assertEquals(runtimeVersion, compacts.get(0).getInitiatorVersion());
-    // split the threadid
-    String[] parts = compacts.get(0).getInitiatorId().split("-");
-    Assert.assertTrue(parts.length > 1);
-    Assert.assertEquals(ServerUtils.hostname(), String.join("-", Arrays.copyOfRange(parts, 0, parts.length - 1)));
-  }
-
   @Override
   boolean useHive130DeltaDirName() {
     return false;

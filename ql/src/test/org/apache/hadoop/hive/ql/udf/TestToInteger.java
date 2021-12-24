@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,18 +18,13 @@
 
 package org.apache.hadoop.hive.ql.udf;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import org.junit.Test;
 
-/**
- * TestToInteger.
- */
-public class TestToInteger{
+public class TestToInteger extends TestCase{
 
   @Test
   public void testTextToInteger() throws Exception{

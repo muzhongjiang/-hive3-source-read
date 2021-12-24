@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.spark;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
@@ -37,21 +36,17 @@ public class MapInput implements SparkTran<WritableComparable, Writable,
   private JavaPairRDD<WritableComparable, Writable> hadoopRDD;
   private boolean toCache;
   private final SparkPlan sparkPlan;
-  private final String name;
-  private final BaseWork baseWork;
+  private String name = "MapInput";
 
   public MapInput(SparkPlan sparkPlan, JavaPairRDD<WritableComparable, Writable> hadoopRDD) {
-    this(sparkPlan, hadoopRDD, false, "MapInput", null);
+    this(sparkPlan, hadoopRDD, false);
   }
 
   public MapInput(SparkPlan sparkPlan,
-                  JavaPairRDD<WritableComparable, Writable> hadoopRDD, boolean toCache, String
-                          name, BaseWork baseWork) {
+      JavaPairRDD<WritableComparable, Writable> hadoopRDD, boolean toCache) {
     this.hadoopRDD = hadoopRDD;
     this.toCache = toCache;
     this.sparkPlan = sparkPlan;
-    this.name = name;
-    this.baseWork = baseWork;
   }
 
   public void setToCache(boolean toCache) {
@@ -71,7 +66,6 @@ public class MapInput implements SparkTran<WritableComparable, Writable,
     } else {
       result = hadoopRDD;
     }
-    result.setName(this.name);
     return result;
   }
 
@@ -100,11 +94,11 @@ public class MapInput implements SparkTran<WritableComparable, Writable,
 
   @Override
   public Boolean isCacheEnable() {
-    return Boolean.valueOf(toCache);
+    return new Boolean(toCache);
   }
 
   @Override
-  public BaseWork getBaseWork() {
-    return baseWork;
+  public void setName(String name) {
+    this.name = name;
   }
 }

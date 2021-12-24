@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,7 @@ package org.apache.hive.service.server;
 
 import java.util.Map;
 
-import org.apache.hadoop.hive.metastore.HMSHandler;
+import org.apache.hadoop.hive.metastore.HiveMetaStore;
 import org.apache.hadoop.hive.metastore.RawStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,12 +67,8 @@ public class ThreadWithGarbageCleanup extends Thread {
    */
   public void cacheThreadLocalRawStore() {
     Long threadId = this.getId();
-    RawStore threadLocalRawStore = HMSHandler.getRawStore();
-    if (threadLocalRawStore == null) {
-      LOG.debug("Thread Local RawStore is null, for the thread: " +
-              this.getName() + " and so removing entry from threadRawStoreMap.");
-      threadRawStoreMap.remove(threadId);
-    } else {
+    RawStore threadLocalRawStore = HiveMetaStore.HMSHandler.getRawStore();
+    if (threadLocalRawStore != null && !threadRawStoreMap.containsKey(threadId)) {
       LOG.debug("Adding RawStore: " + threadLocalRawStore + ", for the thread: " +
           this.getName() + " to threadRawStoreMap for future cleanup.");
       threadRawStoreMap.put(threadId, threadLocalRawStore);

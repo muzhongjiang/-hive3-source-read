@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,8 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hive.common.classification.InterfaceAudience;
-import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaStringObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorConverter;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
@@ -42,7 +40,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableIntObject
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableLongObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableShortObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableTimestampObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.SettableTimestampLocalTZObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.VoidObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableStringObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
@@ -56,8 +53,6 @@ public final class ObjectInspectorConverters {
   /**
    * A converter which will convert objects with one ObjectInspector to another.
    */
-  @InterfaceAudience.Public
-  @InterfaceStability.Stable
   public static interface Converter {
     Object convert(Object input);
   }
@@ -76,12 +71,6 @@ public final class ObjectInspectorConverters {
   private static Converter getConverter(PrimitiveObjectInspector inputOI,
       PrimitiveObjectInspector outputOI) {
     switch (outputOI.getPrimitiveCategory()) {
-    case VOID:
-      if (!outputOI.getTypeInfo().equals(inputOI.getTypeInfo())) {
-        throw new RuntimeException("Hive internal error: conversion of "
-            + inputOI.getTypeName() + " to void not possible.");
-      }
-      return new IdentityConverter();
     case BOOLEAN:
       return new PrimitiveObjectInspectorConverter.BooleanConverter(
           inputOI,
@@ -118,7 +107,6 @@ public final class ObjectInspectorConverters {
         return new PrimitiveObjectInspectorConverter.StringConverter(
             inputOI);
       }
-      break;
     case CHAR:
       return new PrimitiveObjectInspectorConverter.HiveCharConverter(
           inputOI,
@@ -135,10 +123,6 @@ public final class ObjectInspectorConverters {
       return new PrimitiveObjectInspectorConverter.TimestampConverter(
           inputOI,
           (SettableTimestampObjectInspector) outputOI);
-    case TIMESTAMPLOCALTZ:
-      return new PrimitiveObjectInspectorConverter.TimestampLocalTZConverter(
-          inputOI,
-          (SettableTimestampLocalTZObjectInspector) outputOI);
     case INTERVAL_YEAR_MONTH:
       return new PrimitiveObjectInspectorConverter.HiveIntervalYearMonthConverter(
           inputOI,
@@ -155,10 +139,11 @@ public final class ObjectInspectorConverters {
       return new PrimitiveObjectInspectorConverter.HiveDecimalConverter(
           inputOI,
           (SettableHiveDecimalObjectInspector) outputOI);
+    default:
+      throw new RuntimeException("Hive internal error: conversion of "
+          + inputOI.getTypeName() + " to " + outputOI.getTypeName()
+          + " not supported yet.");
     }
-    throw new RuntimeException("Hive internal error: conversion of "
-            + inputOI.getTypeName() + " to " + outputOI.getTypeName()
-            + " not supported yet.");
   }
 
   /**
@@ -478,7 +463,7 @@ public final class ObjectInspectorConverters {
       }
 
       Object inputFieldValue = inputOI.getField(input);
-      byte inputFieldTag = inputOI.getTag(input);
+      Object inputFieldTag = inputOI.getTag(input);
       Object outputFieldValue = null;
 
       int inputFieldTagIndex = ((Byte)inputFieldTag).intValue();
@@ -487,7 +472,7 @@ public final class ObjectInspectorConverters {
          outputFieldValue = fieldConverters.get(inputFieldTagIndex).convert(inputFieldValue);
       }
 
-      outputOI.setFieldAndTag(output, outputFieldValue, inputFieldTag);
+      outputOI.addField(output, outputFieldValue);
 
       return output;
     }

@@ -1,5 +1,3 @@
---! qt:dataset:srcbucket
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 
 

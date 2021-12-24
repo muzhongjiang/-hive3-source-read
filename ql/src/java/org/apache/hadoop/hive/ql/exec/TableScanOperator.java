@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,19 +23,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.common.StatsSetupConst;
-import org.apache.hadoop.hive.common.TableName;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.ErrorMsg;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
@@ -57,24 +54,20 @@ import org.apache.hadoop.mapred.JobConf;
  * read as part of map-reduce framework
  **/
 public class TableScanOperator extends Operator<TableScanDesc> implements
-    Serializable, VectorizationContextRegion {
+    Serializable {
   private static final long serialVersionUID = 1L;
 
-  private VectorizationContext taskVectorizationContext;
-
-  protected JobConf jc;
-  private boolean inputFileChanged = false;
+  protected transient JobConf jc;
+  private transient boolean inputFileChanged = false;
   private TableDesc tableDesc;
 
-  private Stat currentStat;
-  private Map<String, Stat> stats;
+  private transient Stat currentStat;
+  private transient Map<String, Stat> stats;
 
-  private int rowLimit = -1;
-  private int currCount = 0;
+  private transient int rowLimit = -1;
+  private transient int currCount = 0;
   // insiderView will tell this TableScan is inside a view or not.
-  private boolean insideView;
-
-  private boolean vectorized;
+  private transient boolean insideView;
 
   private String defaultPartitionName;
 
@@ -85,55 +78,11 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
   private String schemaEvolutionColumns;
   private String schemaEvolutionColumnsTypes;
 
-  private ProbeDecodeContext probeDecodeContextSet;
-
-  /**
-   * Inner wrapper class for TS ProbeDecode optimization
-   */
-  public static class ProbeDecodeContext {
-
-    private final String mjSmallTableCacheKey;
-    private final String mjBigTableKeyColName;
-    private final byte mjSmallTablePos;
-    private final double keyRatio;
-
-    public ProbeDecodeContext(String mjSmallTableCacheKey, byte mjSmallTablePos, String mjBigTableKeyColName,
-        double keyRatio) {
-      this.mjSmallTableCacheKey = mjSmallTableCacheKey;
-      this.mjSmallTablePos = mjSmallTablePos;
-      this.mjBigTableKeyColName = mjBigTableKeyColName;
-      this.keyRatio = keyRatio;
-    }
-
-    public String getMjSmallTableCacheKey() {
-      return mjSmallTableCacheKey;
-    }
-
-    public byte getMjSmallTablePos() {
-      return mjSmallTablePos;
-    }
-
-    public String getMjBigTableKeyColName() {
-      return mjBigTableKeyColName;
-    }
-
-    public double getKeyRatio() {
-      return keyRatio;
-    }
-
-    @Override
-    public String toString() {
-      return "cacheKey:" + mjSmallTableCacheKey + ", bigKeyColName:" + mjBigTableKeyColName +
-          ", smallTablePos:" + mjSmallTablePos + ", keyRatio:" + keyRatio;
-    }
-  }
-
-
-  public TableDesc getTableDescSkewJoin() {
+  public TableDesc getTableDesc() {
     return tableDesc;
   }
 
-  public void setTableDescSkewJoin(TableDesc tableDesc) {
+  public void setTableDesc(TableDesc tableDesc) {
     this.tableDesc = tableDesc;
   }
 
@@ -160,50 +109,31 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
   @Override
   public void process(Object row, int tag) throws HiveException {
     if (rowLimit >= 0) {
-      if (checkSetDone(row, tag)) {
+      if (row instanceof VectorizedRowBatch) {
+        VectorizedRowBatch batch = (VectorizedRowBatch) row;
+        if (currCount >= rowLimit) {
+          setDone(true);
+          return;
+        }
+        if (currCount + batch.size > rowLimit) {
+          batch.size = rowLimit - currCount;
+        }
+        currCount += batch.size;
+      } else if (currCount++ >= rowLimit) {
+        setDone(true);
         return;
       }
     }
     if (conf != null && conf.isGatherStats()) {
       gatherStats(row);
     }
-    if (vectorized) {
-      vectorForward((VectorizedRowBatch) row);
-    } else {
-      forward(row, inputObjInspectors[tag]);
-    }
-  }
-
-  private boolean checkSetDone(Object row, int tag) {
-    if (row instanceof VectorizedRowBatch) {
-      // We need to check with 'instanceof' instead of just checking
-      // vectorized because the row can be a VectorizedRowBatch when
-      // FetchOptimizer kicks in even if the operator pipeline is not
-      // vectorized
-      VectorizedRowBatch batch = (VectorizedRowBatch) row;
-      if (currCount >= rowLimit) {
-        setDone(true);
-        return true;
-      }
-      if (currCount + batch.size > rowLimit) {
-        batch.size = rowLimit - currCount;
-      }
-      currCount += batch.size;
-    } else if (currCount++ >= rowLimit) {
-      setDone(true);
-      return true;
-    }
-    return false;
+    forward(row, inputObjInspectors[tag]);
   }
 
   // Change the table partition for collecting stats
   @Override
   public void cleanUpInputFileChangedOp() throws HiveException {
     inputFileChanged = true;
-    updateFileId();
-  }
-
-  private void updateFileId() {
     // If the file name to bucket number mapping is maintained, store the bucket number
     // in the execution context. This is needed for the following scenario:
     // insert overwrite table T1 select * from T2;
@@ -258,7 +188,9 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
           values.add(o == null ? defaultPartitionName : o.toString());
         }
         partitionSpecs = FileUtils.makePartName(conf.getPartColumns(), values);
-        LOG.info("Stats Gathering found a new partition spec = " + partitionSpecs);
+        if (isLogInfoEnabled) {
+          LOG.info("Stats Gathering found a new partition spec = " + partitionSpecs);
+        }
       }
       // find which column contains the raw data size (both partitioned and non partitioned
       int uSizeColumn = -1;
@@ -312,6 +244,9 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
     }
 
     rowLimit = conf.getRowLimit();
+    if (!conf.isGatherStats()) {
+      return;
+    }
 
     if (hconf instanceof JobConf) {
       jc = (JobConf) hconf;
@@ -323,19 +258,10 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
     defaultPartitionName = HiveConf.getVar(hconf, HiveConf.ConfVars.DEFAULTPARTITIONNAME);
     currentStat = null;
     stats = new HashMap<String, Stat>();
-
-    /*
-     * This TableScanDesc flag is strictly set by the Vectorizer class for vectorized MapWork
-     * vertices.
-     */
-    vectorized = conf.isVectorized();
   }
 
   @Override
   public void closeOp(boolean abort) throws HiveException {
-    if (getExecContext() != null && getExecContext().getFileId() == null) {
-      updateFileId();
-    }
     if (conf != null) {
       if (conf.isGatherStats() && stats.size() != 0) {
         publishStats();
@@ -403,10 +329,11 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
     StatsPublisher statsPublisher = Utilities.getStatsPublisher(jc);
     StatsCollectionContext sc = new StatsCollectionContext(jc);
     sc.setStatsTmpDir(conf.getTmpStatsDir());
-    sc.setContextSuffix(getOperatorId());
     if (!statsPublisher.connect(sc)) {
       // just return, stats gathering should not block the main query.
-      LOG.info("StatsPublishing error: cannot connect to database.");
+      if (isLogInfoEnabled) {
+        LOG.info("StatsPublishing error: cannot connect to database.");
+      }
       if (isStatsReliable) {
         throw new HiveException(ErrorMsg.STATSPUBLISHER_CONNECTION_ERROR.getErrorCodedMsg());
       }
@@ -428,7 +355,9 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
           throw new HiveException(ErrorMsg.STATSPUBLISHER_PUBLISHING_ERROR.getErrorCodedMsg());
         }
       }
-      LOG.info("publishing : " + key + " : " + statsToPublish);
+      if (isLogInfoEnabled) {
+	LOG.info("publishing : " + key + " : " + statsToPublish.toString());
+      }
     }
     if (!statsPublisher.closeConnection(sc)) {
       if (isStatsReliable) {
@@ -463,28 +392,6 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
 
   public void setInsideView(boolean insiderView) {
     this.insideView = insiderView;
-  }
-
-  public void setTaskVectorizationContext(VectorizationContext taskVectorizationContext) {
-    this.taskVectorizationContext = taskVectorizationContext;
-  }
-
-  @Override
-  public VectorizationContext getOutputVectorizationContext() {
-    return taskVectorizationContext;
-  }
-
-  public ProbeDecodeContext getProbeDecodeContext() {
-    return probeDecodeContextSet;
-  }
-
-  public void setProbeDecodeContext(ProbeDecodeContext probeDecodeContext) {
-    this.probeDecodeContextSet = probeDecodeContext;
-  }
-
-  public TableName getTableName() {
-    Table tableMetadata = conf.getTableMetadata();
-    return TableName.fromString(tableMetadata.getTableName(), tableMetadata.getCatName(), tableMetadata.getDbName());
   }
 
 }

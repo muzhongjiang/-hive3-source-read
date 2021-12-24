@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.serde2.lazy;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -46,8 +45,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.UnionObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.BinaryComparable;
 import org.apache.hadoop.io.Text;
@@ -89,23 +86,17 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
 
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder(128);
-    sb.append(getClass() + " [serdeParams=" + serdeParams + ", cachedObjectInspector=" + cachedObjectInspector
-        + ", serializedSize=" + serializedSize + ", stats=" + stats + ", lastOperationSerialize="
-        + lastOperationSerialize + ", lastOperationDeserialize=" + lastOperationDeserialize);
+    return getClass().toString()
+        + "["
+        + Arrays.asList(serdeParams.getSeparators())
+        + ":"
+        + ((StructTypeInfo) serdeParams.getRowTypeInfo()).getAllStructFieldNames()
+        + ":"
+        + ((StructTypeInfo) serdeParams.getRowTypeInfo())
+            .getAllStructFieldTypeInfos() + "]";
+  }
 
-    if (serdeParams != null) {
-      sb.append(' ').append(Arrays.toString(serdeParams.getSeparators()));
-      if (serdeParams.getRowTypeInfo() != null) {
-        sb.append(" : ");
-        sb.append(((StructTypeInfo) serdeParams.getRowTypeInfo()).getAllStructFieldNames());
-        sb.append(" : ");
-        sb.append(((StructTypeInfo) serdeParams.getRowTypeInfo()).getAllStructFieldTypeInfos());
-      }
-    }
-
-    sb.append(']');
-    return sb.toString();
+  public LazySimpleSerDe() throws SerDeException {
   }
 
   /**
@@ -113,13 +104,16 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
    * char or byte code (only supports byte-value up to 127) columns:
    * ","-separated column names columns.types: ",", ":", or ";"-separated column
    * types
+   *
+   * @see AbstractSerDe#initialize(Configuration, Properties)
    */
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
+  public void initialize(Configuration job, Properties tbl)
       throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
 
-    serdeParams = new LazySerDeParameters(configuration, this.properties, getClass().getName());
+    super.initialize(job, tbl);
+
+    serdeParams = new LazySerDeParameters(job, tbl, getClass().getName());
 
     // Create the ObjectInspectors for the fields
     cachedObjectInspector = LazyFactory.createLazyStructInspector(serdeParams
@@ -135,16 +129,6 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
     lastOperationDeserialize = false;
   }
 
-  /**
-   *  NOTE: if "columns.types" is missing, all columns will be of String type.
-   */
-  @Override
-  protected List<TypeInfo> parseColumnTypes() {
-    List<TypeInfo> columnTypes = super.parseColumnTypes();
-    return (!columnTypes.isEmpty()) ? columnTypes
-        : Collections.nCopies(getColumnNames().size(), TypeInfoFactory.stringTypeInfo);
-  }
-
   // The object for storing row data
   LazyStruct cachedLazyStruct;
 
@@ -157,7 +141,7 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
    * @param field
    *          the Writable that contains the data
    * @return The deserialized row Object.
-   * @see  org.apache.hadoop.hive.serde2.AbstractSerDe#deserialize(Writable)
+   * @see AbstractSerDe#deserialize(Writable)
    */
   @Override
   public Object doDeserialize(Writable field) throws SerDeException {
@@ -183,7 +167,7 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
   /**
    * Returns the Writable Class after serialization.
    *
-   * @see org.apache.hadoop.hive.serde2.AbstractSerDe#getSerializedClass()
+   * @see AbstractSerDe#getSerializedClass()
    */
   @Override
   public Class<? extends Writable> getSerializedClass() {
@@ -201,8 +185,8 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
    * @param objInspector
    *          The ObjectInspector for the row object
    * @return The serialized Writable object
-   * @throws SerDeException
-   * @see org.apache.hadoop.hive.serde2.AbstractSerDe#serialize(Object, ObjectInspector)
+   * @throws IOException
+   * @see AbstractSerDe#serialize(Object, ObjectInspector)
    */
   @Override
   public Writable doSerialize(Object obj, ObjectInspector objInspector)
@@ -378,7 +362,7 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
       if (ois == null) {
         out.write(nullSequence.getBytes(), 0, nullSequence.getLength());
       } else {
-        LazyUtils.writePrimitiveUTF8(out, Byte.valueOf(uoi.getTag(obj)),
+        LazyUtils.writePrimitiveUTF8(out, new Byte(uoi.getTag(obj)),
             PrimitiveObjectInspectorFactory.javaByteObjectInspector,
             escaped, escapeChar, needsEscape);
         out.write(separator);
@@ -438,7 +422,7 @@ public class LazySimpleSerDe extends AbstractEncodingAwareSerDe {
 
   /**
    * This class is deprecated and is only used for backward compatibility. Replace by
-   * @see org.apache.hadoop.hive.serde2.lazy.LazySerDeParameters .
+   * @see org.apache.hadoop.hive.serde2.lazy.LazySerDeParameters.
    */
   @Deprecated
   public static class SerDeParameters extends org.apache.hadoop.hive.serde2.lazy.LazySerDeParameters {

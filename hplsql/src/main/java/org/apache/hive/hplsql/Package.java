@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,58 +18,55 @@
 
 package org.apache.hive.hplsql;
 
-import static org.apache.hive.hplsql.functions.InMemoryFunctionRegistry.setCallParameters;
-
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.apache.hive.hplsql.HplsqlParser.Package_spec_itemContext;
+import org.apache.hive.hplsql.HplsqlParser.Package_body_itemContext;
 import org.apache.hive.hplsql.HplsqlParser.Create_function_stmtContext;
 import org.apache.hive.hplsql.HplsqlParser.Create_procedure_stmtContext;
-import org.apache.hive.hplsql.HplsqlParser.Package_body_itemContext;
-import org.apache.hive.hplsql.HplsqlParser.Package_spec_itemContext;
-import org.apache.hive.hplsql.functions.BuiltinFunctions;
-import org.apache.hive.hplsql.functions.InMemoryFunctionRegistry;
+import org.apache.hive.hplsql.functions.Function;
 
 /**
  * Program package
  */
 public class Package {
   
-  private String name;
-  private List<Var> vars = new ArrayList<>();
-  private List<String> publicFuncs = new ArrayList<>();
-  private List<String> publicProcs = new ArrayList<>();
+  String name;
+  ArrayList<Var> vars = new ArrayList<Var>();
+  ArrayList<String> publicVars = new ArrayList<String>();
+  ArrayList<String> publicFuncs = new ArrayList<String>();
+  ArrayList<String> publicProcs = new ArrayList<String>();
   
-  HashMap<String, Create_function_stmtContext> func = new HashMap<>();
-  HashMap<String, Create_procedure_stmtContext> proc = new HashMap<>();
+  HashMap<String, Create_function_stmtContext> func = new HashMap<String, Create_function_stmtContext>();
+  HashMap<String, Create_procedure_stmtContext> proc = new HashMap<String, Create_procedure_stmtContext>();
     
   boolean allMembersPublic = false;
     
   Exec exec;
-  InMemoryFunctionRegistry function;
+  Function function;
   boolean trace = false;
   
-  Package(String name, Exec exec, BuiltinFunctions builtinFunctions) {
+  Package(String name, Exec exec) {
     this.name = name;
     this.exec = exec;
-    this.function = new InMemoryFunctionRegistry(exec, builtinFunctions);
+    this.function = new Function(exec);
     this.trace = exec.getTrace();
   }
   
   /**
    * Add a local variable
    */
-  public void addVariable(Var var) {
+  void addVariable(Var var) {
     vars.add(var);
   }
   
   /**
    * Find the variable by name
    */
-  public Var findVariable(String name) {
+  Var findVariable(String name) {
     for (Var var : vars) {
       if (name.equalsIgnoreCase(var.getName())) {
         return var;
@@ -81,7 +78,7 @@ public class Package {
   /**
    * Create the package specification
    */
-  public void createSpecification(HplsqlParser.Create_package_stmtContext ctx) {
+  void createSpecification(HplsqlParser.Create_package_stmtContext ctx) {
     int cnt = ctx.package_spec().package_spec_item().size();
     for (int i = 0; i < cnt; i++) {
       Package_spec_itemContext c = ctx.package_spec().package_spec_item(i);
@@ -100,7 +97,7 @@ public class Package {
   /**
    * Create the package body
    */
-  public void createBody(HplsqlParser.Create_package_body_stmtContext ctx) {
+  void createBody(HplsqlParser.Create_package_body_stmtContext ctx) {
     int cnt = ctx.package_body().package_body_item().size();
     for (int i = 0; i < cnt; i++) {
       Package_body_itemContext c = ctx.package_body().package_body_item(i);
@@ -129,7 +126,7 @@ public class Package {
     }
     ArrayList<Var> actualParams = function.getActualCallParameters(ctx);
     exec.enterScope(Scope.Type.ROUTINE, this);
-    setCallParameters(name, ctx, actualParams, f.create_routine_params(), null, exec);
+    function.setCallParameters(ctx, actualParams, f.create_routine_params(), null);    
     visit(f.single_block_stmt());
     exec.leaveScope(); 
     return true;
@@ -157,7 +154,7 @@ public class Package {
       visit(p.declare_block_inplace());
     }
     if (p.create_routine_params() != null) {
-      setCallParameters(name, ctx, actualParams, p.create_routine_params(), out, exec);
+      function.setCallParameters(ctx, actualParams, p.create_routine_params(), out);
     }
     visit(p.proc_block());
     exec.callStackPop();
@@ -181,7 +178,14 @@ public class Package {
   Integer visit(ParserRuleContext ctx) {
     return exec.visit(ctx);  
   } 
-
+  
+  /**
+   * Execute children rules
+   */
+  Integer visitChildren(ParserRuleContext ctx) {
+    return exec.visitChildren(ctx);  
+  }  
+  
   /**
    * Trace information
    */

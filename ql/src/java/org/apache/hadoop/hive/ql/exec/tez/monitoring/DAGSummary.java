@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -79,7 +79,8 @@ class DAGSummary implements PrintSummary {
 
   private long hiveInputRecordsFromTezCounters(String vertexName, String inputVertexName) {
     // Get the counters for the input vertex.
-    Set<StatusGetOpts> statusOptions = Collections.singleton(StatusGetOpts.GET_COUNTERS);
+    Set<StatusGetOpts> statusOptions = new HashSet<>(1);
+    statusOptions.add(StatusGetOpts.GET_COUNTERS);
     VertexStatus inputVertexStatus = vertexStatus(statusOptions, inputVertexName);
     final TezCounters inputVertexCounters = inputVertexStatus.getVertexCounters();
 

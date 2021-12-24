@@ -1,6 +1,3 @@
---! qt:dataset:srcbucket
---! qt:dataset:src1
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 DROP VIEW view1;
 DROP VIEW view2;
@@ -41,8 +38,7 @@ CREATE VIEW view0(valoo) AS SELECT upper(value) FROM src WHERE key=86;
 EXPLAIN
 SELECT * from view2 where key=18;
 
-SHOW TABLES 'view%';
-SHOW VIEWS 'view%';
+SHOW TABLES 'view.*';
 DESCRIBE view1;
 DESCRIBE EXTENDED view1;
 DESCRIBE FORMATTED view1;
@@ -57,28 +53,28 @@ ALTER VIEW view3 SET TBLPROPERTIES ("biggest" = "loser");
 DESCRIBE EXTENDED view3;
 DESCRIBE FORMATTED view3;
 
-CREATE TABLE table1_n4 (key int);
+CREATE TABLE table1 (key int);
 
 -- use DESCRIBE EXTENDED on a base table and an external table as points
 -- of comparison for view descriptions
-DESCRIBE EXTENDED table1_n4;
+DESCRIBE EXTENDED table1;
 DESCRIBE EXTENDED src1;
 
 -- use DESCRIBE EXTENDED on a base table as a point of comparison for
 -- view descriptions
-DESCRIBE EXTENDED table1_n4;
+DESCRIBE EXTENDED table1;
 
 
-INSERT OVERWRITE TABLE table1_n4 SELECT key FROM src WHERE key = 86;
+INSERT OVERWRITE TABLE table1 SELECT key FROM src WHERE key = 86;
 
-SELECT * FROM table1_n4;
-CREATE VIEW view4 AS SELECT * FROM table1_n4;
+SELECT * FROM table1;
+CREATE VIEW view4 AS SELECT * FROM table1;
 SELECT * FROM view4;
 DESCRIBE view4;
-ALTER TABLE table1_n4 ADD COLUMNS (value STRING);
-SELECT * FROM table1_n4;
+ALTER TABLE table1 ADD COLUMNS (value STRING);
+SELECT * FROM table1;
 SELECT * FROM view4;
-DESCRIBE table1_n4;
+DESCRIBE table1;
 DESCRIBE view4;
 
 CREATE VIEW view5 AS SELECT v1.key as key1, v2.key as key2
@@ -117,7 +113,7 @@ CREATE TEMPORARY FUNCTION test_translate AS
 'org.apache.hadoop.hive.ql.udf.generic.GenericUDFTestTranslate';
 CREATE VIEW view8(c) AS
 SELECT test_translate('abc', 'a', 'b')
-FROM table1_n4;
+FROM table1;
 DESCRIBE EXTENDED view8;
 DESCRIBE FORMATTED view8;
 SELECT * FROM view8;
@@ -155,7 +151,7 @@ CREATE TEMPORARY FUNCTION test_explode AS
 'org.apache.hadoop.hive.ql.udf.generic.GenericUDTFExplode';
 CREATE VIEW view11 AS
 SELECT test_explode(array(1,2,3)) AS (boom)
-FROM table1_n4;
+FROM table1;
 DESCRIBE EXTENDED view11;
 DESCRIBE FORMATTED view11;
 SELECT * FROM view11;
@@ -224,35 +220,12 @@ DROP TABLE IF EXISTS view16;
 DESCRIBE view16;
 
 -- Likewise, DROP VIEW IF EXISTS should ignore a matching table name
-DROP VIEW IF EXISTS table1_n4;
-DESCRIBE table1_n4;
+DROP VIEW IF EXISTS table1;
+DESCRIBE table1;
 
 -- this should work since currently we don't track view->table
 -- dependencies for implementing RESTRICT
 
-
--- create view over literals
-create view view17 as select 1 as v;
-select * from view17;
-create view view18 as select v+1 from (select 1 as v) t;
-select * from view18;
-
--- create view if not exists
-create view if not exists view18 as select "should be ignored";
-show create table view18;
-
--- 'create or replace'
-create or replace view view18 as select "should replace";
-show create table view18;
-
--- create a partitioned view
-DROP VIEW IF EXISTS view19;
-create view view19 partitioned on (key) as select value, key from src;
-show create table view19;
-
--- create or replace partitioned view
-create or replace view view19 partitioned on (key) as select value, key from src;
-show create table view19;
 
 DROP VIEW view1;
 DROP VIEW view2;
@@ -270,9 +243,6 @@ DROP VIEW view13;
 DROP VIEW view14;
 DROP VIEW view15;
 DROP VIEW view16;
-DROP VIEW view17;
-DROP VIEW view18;
-DROP VIEW view19;
 DROP TEMPORARY FUNCTION test_translate;
 DROP TEMPORARY FUNCTION test_max;
 DROP TEMPORARY FUNCTION test_explode;

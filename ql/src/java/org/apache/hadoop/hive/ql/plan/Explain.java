@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,7 +28,7 @@ import java.lang.annotation.RetentionPolicy;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Explain {
   public enum Level {
-    USER, DEFAULT, EXTENDED, DEBUG;
+    USER, DEFAULT, EXTENDED;
     public boolean in(Level[] levels) {
       for (Level level : levels) {
         if (level.equals(this)) {
@@ -45,8 +45,6 @@ public @interface Explain {
   boolean displayOnlyOnTrue() default false;
 
   boolean skipHeader() default false;
-
-  boolean jsonOnly() default false;
 
   // By default, many existing @Explain classes/methods are NON_VECTORIZED.
   //
@@ -76,5 +74,4 @@ public @interface Explain {
     }
   };
   Vectorization vectorization() default Vectorization.NON_VECTORIZED;
-
 }

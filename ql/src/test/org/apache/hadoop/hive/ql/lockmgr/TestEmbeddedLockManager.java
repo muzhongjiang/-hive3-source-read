@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,23 +18,16 @@
 
 package org.apache.hadoop.hive.ql.lockmgr;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.lockmgr.HiveLockObject.HiveLockObjectData;
 import org.junit.Assert;
-import org.junit.Test;
 
-/**
- * TestEmbeddedLockManager.
- *
- */
-public class TestEmbeddedLockManager {
+public class TestEmbeddedLockManager extends TestCase {
 
   private int counter;
-  private HiveConf conf = new HiveConf();
 
-  @Test
   public void testLocking() throws LockException {
     HiveConf conf = new HiveConf();
     conf.set("hive.lock.numretries", "0");
@@ -126,8 +119,7 @@ public class TestEmbeddedLockManager {
   }
 
   private HiveLockObject lockObj(String path, String query) {
-    HiveLockObjectData data = new HiveLockObjectData(String.valueOf(++counter), null, null,
-        query, conf);
+    HiveLockObjectData data = new HiveLockObjectData(String.valueOf(++counter), null, null, query);
     return new HiveLockObject(path.split("/"), data);
   }
 }

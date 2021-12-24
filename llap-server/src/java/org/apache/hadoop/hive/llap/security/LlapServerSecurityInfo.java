@@ -16,24 +16,26 @@ package org.apache.hadoop.hive.llap.security;
 
 import java.lang.annotation.Annotation;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.llap.protocol.LlapManagementProtocolPB;
 import org.apache.hadoop.hive.llap.protocol.LlapProtocolBlockingPB;
+import org.apache.hadoop.hive.llap.protocol.LlapManagementProtocolPB;
 import org.apache.hadoop.security.KerberosInfo;
 import org.apache.hadoop.security.SecurityInfo;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.security.token.TokenInfo;
 import org.apache.hadoop.security.token.TokenSelector;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class LlapServerSecurityInfo extends SecurityInfo {
-  private static final Logger LOG = LoggerFactory.getLogger(LlapServerSecurityInfo.class);
+  private static final Log LOG = LogFactory.getLog(LlapServerSecurityInfo.class);
 
   @Override
   public KerberosInfo getKerberosInfo(Class<?> protocol, Configuration conf) {
-    LOG.debug("Trying to get KerberosInfo for " + protocol);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Trying to get KerberosInfo for " + protocol);
+    }
     if (!LlapProtocolBlockingPB.class.isAssignableFrom(protocol)
         && !LlapManagementProtocolPB.class.isAssignableFrom(protocol)) return null;
     return new KerberosInfo() {
@@ -56,7 +58,9 @@ public class LlapServerSecurityInfo extends SecurityInfo {
 
   @Override
   public TokenInfo getTokenInfo(Class<?> protocol, Configuration conf) {
-    LOG.debug("Trying to get TokenInfo for {}", protocol);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Trying to get TokenInfo for " + protocol);
+    }
     // Tokens cannot be used for the management protocol (for now).
     if (!LlapProtocolBlockingPB.class.isAssignableFrom(protocol)) return null;
     return new TokenInfo() {

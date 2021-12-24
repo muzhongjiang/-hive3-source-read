@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,21 +18,18 @@
 
 package org.apache.hadoop.hive.ql.udf;
 
-import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDF;
-import org.apache.hadoop.hive.ql.exec.UDFMethodResolver;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.CastDecimalToLong;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.CastDoubleToLong;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.CastStringToLong;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.CastTimestampToLong;
-import org.apache.hadoop.hive.ql.io.BucketCodec;
 import org.apache.hadoop.hive.ql.io.RecordIdentifier;
 import org.apache.hadoop.hive.serde2.io.ByteWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.lazy.LazyInteger;
 import org.apache.hadoop.hive.serde2.lazy.LazyUtils;
 import org.apache.hadoop.io.BooleanWritable;
@@ -48,32 +45,10 @@ import org.apache.hadoop.io.Text;
  */
 @VectorizedExpressions({CastTimestampToLong.class, CastDoubleToLong.class,
     CastDecimalToLong.class, CastStringToLong.class})
-@Description(
-        name = "int",
-        value = "_FUNC_(x) - converts it's parameter to _FUNC_",
-        extended =
-                "- x is NULL -> NULL\n" +
-                "- byte, short, integer, long, timestamp:\n" +
-                "  x fits into the type _FUNC_ -> integer part of x\n" +
-                "  undefined otherwise\n" +
-                "- boolean:\n" +
-                "  true  -> 1\n" +
-                "  false -> 0\n" +
-                "- string:\n" +
-                "  x is a valid integer -> x\n" +
-                "  NULL otherwise\n" +
-                "Example:\n "
-                + "  > SELECT _FUNC_(true);\n"
-                + "  1")
 public class UDFToInteger extends UDF {
   private final IntWritable intWritable = new IntWritable();
 
   public UDFToInteger() {
-  }
-
-  @Override
-  public UDFMethodResolver getResolver() {
-    return new TimestampCastRestrictorResolver(super.getResolver());
   }
 
   /**
@@ -199,7 +174,7 @@ public class UDFToInteger extends UDF {
       }
       try {
         intWritable.set(LazyInteger
-            .parseInt(i.getBytes(), 0, i.getLength(), 10, true));
+            .parseInt(i.getBytes(), 0, i.getLength(), 10));
         return intWritable;
       } catch (NumberFormatException e) {
         // MySQL returns 0 if the string is not a well-formed numeric value.
@@ -217,16 +192,11 @@ public class UDFToInteger extends UDF {
    *          The Timestamp value to convert
    * @return IntWritable
    */
-  public IntWritable evaluate(TimestampWritableV2 i) {
+  public IntWritable evaluate(TimestampWritable i) {
     if (i == null) {
       return null;
     } else {
-      final long longValue = i.getSeconds();
-      final int intValue = (int) longValue;
-      if (intValue != longValue) {
-        return null;
-      }
-      intWritable.set(intValue);
+      intWritable.set((int) i.getSeconds());
       return intWritable;
     }
   }
@@ -250,9 +220,7 @@ public class UDFToInteger extends UDF {
     if (i == null) {
       return null;
     } else {
-      BucketCodec decoder =
-        BucketCodec.determineVersion(i.getBucketProperty());
-      intWritable.set(decoder.decodeWriterId(i.getBucketProperty()));
+      intWritable.set(i.getBucketId());
       return intWritable;
     }
   }

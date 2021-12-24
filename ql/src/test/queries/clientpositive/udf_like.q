@@ -1,4 +1,3 @@
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.fetch.task.conversion=more;
 
@@ -23,8 +22,3 @@ SELECT '1+2' LIKE '_+_',
        '|||' LIKE '|_|', 
        '+++' LIKE '1+_' 
 FROM src tablesample (1 rows);
-
-
-CREATE TEMPORARY TABLE SplitLines(`id` string) STORED AS ORC;
-INSERT INTO SplitLines SELECT 'withdraw\ncash';
-SELECT `id` LIKE '%withdraw%cash' FROM SplitLines ;

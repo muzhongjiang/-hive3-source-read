@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,7 +28,7 @@ import org.codehaus.jackson.annotate.JsonProperty;
 public class JSONCreateTableMessage extends CreateTableMessage {
 
   @JsonProperty
-  String server, servicePrincipal, db, table, tableType;
+  String server, servicePrincipal, db, table;
 
   @JsonProperty
   Long timestamp;
@@ -38,18 +38,11 @@ public class JSONCreateTableMessage extends CreateTableMessage {
    */
   public JSONCreateTableMessage() {}
 
-  public JSONCreateTableMessage(String server, String servicePrincipal, String db, String table,
-      Long timestamp) {
-    this(server, servicePrincipal, db, table, null, timestamp);
-  }
-
-  public JSONCreateTableMessage(String server, String servicePrincipal, String db, String table,
-      String tableType, Long timestamp) {
+  public JSONCreateTableMessage(String server, String servicePrincipal, String db, String table, Long timestamp) {
     this.server = server;
     this.servicePrincipal = servicePrincipal;
     this.db = db;
     this.table = table;
-    this.tableType = tableType;
     this.timestamp = timestamp;
     checkValid();
   }
@@ -68,11 +61,6 @@ public class JSONCreateTableMessage extends CreateTableMessage {
 
   @Override
   public String getTable() { return table; }
-
-  @Override
-  public String getTableType() {
-    if (tableType != null) return tableType; else return "";
-  }
 
   @Override
   public String toString() {

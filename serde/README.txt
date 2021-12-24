@@ -10,6 +10,8 @@ through "CREATE TABLE" statement:
 * FileFormat: the data has to be in Text or SequenceFile.
 * Format of the row:
   * If the data is in delimited format, use MetadataTypedColumnsetSerDe
+  * If the data is in delimited format and has more than 1 levels of delimitor,
+    use DynamicSerDe with TCTLSeparatedProtocol
   * If the data is a serialized thrift object, use ThriftSerDe
 
 The steps to load the data:

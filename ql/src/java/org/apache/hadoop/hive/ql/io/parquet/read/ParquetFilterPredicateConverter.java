@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,15 +24,14 @@ import org.apache.hadoop.hive.ql.io.parquet.LeafFilterFactory;
 import org.apache.hadoop.hive.ql.io.sarg.ExpressionTree;
 import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.parquet.filter2.predicate.FilterApi;
 import org.apache.parquet.filter2.predicate.FilterPredicate;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 public class ParquetFilterPredicateConverter {
   private static final Logger LOG = LoggerFactory.getLogger(ParquetFilterPredicateConverter.class);
@@ -43,13 +42,12 @@ public class ParquetFilterPredicateConverter {
    * @return  a filter predicate translated from search argument. null is returned
    *          if failed to convert.
    */
-  public static FilterPredicate toFilterPredicate(SearchArgument sarg, MessageType schema, Map<String, TypeInfo> columnTypes) {
-    Map<String, TypeInfo> columns = null;
+  public static FilterPredicate toFilterPredicate(SearchArgument sarg, MessageType schema) {
+    Set<String> columns = null;
     if (schema != null) {
-      columns = new HashMap<>();
+      columns = new HashSet<String>();
       for (Type field : schema.getFields()) {
-      String columnName = field.getName();
-        columns.put(columnName, columnTypes.get(columnName));
+        columns.add(field.getName());
       }
     }
 
@@ -62,21 +60,20 @@ public class ParquetFilterPredicateConverter {
 
   private static FilterPredicate translate(ExpressionTree root,
                                            List<PredicateLeaf> leaves,
-                                           Map<String, TypeInfo> columns,
+                                           Set<String> columns,
                                            MessageType schema) throws Exception {
     FilterPredicate p = null;
     switch (root.getOperator()) {
       case OR:
         for(ExpressionTree child: root.getChildren()) {
-          FilterPredicate childPredicate = translate(child, leaves, columns, schema);
-          if (childPredicate == null) {
-            return null;
-          }
-
           if (p == null) {
-            p = childPredicate;
+            p = translate(child, leaves, columns, schema);
           } else {
-            p = FilterApi.or(p, childPredicate);
+            FilterPredicate right = translate(child, leaves, columns, schema);
+            // constant means no filter, ignore it when it is null
+            if(right != null){
+              p = FilterApi.or(p, right);
+            }
           }
         }
         return p;
@@ -105,10 +102,9 @@ public class ParquetFilterPredicateConverter {
         PredicateLeaf leaf = leaves.get(root.getLeaf());
 
         // If columns is null, then we need to create the leaf
-        if (columns.containsKey(leaf.getColumnName())) {
+        if (columns.contains(leaf.getColumnName())) {
           Type parquetType = schema.getType(leaf.getColumnName());
-          TypeInfo hiveType = columns.get(leaf.getColumnName());
-          return buildFilterPredicateFromPredicateLeaf(leaf, parquetType, hiveType);
+          return buildFilterPredicateFromPredicateLeaf(leaf, parquetType);
         } else {
           // Do not create predicate if the leaf is not on the passed schema.
           return null;
@@ -122,7 +118,7 @@ public class ParquetFilterPredicateConverter {
   }
 
   private static FilterPredicate buildFilterPredicateFromPredicateLeaf
-      (PredicateLeaf leaf, Type parquetType, TypeInfo columnType) throws Exception {
+      (PredicateLeaf leaf, Type parquetType) throws Exception {
     LeafFilterFactory leafFilterFactory = new LeafFilterFactory();
     FilterPredicateLeafBuilder builder;
     try {
@@ -132,14 +128,12 @@ public class ParquetFilterPredicateConverter {
       if (isMultiLiteralsOperator(leaf.getOperator())) {
         return builder.buildPredicate(leaf.getOperator(),
             leaf.getLiteralList(),
-            leaf.getColumnName(),
-            columnType);
+            leaf.getColumnName());
       } else {
         return builder
             .buildPredict(leaf.getOperator(),
                 leaf.getLiteral(),
-                leaf.getColumnName(),
-                columnType);
+                leaf.getColumnName());
       }
     } catch (Exception e) {
       LOG.error("fail to build predicate filter leaf with errors" + e, e);

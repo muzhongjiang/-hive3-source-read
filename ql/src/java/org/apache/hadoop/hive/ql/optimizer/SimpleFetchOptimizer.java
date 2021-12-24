@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -43,7 +43,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.exec.CommonJoinOperator;
 import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
@@ -116,7 +115,9 @@ public class SimpleFetchOptimizer extends Transform {
           pctx.setFetchTask(fetchTask);
         }
       } catch (Exception e) {
-        LOG.error("Failed to transform", e);
+        // Has to use full name to make sure it does not conflict with
+        // org.apache.commons.lang.StringUtils
+        LOG.error(org.apache.hadoop.util.StringUtils.stringifyException(e));
         if (e instanceof SemanticException) {
           throw (SemanticException) e;
         }
@@ -142,7 +143,7 @@ public class SimpleFetchOptimizer extends Transform {
     FetchData fetch = checkTree(aggressive, pctx, alias, source);
     if (fetch != null && checkThreshold(fetch, limit, pctx)) {
       FetchWork fetchWork = fetch.convertToWork();
-      FetchTask fetchTask = (FetchTask) TaskFactory.get(fetchWork);
+      FetchTask fetchTask = (FetchTask) TaskFactory.get(fetchWork, pctx.getConf());
       fetchWork.setSink(fetch.completed(pctx, fetchWork));
       fetchWork.setSource(source);
       fetchWork.setLimit(limit);
@@ -209,38 +210,11 @@ public class SimpleFetchOptimizer extends Transform {
         bypassFilter = !pctx.getPrunedPartitions(alias, ts).hasUnknownPartitions();
       }
     }
-
-    boolean onlyPruningFilter = bypassFilter;
-    Operator<?> op = ts;
-    while (onlyPruningFilter) {
-      if (op instanceof FileSinkOperator || op.getChildOperators() == null) {
-        break;
-      } else if (op.getChildOperators().size() != 1) {
-        onlyPruningFilter = false;
-        break;
-      } else {
-        op = op.getChildOperators().get(0);
-      }
-
-      if (op instanceof FilterOperator) {
-        ExprNodeDesc predicate = ((FilterOperator) op).getConf().getPredicate();
-        if (predicate instanceof ExprNodeConstantDesc
-                && "boolean".equals(predicate.getTypeInfo().getTypeName())) {
-          continue;
-        } else if (PartitionPruner.onlyContainsPartnCols(table, predicate)) {
-          continue;
-        } else {
-          onlyPruningFilter = false;
-        }
-      }
-    }
-
-    if (!aggressive && !onlyPruningFilter) {
+    if (!aggressive && !bypassFilter) {
       return null;
     }
-
     PrunedPartitionList partitions = pctx.getPrunedPartitions(alias, ts);
-    FetchData fetch = new FetchData(ts, parent, table, partitions, splitSample, onlyPruningFilter);
+    FetchData fetch = new FetchData(ts, parent, table, partitions, splitSample, bypassFilter);
     return checkOperators(fetch, aggressive, bypassFilter);
   }
 
@@ -481,7 +455,9 @@ public class SimpleFetchOptimizer extends Transform {
           PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc);
           Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf);
           long len = estimator.estimate(jobConf, scanOp, threshold).getTotalLength();
-          LOG.debug("Threshold {} exceeded for pseudoMR mode", len);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Threshold " + len + " exceeded for pseudoMR mode");
+          }
           return (threshold - len) > 0;
         }
         if (table.isNonNative()) {
@@ -489,7 +465,9 @@ public class SimpleFetchOptimizer extends Transform {
         }
         if (!table.isPartitioned()) {
           long len = getPathLength(jobConf, table.getPath(), table.getInputFormatClass(), threshold);
-          LOG.debug("Threshold {} exceeded for pseudoMR mode", len);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Threshold " + len + " exceeded for pseudoMR mode");
+          }
           return (threshold - len) > 0;
         }
         final AtomicLong total = new AtomicLong(0);
@@ -545,7 +523,6 @@ public class SimpleFetchOptimizer extends Transform {
     // scanning the filesystem to get file lengths.
     private Status checkThresholdWithMetastoreStats(final Table table, final PrunedPartitionList partsList,
       final long threshold) {
-      Status status = Status.UNAVAILABLE;
       if (table != null && !table.isPartitioned()) {
         long dataSize = StatsUtils.getTotalSize(table);
         if (dataSize <= 0) {
@@ -553,7 +530,7 @@ public class SimpleFetchOptimizer extends Transform {
           return Status.UNAVAILABLE;
         }
 
-        status = (threshold - dataSize) >= 0 ? Status.PASS : Status.FAIL;
+        return (threshold - dataSize) >= 0 ? Status.PASS : Status.FAIL;
       } else if (table != null && table.isPartitioned() && partsList != null) {
         List<Long> dataSizes = StatsUtils.getBasicStatForPartitions(table, partsList.getNotDeniedPartns(),
           StatsSetupConst.TOTAL_SIZE);
@@ -564,15 +541,10 @@ public class SimpleFetchOptimizer extends Transform {
           return Status.UNAVAILABLE;
         }
 
-        status = (threshold - totalDataSize) >= 0 ? Status.PASS : Status.FAIL;
+        return (threshold - totalDataSize) >= 0 ? Status.PASS : Status.FAIL;
       }
 
-      if (status == Status.PASS && MetaStoreUtils.isExternalTable(table.getTTable())) {
-        // External table should also check the underlying file size.
-        LOG.warn("Table {} is external table, falling back to filesystem scan.", table.getCompleteName());
-        status = Status.UNAVAILABLE;
-      }
-      return status;
+      return Status.UNAVAILABLE;
     }
 
     private long getPathLength(JobConf conf, Path path,

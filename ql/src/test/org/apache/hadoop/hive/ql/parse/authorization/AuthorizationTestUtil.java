@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,39 +17,57 @@
  */
 package org.apache.hadoop.hive.ql.parse.authorization;
 
+import java.io.Serializable;
 import java.util.List;
+
+import junit.framework.Assert;
 
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.QueryState;
-import org.apache.hadoop.hive.ql.ddl.DDLSemanticAnalyzerFactory;
-import org.apache.hadoop.hive.ql.ddl.DDLWork;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.parse.ASTNode;
-import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer;
+import org.apache.hadoop.hive.ql.parse.DDLSemanticAnalyzer;
+import org.apache.hadoop.hive.ql.parse.ParseDriver;
 import org.apache.hadoop.hive.ql.parse.ParseUtils;
+import org.apache.hadoop.hive.ql.plan.DDLWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.junit.Assert;
 
 /**
  * Util function for authorization tests
  */
 public class AuthorizationTestUtil {
 
+  /**
+   * Create DDLWork from given ast
+   * @param ast
+   * @param conf
+   * @param db
+   * @return
+   * @throws Exception
+   */
   public static DDLWork analyze(ASTNode ast, QueryState queryState, Hive db) throws Exception {
-    BaseSemanticAnalyzer analyzer = DDLSemanticAnalyzerFactory.getAnalyzer(ast, queryState, db);
+    DDLSemanticAnalyzer analyzer = new DDLSemanticAnalyzer(queryState, db);
     SessionState.start(queryState.getConf());
     analyzer.analyze(ast, new Context(queryState.getConf()));
-    List<Task<?>> rootTasks = analyzer.getRootTasks();
+    List<Task<? extends Serializable>> rootTasks = analyzer.getRootTasks();
     return (DDLWork) inList(rootTasks).ofSize(1).get(0).getWork();
   }
 
-  public static DDLWork analyze(String command, QueryState queryState, Hive db, Context ctx) throws Exception {
-    return analyze(parse(command, ctx), queryState, db);
+  /**
+   * Create DDLWork from given command string
+   * @param command
+   * @param conf
+   * @param db
+   * @return
+   * @throws Exception
+   */
+  public static DDLWork analyze(String command, QueryState queryState, Hive db) throws Exception {
+    return analyze(parse(command), queryState, db);
   }
 
-  private static ASTNode parse(String command, Context ctx) throws Exception {
-    return ParseUtils.parse(command, ctx);
+  private static ASTNode parse(String command) throws Exception {
+    return ParseUtils.parse(command);
   }
 
   /**

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,8 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.tez;
 
 import java.io.IOException;
-
-import org.apache.hadoop.hive.ql.exec.tez.tools.KeyValueInputMerger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.AbstractMapOperator;
@@ -28,6 +26,7 @@ import org.apache.hadoop.hive.ql.exec.mr.ExecMapperContext;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.tez.mapreduce.lib.MRReader;
 import org.apache.tez.runtime.library.api.KeyValueReader;
 
@@ -47,10 +46,6 @@ public class MapRecordSource implements RecordSource {
   void init(JobConf jconf, AbstractMapOperator mapOp, KeyValueReader reader) throws IOException {
     execContext = mapOp.getExecContext();
     this.mapOp = mapOp;
-    if (reader instanceof KeyValueInputMerger) {
-      KeyValueInputMerger kvMerger = (KeyValueInputMerger) reader;
-      kvMerger.setIOCxt(execContext.getIoCxt());
-    }
     this.reader = reader;
   }
 
@@ -95,7 +90,7 @@ public class MapRecordSource implements RecordSource {
         // Don't create a new object if we are already out of memory
         throw (OutOfMemoryError) e;
       } else {
-        LOG.error("Failed to process row", e);
+        LOG.error(StringUtils.stringifyException(e));
         closeReader();
         throw new RuntimeException(e);
       }
@@ -108,12 +103,6 @@ public class MapRecordSource implements RecordSource {
       LOG.warn("Cannot close " + (reader == null ? null : reader.getClass()));
       return;
     }
-    if (reader instanceof KeyValueInputMerger) {
-      // cleanup
-      KeyValueInputMerger kvMerger = (KeyValueInputMerger) reader;
-      kvMerger.clean();
-    }
-
     LOG.info("Closing MRReader on error");
     MRReader mrReader = (MRReader)reader;
     try {

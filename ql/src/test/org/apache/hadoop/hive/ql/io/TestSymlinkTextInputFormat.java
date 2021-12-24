@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 
-
+import junit.framework.TestCase;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +37,7 @@ import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.Driver;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.mr.ExecDriver;
 import org.apache.hadoop.hive.ql.exec.mr.MapRedTask;
 import org.apache.hadoop.hive.ql.plan.MapredWork;
 import org.apache.hadoop.hive.ql.plan.PartitionDesc;
@@ -50,16 +51,12 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.ReflectionUtils;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-import org.junit.Before;
-import org.junit.After;
-import org.junit.Test;
 
 /**
  * Unittest for SymlinkTextInputFormat.
  */
-public class TestSymlinkTextInputFormat {
+@SuppressWarnings("deprecation")
+public class TestSymlinkTextInputFormat extends TestCase {
   private static final Logger log =
       LoggerFactory.getLogger(TestSymlinkTextInputFormat.class);
 
@@ -73,8 +70,8 @@ public class TestSymlinkTextInputFormat {
   private Path dataDir2;
   private Path symlinkDir;
 
-  @Before
-  public void setUp() throws IOException {
+  @Override
+  protected void setUp() throws IOException {
     conf = new Configuration();
     job = new JobConf(conf);
 
@@ -98,8 +95,8 @@ public class TestSymlinkTextInputFormat {
     symlinkDir = new Path(testDir, "symlinkdir");
   }
 
-  @After
-  public void tearDown() throws IOException {
+  @Override
+  protected void tearDown() throws IOException {
     fileSystem.delete(testDir, true);
   }
 
@@ -108,20 +105,24 @@ public class TestSymlinkTextInputFormat {
    * file, and then create one symlink file containing these 2 files. Normally
    * without combine, it will return at least 2 splits
    */
-  @Test
   public void testCombine() throws Exception {
     JobConf newJob = new JobConf(job);
     FileSystem fs = dataDir1.getFileSystem(newJob);
+    int symbolLinkedFileSize = 0;
 
     Path dir1_file1 = new Path(dataDir1, "combinefile1_1");
     writeTextFile(dir1_file1,
                   "dir1_file1_line1\n" +
                   "dir1_file1_line2\n");
 
+    symbolLinkedFileSize += fs.getFileStatus(dir1_file1).getLen();
+
     Path dir2_file1 = new Path(dataDir2, "combinefile2_1");
     writeTextFile(dir2_file1,
                   "dir2_file1_line1\n" +
                   "dir2_file1_line2\n");
+
+    symbolLinkedFileSize += fs.getFileStatus(dir2_file1).getLen();
 
     // A symlink file, contains first file from first dir and second file from
     // second dir.
@@ -138,6 +139,7 @@ public class TestSymlinkTextInputFormat {
     HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_REWORK_MAPREDWORK, true);
     HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY, false);
     Driver drv = new Driver(hiveConf);
+    drv.init();
     String tblName = "text_symlink_text";
 
     String createSymlinkTableCmd = "create table " + tblName + " (key int) stored as " +
@@ -149,16 +151,24 @@ public class TestSymlinkTextInputFormat {
     boolean tblCreated = false;
     try {
       int ecode = 0;
-      drv.run(createSymlinkTableCmd);
+      ecode = drv.run(createSymlinkTableCmd).getResponseCode();
+      if (ecode != 0) {
+        throw new Exception("Create table command: " + createSymlinkTableCmd
+            + " failed with exit code= " + ecode);
+      }
 
       tblCreated = true;
       String loadFileCommand = "LOAD DATA LOCAL INPATH '" +
         new Path(symlinkDir, "symlink_file").toString() + "' INTO TABLE " + tblName;
 
-      drv.run(loadFileCommand);
+      ecode = drv.run(loadFileCommand).getResponseCode();
+      if (ecode != 0) {
+        throw new Exception("Load data command: " + loadFileCommand
+            + " failed with exit code= " + ecode);
+      }
 
       String cmd = "select key*1 from " + tblName;
-      ecode = drv.compile(cmd, true);
+      ecode = drv.compile(cmd);
       if (ecode != 0) {
         throw new Exception("Select compile: " + cmd
             + " failed with exit code= " + ecode);
@@ -188,7 +198,7 @@ public class TestSymlinkTextInputFormat {
       fail("Caught exception " + e);
     } finally {
       if (tblCreated) {
-        drv.run("drop table text_symlink_text");
+        drv.run("drop table text_symlink_text").getResponseCode();
       }
     }
   }
@@ -197,7 +207,6 @@ public class TestSymlinkTextInputFormat {
    * Test scenario: Two data directories, one symlink file that contains two
    * paths each point to a file in one of data directories.
    */
-  @Test
   public void testAccuracy1() throws IOException {
     // First data dir, contains 2 files.
 
@@ -279,7 +288,6 @@ public class TestSymlinkTextInputFormat {
    *
    * Expected: Should return empty result set without any exception.
    */
-  @Test
   public void testAccuracy2() throws IOException {
     fileSystem.mkdirs(symlinkDir);
 
@@ -320,7 +328,6 @@ public class TestSymlinkTextInputFormat {
    * Scenario: No job input paths.
    * Expected: IOException with proper message.
    */
-  @Test
   public void testFailure() {
     SymlinkTextInputFormat inputFormat = new SymlinkTextInputFormat();
 

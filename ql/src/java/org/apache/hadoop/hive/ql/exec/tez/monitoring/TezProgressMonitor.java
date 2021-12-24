@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -35,12 +35,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import static org.apache.tez.dag.api.client.DAGStatus.State.KILLED;
 
-public class TezProgressMonitor implements ProgressMonitor {
+class TezProgressMonitor implements ProgressMonitor {
   private static final int COLUMN_1_WIDTH = 16;
-  private final List<BaseWork> topSortedWork;
+  private final Map<String, BaseWork> workMap;
   private final SessionState.LogHelper console;
   private final long executionStartTime;
   private final DAGStatus status;
@@ -51,11 +53,11 @@ public class TezProgressMonitor implements ProgressMonitor {
    * Try to get most the data required from dagClient in the constructor itself so that even after
    * the tez job has finished this object can be used for later use.s
    */
-  TezProgressMonitor(DAGClient dagClient, DAGStatus status, List<BaseWork> topSortedWork,
+  TezProgressMonitor(DAGClient dagClient, DAGStatus status, Map<String, BaseWork> workMap,
       Map<String, Progress> progressMap, SessionState.LogHelper console, long executionStartTime)
       throws IOException, TezException {
     this.status = status;
-    this.topSortedWork = topSortedWork;
+    this.workMap = workMap;
     this.console = console;
     this.executionStartTime = executionStartTime;
     for (Map.Entry<String, Progress> entry : progressMap.entrySet()) {
@@ -86,27 +88,25 @@ public class TezProgressMonitor implements ProgressMonitor {
   public List<List<String>> rows() {
     try {
       List<List<String>> results = new ArrayList<>();
-      for (BaseWork baseWork : topSortedWork) {
-        String vertexName = baseWork.getName();
-        VertexProgress progress = progressCountsMap.get(vertexName);
-        if (progress != null) {
-          // Map 1 .......... container  SUCCEEDED      7          7        0        0       0       0
+      SortedSet<String> keys = new TreeSet<>(progressCountsMap.keySet());
+      for (String s : keys) {
+        VertexProgress progress = progressCountsMap.get(s);
 
-          // TODO: can we pass custom things thru the progress?
-          results.add(
+        // Map 1 .......... container  SUCCEEDED      7          7        0        0       0       0
+
+        results.add(
             Arrays.asList(
-              getNameWithProgress(vertexName, progress.succeededTaskCount, progress.totalTaskCount),
-              getMode(baseWork),
-              progress.vertexStatus(vertexStatusMap.get(vertexName)),
-              progress.total(),
-              progress.completed(),
-              progress.running(),
-              progress.pending(),
-              progress.failed(),
-              progress.killed()
+                getNameWithProgress(s, progress.succeededTaskCount, progress.totalTaskCount),
+                getMode(s, workMap),
+                progress.vertexStatus(vertexStatusMap.get(s)),
+                progress.total(),
+                progress.completed(),
+                progress.running(),
+                progress.pending(),
+                progress.failed(),
+                progress.killed()
             )
-          );
-        }
+        );
       }
       return results;
     } catch (Exception e) {
@@ -194,8 +194,9 @@ public class TezProgressMonitor implements ProgressMonitor {
     return result;
   }
 
-  private String getMode(BaseWork work) {
+  private String getMode(String name, Map<String, BaseWork> workMap) {
     String mode = "container";
+    BaseWork work = workMap.get(name);
     if (work != null) {
       // uber > llap > container
       if (work.getUberMode()) {
@@ -209,7 +210,7 @@ public class TezProgressMonitor implements ProgressMonitor {
     return mode;
   }
 
-  public static class VertexProgress {
+  static class VertexProgress {
     private final int totalTaskCount;
     private final int succeededTaskCount;
     private final int failedTaskAttemptCount;
@@ -325,9 +326,5 @@ public class TezProgressMonitor implements ProgressMonitor {
       result = 31 * result + dagState.hashCode();
       return result;
     }
-  }
-
-  public DAGStatus getStatus() {
-    return status;
   }
 }

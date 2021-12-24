@@ -1,32 +1,32 @@
 #### A masked pattern was here ####
 PREHOOK: type: CREATETABLE
-PREHOOK: Input: hdfs://### HDFS PATH ###+with space
+#### A masked pattern was here ####
 PREHOOK: Output: database:default
 PREHOOK: Output: default@spacetest
 #### A masked pattern was here ####
 POSTHOOK: type: CREATETABLE
-POSTHOOK: Input: hdfs://### HDFS PATH ###+with space
+#### A masked pattern was here ####
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@spacetest
 PREHOOK: query: SELECT * FROM spacetest
 PREHOOK: type: QUERY
 PREHOOK: Input: default@spacetest
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: SELECT * FROM spacetest
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@spacetest
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 12	jason
 13	steven
 15	joe
 PREHOOK: query: SELECT count(*) FROM spacetest
 PREHOOK: type: QUERY
 PREHOOK: Input: default@spacetest
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: SELECT count(*) FROM spacetest
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@spacetest
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 3
 PREHOOK: query: DROP TABLE spacetest
 PREHOOK: type: DROPTABLE
@@ -46,23 +46,23 @@ POSTHOOK: Output: database:default
 POSTHOOK: Output: default@spacetestpartition
 #### A masked pattern was here ####
 PREHOOK: type: ALTERTABLE_ADDPARTS
-PREHOOK: Input: hdfs://### HDFS PATH ###+with space
+#### A masked pattern was here ####
 PREHOOK: Output: default@spacetestpartition
 #### A masked pattern was here ####
 POSTHOOK: type: ALTERTABLE_ADDPARTS
-POSTHOOK: Input: hdfs://### HDFS PATH ###+with space
+#### A masked pattern was here ####
 POSTHOOK: Output: default@spacetestpartition
 POSTHOOK: Output: default@spacetestpartition@day=10
 PREHOOK: query: SELECT * FROM spacetestpartition
 PREHOOK: type: QUERY
 PREHOOK: Input: default@spacetestpartition
 PREHOOK: Input: default@spacetestpartition@day=10
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: SELECT * FROM spacetestpartition
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@spacetestpartition
 POSTHOOK: Input: default@spacetestpartition@day=10
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 12	jason	10
 13	steven	10
 15	joe	10
@@ -70,12 +70,12 @@ PREHOOK: query: SELECT count(*) FROM spacetestpartition
 PREHOOK: type: QUERY
 PREHOOK: Input: default@spacetestpartition
 PREHOOK: Input: default@spacetestpartition@day=10
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: SELECT count(*) FROM spacetestpartition
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@spacetestpartition
 POSTHOOK: Input: default@spacetestpartition@day=10
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 3
 PREHOOK: query: DROP TABLE spacetestpartition
 PREHOOK: type: DROPTABLE

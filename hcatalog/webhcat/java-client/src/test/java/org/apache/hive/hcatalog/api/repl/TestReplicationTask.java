@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,7 @@
  */
 package org.apache.hive.hcatalog.api.repl;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -30,13 +30,9 @@ import org.apache.hive.hcatalog.api.repl.exim.EximReplicationTaskFactory;
 import org.apache.hive.hcatalog.common.HCatConstants;
 import org.apache.hive.hcatalog.common.HCatException;
 import org.apache.hive.hcatalog.messaging.MessageFactory;
-import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
-/**
- * TestReplicationTask.
- */
-public class TestReplicationTask {
+public class TestReplicationTask extends TestCase{
   private static MessageFactory msgFactory = MessageFactory.getInstance();
 
 
@@ -72,7 +68,7 @@ public class TestReplicationTask {
   }
 
   @Test
-  public void testCreate() throws HCatException {
+  public static void testCreate() throws HCatException {
     Table t = new Table();
     t.setDbName("testdb");
     t.setTableName("testtable");

@@ -1,5 +1,3 @@
-set hive.mapred.mode=nonstrict;
--- start query 1 in stream 0 using template query27.tpl and seed 2017787633
 explain
 select  i_item_id,
         s_state, grouping(s_state) g_state,
@@ -22,4 +20,3 @@ select  i_item_id,
          ,s_state
  limit 100;
 
--- end query 1 in stream 0 using template query27.tpl

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,14 +17,13 @@
  */
 package org.apache.hadoop.hive.llap.metrics;
 
-import com.google.common.base.MoreObjects;
 import org.apache.hadoop.metrics2.MetricsInfo;
 
 import com.google.common.base.Objects;
 
 /**
  * Llap daemon JVM info. These are some additional metrics that are not exposed via
- * {@link org.apache.hadoop.hive.common.JvmMetrics}
+ * {@link org.apache.hadoop.metrics.jvm.JvmMetrics}
  *
  * NOTE: These metrics are for sinks supported by hadoop-metrics2. There is already a /jmx endpoint
  * that gives all these info.
@@ -38,10 +37,7 @@ public enum LlapDaemonJvmInfo implements MetricsInfo {
   LlapDaemonMappedBufferTotalCapacity("Estimate of total capacity of all mapped byte buffers in bytes"),
   LlapDaemonMappedBufferMemoryUsed("Estimate of memory that JVM is using for mapped byte buffers in bytes"),
   LlapDaemonOpenFileDescriptorCount("Number of open file descriptors"),
-  LlapDaemonMaxFileDescriptorCount("Maximum number of file descriptors used so far"),
-  LlapDaemonLimitFileDescriptorCount("Limit for file descriptors allowed by system"),
-  LlapDaemonResidentSetSize("Resident memory (RSS) used by llap daemon process in bytes"),
-  LlapDaemonVirtualMemorySize("Virtual memory (VMEM) used by llap daemon process in bytes")
+  LlapDaemonMaxFileDescriptorCount("Maximum number of file descriptors"),
   ;
 
   private final String desc;
@@ -57,7 +53,7 @@ public enum LlapDaemonJvmInfo implements MetricsInfo {
 
   @Override
   public String toString() {
-    return MoreObjects.toStringHelper(this)
+    return Objects.toStringHelper(this)
       .add("name", name()).add("description", desc)
       .toString();
   }

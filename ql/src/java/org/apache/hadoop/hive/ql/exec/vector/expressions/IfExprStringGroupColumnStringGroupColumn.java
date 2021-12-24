@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * Compute IF(expr1, expr2, expr3) for 3 input column expressions.
@@ -34,9 +33,14 @@ public class IfExprStringGroupColumnStringGroupColumn extends VectorExpression {
 
   private static final long serialVersionUID = 1L;
 
-  public IfExprStringGroupColumnStringGroupColumn(int arg1Column, int arg2Column, int arg3Column,
-      int outputColumnNum) {
-    super(arg1Column, arg2Column, arg3Column, outputColumnNum);
+  private int arg1Column, arg2Column, arg3Column;
+  private int outputColumn;
+
+  public IfExprStringGroupColumnStringGroupColumn(int arg1Column, int arg2Column, int arg3Column, int outputColumn) {
+    this.arg1Column = arg1Column;
+    this.arg2Column = arg2Column;
+    this.arg3Column = arg3Column;
+    this.outputColumn = outputColumn;
   }
 
   public IfExprStringGroupColumnStringGroupColumn() {
@@ -44,22 +48,20 @@ public class IfExprStringGroupColumnStringGroupColumn extends VectorExpression {
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    LongColumnVector arg1ColVector = (LongColumnVector) batch.cols[inputColumnNum[0]];
-    BytesColumnVector arg2ColVector = (BytesColumnVector) batch.cols[inputColumnNum[1]];
-    BytesColumnVector arg3ColVector = (BytesColumnVector) batch.cols[inputColumnNum[2]];
-    BytesColumnVector outputColVector = (BytesColumnVector) batch.cols[outputColumnNum];
+    LongColumnVector arg1ColVector = (LongColumnVector) batch.cols[arg1Column];
+    BytesColumnVector arg2ColVector = (BytesColumnVector) batch.cols[arg2Column];
+    BytesColumnVector arg3ColVector = (BytesColumnVector) batch.cols[arg3Column];
+    BytesColumnVector outputColVector = (BytesColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
     boolean[] outputIsNull = outputColVector.isNull;
-
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
+    outputColVector.noNulls = arg2ColVector.noNulls && arg3ColVector.noNulls;
+    outputColVector.isRepeating = false; // may override later
     int n = batch.size;
     long[] vector1 = arg1ColVector.vector;
 
@@ -77,7 +79,7 @@ public class IfExprStringGroupColumnStringGroupColumn extends VectorExpression {
      * of code paths.
      */
     if (arg1ColVector.isRepeating) {
-      if ((arg1ColVector.noNulls || !arg1ColVector.isNull[0]) && vector1[0] == 1) {
+      if (vector1[0] == 1) {
         arg2ColVector.copySelected(batch.selectedInUse, sel, n, outputColVector);
       } else {
         arg3ColVector.copySelected(batch.selectedInUse, sel, n, outputColVector);
@@ -88,11 +90,6 @@ public class IfExprStringGroupColumnStringGroupColumn extends VectorExpression {
     // extend any repeating values and noNulls indicator in the inputs
     arg2ColVector.flatten(batch.selectedInUse, sel, n);
     arg3ColVector.flatten(batch.selectedInUse, sel, n);
-
-    /*
-     * Do careful maintenance of NULLs.
-     */
-    outputColVector.noNulls = false;
 
     if (arg1ColVector.noNulls) {
       if (batch.selectedInUse) {
@@ -130,7 +127,6 @@ public class IfExprStringGroupColumnStringGroupColumn extends VectorExpression {
         }
       }
     } else /* there are nulls */ {
-
       if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
@@ -171,9 +167,18 @@ public class IfExprStringGroupColumnStringGroupColumn extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "String";
+  }	
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", " + getColumnParamString(1, inputColumnNum[1]) +
-         ", " + getColumnParamString(2, inputColumnNum[2]);
+    return "col " + arg1Column + ", col "+ arg2Column + ", col "+ arg3Column;
   }
 
   @Override
@@ -184,8 +189,8 @@ public class IfExprStringGroupColumnStringGroupColumn extends VectorExpression {
         .setNumArguments(3)
         .setArgumentTypes(
             VectorExpressionDescriptor.ArgumentType.INT_FAMILY,
-            VectorExpressionDescriptor.ArgumentType.STRING_FAMILY_BINARY,
-            VectorExpressionDescriptor.ArgumentType.STRING_FAMILY_BINARY)
+            VectorExpressionDescriptor.ArgumentType.STRING_FAMILY,
+            VectorExpressionDescriptor.ArgumentType.STRING_FAMILY)
         .setInputExpressionTypes(
             VectorExpressionDescriptor.InputExpressionType.COLUMN,
             VectorExpressionDescriptor.InputExpressionType.COLUMN,

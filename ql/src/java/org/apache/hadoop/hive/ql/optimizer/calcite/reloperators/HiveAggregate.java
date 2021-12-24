@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,6 @@ import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelShuttle;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -34,7 +33,6 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
-import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelShuttle;
 import org.apache.hadoop.hive.ql.optimizer.calcite.TraitsUtil;
 
 import com.google.common.collect.Sets;
@@ -45,17 +43,18 @@ public class HiveAggregate extends Aggregate implements HiveRelNode {
 
 
   public HiveAggregate(RelOptCluster cluster, RelTraitSet traitSet, RelNode child,
-      ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets,
+      boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets,
       List<AggregateCall> aggCalls) {
-    super(cluster, TraitsUtil.getDefaultTraitSet(cluster), child, false,
-            groupSet, groupSets, aggCalls);
+    super(cluster, TraitsUtil.getDefaultTraitSet(cluster), child, indicator, groupSet,
+            groupSets, aggCalls);
   }
 
   @Override
   public Aggregate copy(RelTraitSet traitSet, RelNode input,
-          ImmutableBitSet groupSet,
+          boolean indicator, ImmutableBitSet groupSet,
           List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
-    return new HiveAggregate(getCluster(), traitSet, input, groupSet, groupSets, aggCalls);
+      return new HiveAggregate(getCluster(), traitSet, input, indicator, groupSet,
+              groupSets, aggCalls);
   }
 
   @Override
@@ -69,20 +68,19 @@ public class HiveAggregate extends Aggregate implements HiveRelNode {
   }
 
   public boolean isBucketedInput() {
-    final RelMetadataQuery mq = this.getInput().getCluster().getMetadataQuery();
-    return mq.distribution(this).getKeys().
+    return RelMetadataQuery.instance().distribution(this.getInput()).getKeys().
             containsAll(groupSet.asList());
   }
 
   @Override
   protected RelDataType deriveRowType() {
     return deriveRowType(getCluster().getTypeFactory(), getInput().getRowType(),
-        indicator, groupSet, aggCalls);
+        indicator, groupSet, groupSets, aggCalls);
   }
 
   public static RelDataType deriveRowType(RelDataTypeFactory typeFactory,
       final RelDataType inputRowType, boolean indicator,
-      ImmutableBitSet groupSet,
+      ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets,
       final List<AggregateCall> aggCalls) {
     final List<Integer> groupList = groupSet.asList();
     assert groupList.size() == groupSet.cardinality();
@@ -100,11 +98,10 @@ public class HiveAggregate extends Aggregate implements HiveRelNode {
                 typeFactory.createSqlType(SqlTypeName.BOOLEAN), false);
         String name = "i$" + fieldList.get(groupKey).getName();
         int i = 0;
-        StringBuilder nameBuilder = new StringBuilder(name);
         while (containedNames.contains(name)) {
-          nameBuilder.append('_').append(i++);
+          name += "_" + i++;
         }
-        containedNames.add(nameBuilder.toString());
+        containedNames.add(name);
         builder.add(name, booleanType);
       }
     }
@@ -131,14 +128,6 @@ public class HiveAggregate extends Aggregate implements HiveRelNode {
 
   public LinkedHashSet<Integer> getAggregateColumnsOrder() {
     return this.aggregateColumnsOrder;
-  }
-
-  //required for HiveRelDecorrelator
-  @Override public RelNode accept(RelShuttle shuttle) {
-    if(shuttle instanceof HiveRelShuttle) {
-      return ((HiveRelShuttle)shuttle).visit(this);
-    }
-    return shuttle.visit(this);
   }
 
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,12 +24,10 @@ import java.util.List;
 
 import org.apache.hadoop.hive.common.Pool;
 import org.apache.hadoop.hive.common.Pool.PoolObjectHelper;
-import org.apache.hadoop.hive.common.io.CacheTag;
 import org.apache.hadoop.hive.common.io.DataCache;
 import org.apache.hadoop.hive.common.io.encoded.EncodedColumnBatch;
 import org.apache.hadoop.hive.common.io.encoded.EncodedColumnBatch.ColumnStreamData;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
-import org.apache.orc.CompressionCodec;
 import org.apache.orc.DataReader;
 import org.apache.orc.OrcProto;
 
@@ -46,11 +44,12 @@ public interface Reader extends org.apache.hadoop.hive.ql.io.orc.Reader {
    * @param pf Pool factory to create object pools.
    * @return The reader.
    */
-  EncodedReader encodedReader(Object fileKey, DataCache dataCache, LlapDataReader dataReader,
-      PoolFactory pf, IoTrace trace, boolean useCodecPool, CacheTag tag, boolean isReadCacheOnly) throws IOException;
+  EncodedReader encodedReader(Object fileKey, DataCache dataCache, DataReader dataReader,
+      PoolFactory pf) throws IOException;
 
   /** The factory that can create (or return) the pools used by encoded reader. */
   public interface PoolFactory {
+    <T> Pool<T> createPool(int size, PoolObjectHelper<T> helper);
     Pool<OrcEncodedColumnBatch> createEncodedColumnBatchPool();
     Pool<ColumnStreamData> createColumnStreamDataPool();
   }
@@ -105,10 +104,11 @@ public interface Reader extends org.apache.hadoop.hive.ql.io.orc.Reader {
       if (columnVectors != null && columnCount == columnVectors.length) {
         Arrays.fill(columnVectors, null);
         return;
-      }
-      if (columnVectors != null) {
+      } if (columnVectors != null) {
         columnVectors = new List[columnCount];
-      } // else just keep it null
+      } else {
+        columnVectors = null;
+      }
     }
 
     public boolean hasVectors(int colIx) {
@@ -118,15 +118,6 @@ public interface Reader extends org.apache.hadoop.hive.ql.io.orc.Reader {
     public List<ColumnVector> getColumnVectors(int colIx) {
       if (!hasVectors(colIx)) throw new AssertionError("No data for column " + colIx);
       return columnVectors[colIx];
-    }
-
-    public int getColumnsWithDataCount() {
-      int childCount = hasData.length, result = 0;
-      for (int childIx = 0; childIx < childCount; ++childIx) {
-        if (!hasData(childIx) && !hasVectors(childIx)) continue;
-        ++result;
-      }
-      return result;
     }
   }
 }

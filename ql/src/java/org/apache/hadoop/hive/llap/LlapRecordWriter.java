@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,17 +33,15 @@ public class LlapRecordWriter<K extends Writable, V extends WritableComparable>
   implements RecordWriter<K,V> {
   public static final Logger LOG = LoggerFactory.getLogger(LlapRecordWriter.class);
 
-  String id;
   DataOutputStream dos;
 
-  public LlapRecordWriter(String id, OutputStream out) {
-    this.id = id;
+  public LlapRecordWriter(OutputStream out) {
     dos = new DataOutputStream(out);
   }
 
   @Override
   public void close(Reporter reporter) throws IOException {
-    LOG.info("CLOSING the record writer output stream for " + id);
+    LOG.info("CLOSING the record writer output stream");
     dos.close();
   }
 

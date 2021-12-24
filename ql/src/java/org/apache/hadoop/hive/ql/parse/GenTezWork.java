@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -35,7 +35,7 @@ import org.apache.hadoop.hive.ql.exec.OperatorFactory;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.optimizer.GenMapRedUtils;
 import org.apache.hadoop.hive.ql.optimizer.ReduceSinkMapJoinProc;
@@ -58,7 +58,7 @@ import org.slf4j.LoggerFactory;
  * a new execution unit.) and break the operators into work
  * and tasks along the way.
  */
-public class GenTezWork implements SemanticNodeProcessor {
+public class GenTezWork implements NodeProcessor {
 
   private static final Logger LOG = LoggerFactory.getLogger(GenTezWork.class.getName());
 
@@ -70,7 +70,7 @@ public class GenTezWork implements SemanticNodeProcessor {
 
   @Override
   public Object process(Node nd, Stack<Node> stack,
-                        NodeProcessorCtx procContext, Object... nodeOutputs)
+      NodeProcessorCtx procContext, Object... nodeOutputs)
       throws SemanticException {
 
     GenTezProcContext context = (GenTezProcContext) procContext;
@@ -291,14 +291,8 @@ public class GenTezWork implements SemanticNodeProcessor {
               // of the downstream work
               for (ReduceSinkOperator r:
                      context.linkWorkWithReduceSinkMap.get(parentWork)) {
-                if (!context.mapJoinParentMap.get(mj).contains(r)) {
-                  // We might be visiting twice because of reutilization of intermediary results.
-                  // If that is the case, we do not need to do anything because either we have
-                  // already connected this RS operator or we will connect it at subsequent pass.
-                  continue;
-                }
                 if (r.getConf().getOutputName() != null) {
-                  LOG.debug("Cloning reduce sink " + r + " for multi-child broadcast edge");
+                  LOG.debug("Cloning reduce sink for multi-child broadcast edge");
                   // we've already set this one up. Need to clone for the next work.
                   r = (ReduceSinkOperator) OperatorFactory.getAndMakeChild(
                       r.getCompilationOpContext(), (ReduceSinkDesc)r.getConf().clone(),
@@ -319,7 +313,9 @@ public class GenTezWork implements SemanticNodeProcessor {
     // This is where we cut the tree as described above. We also remember that
     // we might have to connect parent work with this work later.
     for (Operator<?> parent : new ArrayList<Operator<?>>(root.getParentOperators())) {
-      LOG.debug("Removing {} as parent from {}", parent, root);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Removing " + parent + " as parent from " + root);
+      }
       context.leafOperatorToFollowingWork.remove(parent);
       context.leafOperatorToFollowingWork.put(parent, work);
       root.removeParent(parent);
@@ -374,7 +370,7 @@ public class GenTezWork implements SemanticNodeProcessor {
       long bytesPerReducer = context.conf.getLongVar(HiveConf.ConfVars.BYTESPERREDUCER);
 
       LOG.debug("Second pass. Leaf operator: "+operator
-        +" has common downstream work: "+followingWork);
+        +" has common downstream work:"+followingWork);
 
       if (operator instanceof DummyStoreOperator) {
         // this is the small table side.
@@ -459,11 +455,10 @@ public class GenTezWork implements SemanticNodeProcessor {
           EdgeType edgeType = GenTezUtils.determineEdgeType(work, followingWork, rs);
           if (rWork.isAutoReduceParallelism()) {
             edgeProp =
-                new TezEdgeProperty(context.conf, edgeType, true, rWork.isSlowStart(),
+                new TezEdgeProperty(context.conf, edgeType, true,
                     rWork.getMinReduceTasks(), rWork.getMaxReduceTasks(), bytesPerReducer);
           } else {
             edgeProp = new TezEdgeProperty(edgeType);
-            edgeProp.setSlowStart(rWork.isSlowStart());
           }
           tezWork.connect(work, followingWork, edgeProp);
           context.connectedReduceSinks.add(rs);

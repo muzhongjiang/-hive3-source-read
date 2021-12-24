@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,29 +18,23 @@
 
 package org.apache.hadoop.hive.serde2.binarysortable.fast;
 
-import static org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe.ONE;
-import static org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe.ZERO;
-
 import java.io.IOException;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 
-import org.apache.hadoop.hive.common.type.Date;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
-import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableUtils;
 import org.apache.hadoop.hive.serde2.fast.SerializeWrite;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
+import org.apache.hive.common.util.DateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,16 +45,6 @@ import org.slf4j.LoggerFactory;
  */
 public final class BinarySortableSerializeWrite implements SerializeWrite {
   public static final Logger LOG = LoggerFactory.getLogger(BinarySortableSerializeWrite.class.getName());
-
-  public static BinarySortableSerializeWrite with(Properties tbl, int columnCount) {
-    boolean[] columnSortOrderIsDesc = new boolean[columnCount];
-    byte[] columnNullMarker = new byte[columnCount];
-    byte[] columnNotNullMarker = new byte[columnCount];
-
-    BinarySortableUtils.fillOrderArrays(tbl, columnSortOrderIsDesc, columnNullMarker, columnNotNullMarker);
-
-    return new BinarySortableSerializeWrite(columnSortOrderIsDesc, columnNullMarker, columnNotNullMarker);
-  }
 
   private Output output;
 
@@ -73,15 +57,17 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
   // Which field we are on.  We start with -1 to be consistent in style with
   // BinarySortableDeserializeRead.
   private int index;
-  private int level;
 
-  private TimestampWritableV2 tempTimestampWritable;
-  private HiveDecimalWritable hiveDecimalWritable;
+  private int fieldCount;
+
+  private TimestampWritable tempTimestampWritable;
+
   private byte[] decimalBytesScratch;
 
   public BinarySortableSerializeWrite(boolean[] columnSortOrderIsDesc,
           byte[] columnNullMarker, byte[] columnNotNullMarker) {
     this();
+    fieldCount = columnSortOrderIsDesc.length;
     this.columnSortOrderIsDesc = columnSortOrderIsDesc;
     this.columnNullMarker = columnNullMarker;
     this.columnNotNullMarker = columnNotNullMarker;
@@ -93,17 +79,18 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   public BinarySortableSerializeWrite(int fieldCount) {
     this();
+    this.fieldCount = fieldCount;
     columnSortOrderIsDesc = new boolean[fieldCount];
     Arrays.fill(columnSortOrderIsDesc, false);
     columnNullMarker = new byte[fieldCount];
-    Arrays.fill(columnNullMarker, ZERO);
+    Arrays.fill(columnNullMarker, BinarySortableSerDe.ZERO);
     columnNotNullMarker = new byte[fieldCount];
-    Arrays.fill(columnNotNullMarker, ONE);
+    Arrays.fill(columnNotNullMarker, BinarySortableSerDe.ONE);
   }
 
   // Not public since we must have the field count or column sort order information.
   private BinarySortableSerializeWrite() {
-    tempTimestampWritable = new TimestampWritableV2();
+    tempTimestampWritable = new TimestampWritable();
   }
 
   /*
@@ -114,7 +101,6 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
     this.output = output;
     this.output.reset();
     index = -1;
-    level = 0;
   }
 
   /*
@@ -124,7 +110,6 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
   public void setAppend(Output output) {
     this.output = output;
     index = -1;
-    level = 0;
   }
 
   /*
@@ -134,7 +119,6 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
   public void reset() {
     output.reset();
     index = -1;
-    level = 0;
   }
 
   /*
@@ -142,17 +126,8 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeNull() throws IOException {
-    if (level == 0) {
-      index++;
-    }
+    ++index;
     BinarySortableSerDe.writeByte(output, columnNullMarker[index], columnSortOrderIsDesc[index]);
-  }
-
-  private void beginElement() {
-    if (level == 0) {
-      index++;
-    }
-    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], columnSortOrderIsDesc[index]);
   }
 
   /*
@@ -160,8 +135,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeBoolean(boolean v) throws IOException {
-    beginElement();
-    BinarySortableSerDe.writeByte(output, (byte) (v ? 2 : 1), columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.writeByte(output, (byte) (v ? 2 : 1), invert);
   }
 
   /*
@@ -169,8 +150,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeByte(byte v) throws IOException {
-    beginElement();
-    BinarySortableSerDe.writeByte(output, (byte) (v ^ 0x80), columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.writeByte(output, (byte) (v ^ 0x80), invert);
   }
 
   /*
@@ -178,8 +165,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeShort(short v) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeShort(output, v, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeShort(output, v, invert);
   }
 
   /*
@@ -187,8 +180,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeInt(int v) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeInt(output, v, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeInt(output, v, invert);
   }
 
   /*
@@ -196,8 +195,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeLong(long v) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeLong(output, v, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeLong(output, v, invert);
   }
 
   /*
@@ -205,8 +210,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeFloat(float vf) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeFloat(output, vf, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeFloat(output, vf, invert);
   }
 
   /*
@@ -214,8 +225,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeDouble(double vd) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeDouble(output, vd, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeDouble(output, vd, invert);
   }
 
   /*
@@ -226,14 +243,26 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeString(byte[] v) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeBytes(output, v, 0, v.length, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeBytes(output, v, 0, v.length, invert);
   }
 
   @Override
   public void writeString(byte[] v, int start, int length) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeBytes(output, v, start, length, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeBytes(output, v, start, length, invert);
   }
 
   /*
@@ -261,14 +290,26 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeBinary(byte[] v) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeBytes(output, v, 0, v.length, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeBytes(output, v, 0, v.length, invert);
   }
 
   @Override
   public void writeBinary(byte[] v, int start, int length) {
-    beginElement();
-    BinarySortableSerDe.serializeBytes(output, v, start, length, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeBytes(output, v, start, length, invert);
   }
 
   /*
@@ -276,15 +317,27 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeDate(Date date) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeInt(output, DateWritableV2.dateToDays(date), columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeInt(output, DateWritable.dateToDays(date), invert);
   }
 
   // We provide a faster way to write a date without a Date object.
   @Override
   public void writeDate(int dateAsDays) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeInt(output, dateAsDays, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeInt(output, dateAsDays, invert);
   }
 
   /*
@@ -292,9 +345,15 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeTimestamp(Timestamp vt) throws IOException {
-    beginElement();
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
     tempTimestampWritable.set(vt);
-    BinarySortableSerDe.serializeTimestampWritable(output, tempTimestampWritable, columnSortOrderIsDesc[index]);
+    BinarySortableSerDe.serializeTimestampWritable(output, tempTimestampWritable, invert);
   }
 
   /*
@@ -302,14 +361,26 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeHiveIntervalYearMonth(HiveIntervalYearMonth viyt) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeHiveIntervalYearMonth(output, viyt, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeHiveIntervalYearMonth(output, viyt, invert);
   }
 
   @Override
   public void writeHiveIntervalYearMonth(int totalMonths) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeInt(output, totalMonths, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeInt(output, totalMonths, invert);
   }
 
   /*
@@ -317,8 +388,14 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeHiveIntervalDayTime(HiveIntervalDayTime vidt) throws IOException {
-    beginElement();
-    BinarySortableSerDe.serializeHiveIntervalDayTime(output, vidt, columnSortOrderIsDesc[index]);
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
+    BinarySortableSerDe.serializeHiveIntervalDayTime(output, vidt, invert);
   }
 
   /*
@@ -328,114 +405,32 @@ public final class BinarySortableSerializeWrite implements SerializeWrite {
    * creates trailing zeroes output decimals.
    */
   @Override
-  public void writeDecimal64(long decimal64Long, int scale) throws IOException {
-    if (hiveDecimalWritable == null) {
-      hiveDecimalWritable = new HiveDecimalWritable();
-    }
-    hiveDecimalWritable.deserialize64(decimal64Long, scale);
-    writeHiveDecimal(hiveDecimalWritable, scale);
-  }
-
-  @Override
   public void writeHiveDecimal(HiveDecimal dec, int scale) throws IOException {
-    beginElement();
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
     if (decimalBytesScratch == null) {
       decimalBytesScratch = new byte[HiveDecimal.SCRATCH_BUFFER_LEN_TO_BYTES];
     }
-    BinarySortableSerDe.serializeHiveDecimal(output, dec, columnSortOrderIsDesc[index], decimalBytesScratch);
+    BinarySortableSerDe.serializeHiveDecimal(output, dec, invert, decimalBytesScratch);
   }
 
   @Override
   public void writeHiveDecimal(HiveDecimalWritable decWritable, int scale) throws IOException {
-    beginElement();
+    ++index;
+
+    final boolean invert = columnSortOrderIsDesc[index];
+
+    // This field is not a null.
+    BinarySortableSerDe.writeByte(output, columnNotNullMarker[index], invert);
+
     if (decimalBytesScratch == null) {
       decimalBytesScratch = new byte[HiveDecimal.SCRATCH_BUFFER_LEN_TO_BYTES];
     }
-    BinarySortableSerDe.serializeHiveDecimal(output, decWritable, columnSortOrderIsDesc[index], decimalBytesScratch);
-  }
-
-  /*
-   * List
-   */
-  @Override
-  public void beginList(List list) {
-    beginElement();
-    level++;
-    if (!list.isEmpty()) {
-      BinarySortableSerDe.writeByte(output, (byte) 1, columnSortOrderIsDesc[index]);
-    }
-  }
-
-  @Override
-  public void separateList() {
-    BinarySortableSerDe.writeByte(output, (byte) 1, columnSortOrderIsDesc[index]);
-  }
-
-  @Override
-  public void finishList() {
-    level--;
-    // and \0 to terminate
-    BinarySortableSerDe.writeByte(output, (byte) 0, columnSortOrderIsDesc[index]);
-  }
-
-  /*
-   * Map
-   */
-  @Override
-  public void beginMap(Map<?, ?> map) {
-    beginElement();
-    level++;
-    if (!map.isEmpty()) {
-      BinarySortableSerDe.writeByte(output, (byte) 1, columnSortOrderIsDesc[index]);
-    }
-  }
-
-  @Override
-  public void separateKey() {
-  }
-
-  @Override
-  public void separateKeyValuePair() {
-    BinarySortableSerDe.writeByte(output, (byte) 1, columnSortOrderIsDesc[index]);
-  }
-
-  @Override
-  public void finishMap() {
-    level--;
-    // and \0 to terminate
-    BinarySortableSerDe.writeByte(output, (byte) 0, columnSortOrderIsDesc[index]);
-  }
-
-  /*
-   * Struct
-   */
-  @Override
-  public void beginStruct(List fieldValues) {
-    beginElement();
-    level++;
-  }
-
-  @Override
-  public void separateStruct() {
-  }
-
-  @Override
-  public void finishStruct() {
-    level--;
-  }
-
-  /*
-   * Union
-   */
-  @Override
-  public void beginUnion(int tag) throws IOException {
-    beginElement();
-    BinarySortableSerDe.writeByte(output, (byte) tag, columnSortOrderIsDesc[index]);
-    level++;
-  }
-
-  @Override
-  public void finishUnion() {
-    level--;
+    BinarySortableSerDe.serializeHiveDecimal(output, decWritable, invert, decimalBytesScratch);
   }
 }

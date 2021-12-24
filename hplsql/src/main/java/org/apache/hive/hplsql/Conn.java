@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -71,7 +71,11 @@ public class Conn {
     }
     return query;
   }
-
+  
+  public Query executeQuery(String sql, String connName) {
+    return executeQuery(new Query(sql), connName);
+  }
+  
   /**
    * Prepare a SQL query
    */
@@ -90,7 +94,33 @@ public class Conn {
     }
     return query;
   }
-
+  
+  /**
+   * Execute a SQL statement
+   */
+  public Query executeSql(String sql, String connName) {
+    Query query = new Query(sql);
+    try {
+      Connection conn = getConnection(connName);
+      runPreSql(connName, conn);
+      Statement stmt = conn.createStatement();
+      ResultSet rs = null;
+      exec.info(null, "Starting SQL statement");
+      timer.start();
+      if (stmt.execute(sql)) {
+        rs = stmt.getResultSet();        
+      } 
+      timer.stop();
+      query.set(conn, stmt, rs);
+      if (info) {
+        exec.info(null, "SQL statement executed successfully (" + timer.format() + ")");
+      } 
+    } catch (Exception e) {
+      query.setError(e);
+    }
+    return query;
+  }
+  
   /**
    * Close the query object
    */

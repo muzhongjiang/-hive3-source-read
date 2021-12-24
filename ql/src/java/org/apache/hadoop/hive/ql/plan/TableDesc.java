@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,12 +25,11 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Deserializer;
-import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.OutputFormat;
+import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.common.util.ReflectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,14 +46,13 @@ import java.util.Properties;
  */
 public class TableDesc implements Serializable, Cloneable {
 
+  private static final Logger LOG = LoggerFactory.getLogger(TableDesc.class);
+
   private static final long serialVersionUID = 1L;
   private Class<? extends InputFormat> inputFileFormatClass;
   private Class<? extends OutputFormat> outputFileFormatClass;
   private java.util.Properties properties;
   private Map<String, String> jobProperties;
-  private Map<String, String> jobSecrets;
-  public static final String SECRET_PREFIX = "TABLE_SECRET";
-  public static final String SECRET_DELIMIT = "#";
 
   public TableDesc() {
   }
@@ -73,9 +71,9 @@ public class TableDesc implements Serializable, Cloneable {
     setProperties(properties);
   }
 
-  public Class<? extends AbstractSerDe> getSerDeClass() {
+  public Class<? extends Deserializer> getDeserializerClass() {
     try {
-      return (Class<? extends AbstractSerDe>) Class.forName(
+      return (Class<? extends Deserializer>) Class.forName(
           getSerdeClassName(), true, Utilities.getSessionSpecifiedClassLoader());
     } catch (ClassNotFoundException e) {
       throw new RuntimeException(e);
@@ -86,25 +84,24 @@ public class TableDesc implements Serializable, Cloneable {
     return inputFileFormatClass;
   }
 
-  public AbstractSerDe getSerDe() throws Exception {
+  public Deserializer getDeserializer() throws Exception {
     return getDeserializer(null);
   }
 
   /**
    * Return a deserializer object corresponding to the tableDesc.
    */
-  public AbstractSerDe getDeserializer(Configuration conf) throws Exception {
-    return getSerDe(conf, false);
+  public Deserializer getDeserializer(Configuration conf) throws Exception {
+    return getDeserializer(conf, false);
   }
 
-  public AbstractSerDe getSerDe(Configuration conf, boolean ignoreError) throws Exception {
-    AbstractSerDe de = ReflectionUtil.newInstance(getSerDeClass().asSubclass(AbstractSerDe.class), conf);
-    try {
-      de.initialize(conf, properties, null);
-    } catch (SerDeException sde) {
-      if (!ignoreError) {
-        throw sde;
-      }
+  public Deserializer getDeserializer(Configuration conf, boolean ignoreError) throws Exception {
+    Deserializer de = ReflectionUtil.newInstance(
+        getDeserializerClass().asSubclass(Deserializer.class), conf);
+    if (ignoreError) {
+      SerDeUtils.initializeSerDeWithoutErrorCheck(de, conf, properties, null);
+    } else {
+      SerDeUtils.initializeSerDe(de, conf, properties, null);
     }
     return de;
   }
@@ -129,7 +126,7 @@ public class TableDesc implements Serializable, Cloneable {
 
   @Explain(displayName = "properties", explainLevels = { Level.EXTENDED })
   public Map getPropertiesExplain() {
-    return PlanUtils.getPropertiesExplain(getProperties());
+    return HiveStringUtils.getPropertiesExplain(getProperties());
   }
 
   public void setProperties(final Properties properties) {
@@ -146,14 +143,6 @@ public class TableDesc implements Serializable, Cloneable {
     return jobProperties;
   }
 
-  public void setJobSecrets(Map<String, String> jobSecrets) {
-    this.jobSecrets = jobSecrets;
-  }
-
-  public Map<String, String> getJobSecrets() {
-    return jobSecrets;
-  }
-
   /**
    * @return the serdeClassName
    */
@@ -164,12 +153,8 @@ public class TableDesc implements Serializable, Cloneable {
 
   @Explain(displayName = "name", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED })
   public String getTableName() {
-    return properties.getProperty(hive_metastoreConstants.META_TABLE_NAME);
-  }
-
-  @Explain(displayName = "name", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED })
-  public String getDbName() {
-    return properties.getProperty(hive_metastoreConstants.META_TABLE_DB);
+    return properties
+        .getProperty(hive_metastoreConstants.META_TABLE_NAME);
   }
 
   @Explain(displayName = "input format")
@@ -184,14 +169,6 @@ public class TableDesc implements Serializable, Cloneable {
 
   public boolean isNonNative() {
     return (properties.getProperty(hive_metastoreConstants.META_TABLE_STORAGE) != null);
-  }
-
-  public boolean isSetBucketingVersion() {
-    return properties.getProperty(hive_metastoreConstants.TABLE_BUCKETING_VERSION) != null;
-  }
-  public int getBucketingVersion() {
-    return Utilities.getBucketingVersion(
-        properties.getProperty(hive_metastoreConstants.TABLE_BUCKETING_VERSION));
   }
 
   @Override
@@ -247,12 +224,5 @@ public class TableDesc implements Serializable, Cloneable {
     ret = ret && (jobProperties == null ? target.jobProperties == null :
       jobProperties.equals(target.jobProperties));
     return ret;
-  }
-
-  @Override
-  public String toString() {
-    return "TableDesc [inputFileFormatClass=" + inputFileFormatClass
-        + ", outputFileFormatClass=" + outputFileFormatClass + ", properties="
-        + properties + ", jobProperties=" + jobProperties + "]";
   }
 }

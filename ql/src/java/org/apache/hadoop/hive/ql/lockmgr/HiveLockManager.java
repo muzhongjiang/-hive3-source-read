@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,8 +19,7 @@
 package org.apache.hadoop.hive.ql.lockmgr;
 
 import java.util.List;
-
-import org.apache.hadoop.hive.ql.DriverState;
+import org.apache.hadoop.hive.ql.Driver.LockedDriverState;
 
 /**
  * Manager for locks in Hive.  Users should not instantiate a lock manager
@@ -36,14 +35,15 @@ public interface HiveLockManager {
    * @param mode       mode of the lock (SHARED/EXCLUSIVE)
    * @param keepAlive  if the lock needs to be persisted after the statement
    */
-  public HiveLock lock(HiveLockObject key, HiveLockMode mode, boolean keepAlive) throws LockException;
-  public List<HiveLock> lock(List<HiveLockObj> objs, boolean keepAlive, DriverState driverState) throws LockException;
+  public HiveLock lock(HiveLockObject key, HiveLockMode mode,
+      boolean keepAlive) throws LockException;
+  public List<HiveLock> lock(List<HiveLockObj> objs,
+      boolean keepAlive, LockedDriverState lDrvState) throws LockException;
   public void unlock(HiveLock hiveLock) throws LockException;
   public void releaseLocks(List<HiveLock> hiveLocks);
 
   public List<HiveLock> getLocks(boolean verifyTablePartitions, boolean fetchData) throws LockException;
-  public List<HiveLock> getLocks(HiveLockObject key, boolean verifyTablePartitions, boolean fetchData)
-      throws LockException;
+  public List<HiveLock> getLocks(HiveLockObject key, boolean verifyTablePartitions, boolean fetchData) throws LockException;
   public void close() throws LockException;
   public void prepareRetry() throws LockException;
 

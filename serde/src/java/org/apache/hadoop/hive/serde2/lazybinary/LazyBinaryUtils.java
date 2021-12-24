@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,8 +22,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.hive.serde2.ByteStream.RandomAccessOutput;
-import org.apache.hadoop.hive.serde2.io.TimestampLocalTZWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.lazybinary.objectinspector.LazyBinaryObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
@@ -100,7 +99,7 @@ public final class LazyBinaryUtils {
   /**
    * Record is the unit that data is serialized in. A record includes two parts.
    * The first part stores the size of the element and the second part stores
-   * the real element. size element record -&gt; |----|-------------------------|
+   * the real element. size element record -> |----|-------------------------|
    *
    * A RecordInfo stores two information of a record, the size of the "size"
    * part which is the element offset and the size of the element part which is
@@ -203,11 +202,7 @@ public final class LazyBinaryUtils {
         break;
       case TIMESTAMP:
         recordInfo.elementOffset = 0;
-        recordInfo.elementSize = TimestampWritableV2.getTotalLength(bytes, offset);
-        break;
-      case TIMESTAMPLOCALTZ:
-        recordInfo.elementOffset = 0;
-        recordInfo.elementSize = TimestampLocalTZWritable.getTotalLength(bytes, offset);
+        recordInfo.elementSize = TimestampWritable.getTotalLength(bytes, offset);
         break;
       case INTERVAL_YEAR_MONTH:
         recordInfo.elementOffset = 0;
@@ -343,11 +338,6 @@ public final class LazyBinaryUtils {
     writeVLong(byteStream, i);
   }
 
-  public static void writeVInt(RandomAccessOutput byteStream, int i,
-      byte[] scratchBytes) {
-    writeVLong(byteStream, i, scratchBytes);
-  }
-
   /**
    * Read a zero-compressed encoded long from a byte array.
    *
@@ -425,12 +415,6 @@ public final class LazyBinaryUtils {
     byte[] vLongBytes = vLongBytesThreadLocal.get();
     int len = LazyBinaryUtils.writeVLongToByteArray(vLongBytes, l);
     byteStream.write(vLongBytes, 0, len);
-  }
-
-  public static void writeVLong(RandomAccessOutput byteStream, long l,
-      byte[] scratchBytes) {
-    int len = LazyBinaryUtils.writeVLongToByteArray(scratchBytes, l);
-    byteStream.write(scratchBytes, 0, len);
   }
 
   public static void writeDouble(RandomAccessOutput byteStream, double d) {

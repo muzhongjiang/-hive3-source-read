@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,11 +18,6 @@
 
 package org.apache.hadoop.hive;
 
-import java.io.File;
-import java.net.URL;
-import java.util.Iterator;
-import java.util.Map;
-
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 
@@ -41,31 +36,6 @@ public class UtilsForTest {
 
     conf.setVar(ConfVars.METASTORECONNECTURLKEY, "jdbc:derby:;databaseName=" + newDbLoc
         + ";create=true");
-  }
-
-  /**
-   * Do the variable expansion by calling "set" on each variable.
-   * When MR jobs are run, under some circumstances they fail because
-   * the variable expansion fails after changes in Hadoop to prevent
-   * variable expansion for JobHistoryServer. So expanding them ahead
-   * so that variables like {test.tmp.dir} get expanded.
-   * @param hiveConf
-   */
-  public static void expandHiveConfParams(HiveConf hiveConf) {
-    Iterator<Map.Entry<String, String>> iter = hiveConf.iterator();
-    while (iter.hasNext()) {
-      String key = iter.next().getKey();
-      hiveConf.set(key, hiveConf.get(key));
-    }
-  }
-
-  public static HiveConf getHiveOnTezConfFromDir(String confDir) throws Exception {
-    HiveConf.setHiveSiteLocation(
-        new URL("file://" + new File(confDir).toURI().getPath() + "/hive-site.xml"));
-    HiveConf hiveConf = new HiveConf();
-    hiveConf
-        .addResource(new URL("file://" + new File(confDir).toURI().getPath() + "/tez-site.xml"));
-    return hiveConf;
   }
 
 }

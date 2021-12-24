@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.ql.parse.SemanticException;
  */
 public class PreOrderOnceWalker extends PreOrderWalker {
 
-  public PreOrderOnceWalker(SemanticDispatcher disp) {
+  public PreOrderOnceWalker(Dispatcher disp) {
     super(disp);
   }
 

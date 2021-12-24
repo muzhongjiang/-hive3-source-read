@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.NullUtil;
 import org.apache.hadoop.hive.ql.exec.vector.*;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * Generated from template ColumnCompareTimestampColumn.txt, which covers binary arithmetic
@@ -35,38 +34,45 @@ public class <ClassName> extends VectorExpression {
 
   private static final long serialVersionUID = 1L;
 
-  public <ClassName>(int colNum1, int colNum2, int outputColumnNum) {
-    super(colNum1, colNum2, outputColumnNum);
+  private int colNum1;
+  private int colNum2;
+  private int outputColumn;
+
+  public <ClassName>(int colNum1, int colNum2, int outputColumn) {
+    this.colNum1 = colNum1;
+    this.colNum2 = colNum2;
+    this.outputColumn = outputColumn;
   }
 
   public <ClassName>() {
-    super();
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
-
-    // return immediately if batch is empty
-    final int n = batch.size;
-    if (n == 0) {
-      return;
-    }
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    <InputColumnVectorType1> inputColVector1 = (<InputColumnVectorType1>) batch.cols[inputColumnNum[0]];
-    TimestampColumnVector inputColVector2 = (TimestampColumnVector) batch.cols[inputColumnNum[1]];
-    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumnNum];
+    <InputColumnVectorType1> inputColVector1 = (<InputColumnVectorType1>) batch.cols[colNum1];
+    TimestampColumnVector inputColVector2 = (TimestampColumnVector) batch.cols[colNum2];
+    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
-
+    int n = batch.size;
     <OperandType>[] vector1 = inputColVector1.vector;
     long[] outputVector = outputColVector.vector;
 
-    /*
-     * Propagate null values for a two-input operator and set isRepeating and noNulls appropriately.
-     */
+    // return immediately if batch is empty
+    if (n == 0) {
+      return;
+    }
+
+    outputColVector.isRepeating =
+         inputColVector1.isRepeating && inputColVector2.isRepeating
+      || inputColVector1.isRepeating && !inputColVector1.noNulls && inputColVector1.isNull[0]
+      || inputColVector2.isRepeating && !inputColVector2.noNulls && inputColVector2.isNull[0];
+
+    // Handle nulls first
     NullUtil.propagateNullsColCol(
       inputColVector1, inputColVector2, outputColVector, sel, n, batch.selectedInUse);
 
@@ -123,8 +129,18 @@ public class <ClassName> extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "long";
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", " + getColumnParamString(1, inputColumnNum[1]);
+    return "col " + colNum1 + ", col " + + colNum2;
   }
 
   @Override

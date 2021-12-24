@@ -1,6 +1,3 @@
---! qt:dataset:src1
---! qt:dataset:src
---! qt:dataset:part
 set hive.mapred.mode=nonstrict;
 create table s1 as select * from src where key = 0;
 

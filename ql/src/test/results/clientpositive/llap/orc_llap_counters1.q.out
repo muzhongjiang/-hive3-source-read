@@ -7,11 +7,10 @@ PREHOOK: query: CREATE TABLE staging(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE
-TBLPROPERTIES ("hive.serialization.decode.binary.as.base64"="false")
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
 PREHOOK: Output: default@staging
@@ -24,11 +23,10 @@ POSTHOOK: query: CREATE TABLE staging(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE
-TBLPROPERTIES ("hive.serialization.decode.binary.as.base64"="false")
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@staging
@@ -59,7 +57,7 @@ PREHOOK: query: CREATE TABLE orc_ppd_staging(t tinyint,
            c char(50),
            v varchar(50),
            da date,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS ORC tblproperties("orc.row.index.stride" = "1000", "orc.bloom.filter.columns"="*")
 PREHOOK: type: CREATETABLE
@@ -76,19 +74,17 @@ POSTHOOK: query: CREATE TABLE orc_ppd_staging(t tinyint,
            c char(50),
            v varchar(50),
            da date,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS ORC tblproperties("orc.row.index.stride" = "1000", "orc.bloom.filter.columns"="*")
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@orc_ppd_staging
-PREHOOK: query: insert overwrite table orc_ppd_staging select t, si, i, b, f, d, bo, s, cast(s as char(50)) as c,
-cast(s as varchar(50)) as v, cast(ts as date) as da, `dec`, bin from staging order by t, si, i, b, f, d, bo, s, c, v, da, `dec`, bin
+PREHOOK: query: insert overwrite table orc_ppd_staging select t, si, i, b, f, d, bo, s, cast(s as char(50)), cast(s as varchar(50)), cast(ts as date), dec, bin from staging order by t, s
 PREHOOK: type: QUERY
 PREHOOK: Input: default@staging
 PREHOOK: Output: default@orc_ppd_staging
-POSTHOOK: query: insert overwrite table orc_ppd_staging select t, si, i, b, f, d, bo, s, cast(s as char(50)) as c,
-cast(s as varchar(50)) as v, cast(ts as date) as da, `dec`, bin from staging order by t, si, i, b, f, d, bo, s, c, v, da, `dec`, bin
+POSTHOOK: query: insert overwrite table orc_ppd_staging select t, si, i, b, f, d, bo, s, cast(s as char(50)), cast(s as varchar(50)), cast(ts as date), dec, bin from staging order by t, s
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@staging
 POSTHOOK: Output: default@orc_ppd_staging
@@ -113,15 +109,15 @@ POSTHOOK: query: insert into orc_ppd_staging select -10,-321,-65680,-4294967430,
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@staging
 POSTHOOK: Output: default@orc_ppd_staging
-POSTHOOK: Lineage: orc_ppd_staging.b SIMPLE []
+POSTHOOK: Lineage: orc_ppd_staging.b EXPRESSION []
 POSTHOOK: Lineage: orc_ppd_staging.bin EXPRESSION []
 POSTHOOK: Lineage: orc_ppd_staging.bo SIMPLE []
 POSTHOOK: Lineage: orc_ppd_staging.c EXPRESSION []
 POSTHOOK: Lineage: orc_ppd_staging.d EXPRESSION []
 POSTHOOK: Lineage: orc_ppd_staging.da EXPRESSION []
-POSTHOOK: Lineage: orc_ppd_staging.dec SIMPLE []
+POSTHOOK: Lineage: orc_ppd_staging.dec EXPRESSION []
 POSTHOOK: Lineage: orc_ppd_staging.f EXPRESSION []
-POSTHOOK: Lineage: orc_ppd_staging.i SIMPLE []
+POSTHOOK: Lineage: orc_ppd_staging.i EXPRESSION []
 POSTHOOK: Lineage: orc_ppd_staging.s SIMPLE []
 POSTHOOK: Lineage: orc_ppd_staging.si EXPRESSION []
 POSTHOOK: Lineage: orc_ppd_staging.t EXPRESSION []
@@ -158,7 +154,7 @@ PREHOOK: query: CREATE TABLE orc_ppd(t tinyint,
            c char(50),
            v varchar(50),
            da date,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS ORC tblproperties("orc.row.index.stride" = "1000", "orc.bloom.filter.columns"="*")
 PREHOOK: type: CREATETABLE
@@ -175,19 +171,17 @@ POSTHOOK: query: CREATE TABLE orc_ppd(t tinyint,
            c char(50),
            v varchar(50),
            da date,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS ORC tblproperties("orc.row.index.stride" = "1000", "orc.bloom.filter.columns"="*")
 POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@orc_ppd
-PREHOOK: query: insert overwrite table orc_ppd select t, si, i, b, f, d, bo, s, cast(s as char(50)) as c,
-cast(s as varchar(50)) as v, da, `dec`, bin from orc_ppd_staging order by t, si, i, b, f, d, bo, s, c, v, da, `dec`, bin
+PREHOOK: query: insert overwrite table orc_ppd select t, si, i, b, f, d, bo, s, cast(s as char(50)), cast(s as varchar(50)), da, dec, bin from orc_ppd_staging order by t, s
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_ppd_staging
 PREHOOK: Output: default@orc_ppd
-POSTHOOK: query: insert overwrite table orc_ppd select t, si, i, b, f, d, bo, s, cast(s as char(50)) as c,
-cast(s as varchar(50)) as v, da, `dec`, bin from orc_ppd_staging order by t, si, i, b, f, d, bo, s, c, v, da, `dec`, bin
+POSTHOOK: query: insert overwrite table orc_ppd select t, si, i, b, f, d, bo, s, cast(s as char(50)), cast(s as varchar(50)), da, dec, bin from orc_ppd_staging order by t, s
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_ppd_staging
 POSTHOOK: Output: default@orc_ppd
@@ -211,6 +205,7 @@ POSTHOOK: query: describe formatted orc_ppd
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@orc_ppd
 # col_name            	data_type           	comment             
+	 	 
 t                   	tinyint             	                    
 si                  	smallint            	                    
 i                   	int                 	                    
@@ -232,14 +227,13 @@ Retention:          	0
 #### A masked pattern was here ####
 Table Type:         	MANAGED_TABLE       	 
 Table Parameters:	 	 
-	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"b\":\"true\",\"bin\":\"true\",\"bo\":\"true\",\"c\":\"true\",\"d\":\"true\",\"da\":\"true\",\"dec\":\"true\",\"f\":\"true\",\"i\":\"true\",\"s\":\"true\",\"si\":\"true\",\"t\":\"true\",\"v\":\"true\"}}
-	bucketing_version   	2                   
+	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
 	numFiles            	1                   
 	numRows             	2100                
 	orc.bloom.filter.columns	*                   
 	orc.row.index.stride	1000                
 	rawDataSize         	1139514             
-	totalSize           	55696               
+	totalSize           	55376               
 #### A masked pattern was here ####
 	 	 
 # Storage Information	 	 
@@ -255,11 +249,11 @@ Storage Desc Params:
 PREHOOK: query: select count(*) from orc_ppd where t > -100
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_ppd
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 Stage-1 FILE SYSTEM COUNTERS:
-   HDFS_BYTES_READ: 17727
+   HDFS_BYTES_READ: 17728
    HDFS_BYTES_WRITTEN: 104
-   HDFS_READ_OPS: 5
+   HDFS_READ_OPS: 6
    HDFS_LARGE_READ_OPS: 0
    HDFS_WRITE_OPS: 2
 Stage-1 HIVE COUNTERS:
@@ -268,35 +262,20 @@ Stage-1 HIVE COUNTERS:
    RECORDS_IN_Map_1: 2100
    RECORDS_OUT_0: 1
    RECORDS_OUT_INTERMEDIATE_Map_1: 2094
-   RECORDS_OUT_INTERMEDIATE_Reducer_2: 0
-   RECORDS_OUT_OPERATOR_FIL_8: 2094
-   RECORDS_OUT_OPERATOR_FS_12: 1
-   RECORDS_OUT_OPERATOR_GBY_11: 1
-   RECORDS_OUT_OPERATOR_MAP_0: 0
-   RECORDS_OUT_OPERATOR_RS_10: 2094
-   RECORDS_OUT_OPERATOR_SEL_9: 2094
-   RECORDS_OUT_OPERATOR_TS_0: 2100
-   TOTAL_TABLE_ROWS_WRITTEN: 0
 Stage-1 LLAP IO COUNTERS:
-   ALLOCATED_BYTES: 1310720
-   ALLOCATED_USED_BYTES: 2757
-   CACHE_HIT_BYTES: 0
-   CACHE_MISS_BYTES: 1071
+   ALLOCATED_BYTES: 524288
+   ALLOCATED_USED_BYTES: 269
+   CACHE_MISS_BYTES: 249
    METADATA_CACHE_MISS: 2
    NUM_DECODED_BATCHES: 3
    NUM_VECTOR_BATCHES: 3
    ROWS_EMITTED: 2100
    SELECTED_ROWGROUPS: 3
-Stage-1 INPUT COUNTERS:
-   GROUPED_INPUT_SPLITS_Map_1: 1
-   INPUT_DIRECTORIES_Map_1: 1
-   INPUT_FILES_Map_1: 1
-   RAW_INPUT_SPLITS_Map_1: 1
 2094
 PREHOOK: query: select count(*) from orc_ppd where t > -100
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_ppd
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 Stage-1 FILE SYSTEM COUNTERS:
    HDFS_BYTES_READ: 0
    HDFS_BYTES_WRITTEN: 104
@@ -309,28 +288,14 @@ Stage-1 HIVE COUNTERS:
    RECORDS_IN_Map_1: 2100
    RECORDS_OUT_0: 1
    RECORDS_OUT_INTERMEDIATE_Map_1: 2094
-   RECORDS_OUT_INTERMEDIATE_Reducer_2: 0
-   RECORDS_OUT_OPERATOR_FIL_8: 2094
-   RECORDS_OUT_OPERATOR_FS_12: 1
-   RECORDS_OUT_OPERATOR_GBY_11: 1
-   RECORDS_OUT_OPERATOR_MAP_0: 0
-   RECORDS_OUT_OPERATOR_RS_10: 2094
-   RECORDS_OUT_OPERATOR_SEL_9: 2094
-   RECORDS_OUT_OPERATOR_TS_0: 2100
-   TOTAL_TABLE_ROWS_WRITTEN: 0
 Stage-1 LLAP IO COUNTERS:
-   CACHE_HIT_BYTES: 1071
+   CACHE_HIT_BYTES: 249
    CACHE_MISS_BYTES: 0
    METADATA_CACHE_HIT: 2
    NUM_DECODED_BATCHES: 3
    NUM_VECTOR_BATCHES: 3
    ROWS_EMITTED: 2100
    SELECTED_ROWGROUPS: 3
-Stage-1 INPUT COUNTERS:
-   GROUPED_INPUT_SPLITS_Map_1: 1
-   INPUT_DIRECTORIES_Map_1: 1
-   INPUT_FILES_Map_1: 1
-   RAW_INPUT_SPLITS_Map_1: 1
 2094
 PREHOOK: query: DROP TABLE staging
 PREHOOK: type: DROPTABLE

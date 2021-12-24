@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,16 +18,14 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import java.nio.charset.StandardCharsets;
+import java.io.UnsupportedEncodingException;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Random;
 
-import org.apache.hadoop.hive.common.type.Date;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.junit.Assert;
+import junit.framework.Assert;
 
-import org.apache.hadoop.hive.serde2.RandomTypeUtil;
-import org.apache.hadoop.hive.common.type.Timestamp;
+import org.apache.hadoop.hive.common.type.RandomTypeUtil;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
@@ -56,15 +54,11 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.FuncSignLongToDoubl
 import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.FuncSinDoubleToDouble;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.FuncSqrtDoubleToDouble;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.FuncTanDoubleToDouble;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.junit.Test;
 
 
 public class TestVectorMathFunctions {
-
-  private HiveConf hiveConf = new HiveConf();
 
   private static final double eps = 1.0e-7;
   private static boolean equalsWithinTolerance(double a, double b) {
@@ -72,19 +66,19 @@ public class TestVectorMathFunctions {
   }
 
   @Test
-  public void testVectorRound() throws HiveException {
+  public void testVectorRound() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     VectorExpression expr = new FuncRoundDoubleToDouble(0, 1);
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     expr.evaluate(b);
-    Assert.assertEquals(-2d, resultV.vector[0], Double.MIN_VALUE);
-    Assert.assertEquals(-1d, resultV.vector[1], Double.MIN_VALUE);
-    Assert.assertEquals(0d, resultV.vector[2], Double.MIN_VALUE);
-    Assert.assertEquals(0d, resultV.vector[3], Double.MIN_VALUE);
-    Assert.assertEquals(1d, resultV.vector[4], Double.MIN_VALUE);
-    Assert.assertEquals(1d, resultV.vector[5], Double.MIN_VALUE);
-    Assert.assertEquals(2d, resultV.vector[6], Double.MIN_VALUE);
+    Assert.assertEquals(-2d, resultV.vector[0]);
+    Assert.assertEquals(-1d, resultV.vector[1]);
+    Assert.assertEquals(0d, resultV.vector[2]);
+    Assert.assertEquals(0d, resultV.vector[3]);
+    Assert.assertEquals(1d, resultV.vector[4]);
+    Assert.assertEquals(1d, resultV.vector[5]);
+    Assert.assertEquals(2d, resultV.vector[6]);
 
     // spot check null propagation
     b.cols[0].noNulls = false;
@@ -98,79 +92,26 @@ public class TestVectorMathFunctions {
     b.cols[0].isRepeating = true;
     resultV.isRepeating = false;
     expr.evaluate(b);
-    Assert.assertEquals(-2d, resultV.vector[0], Double.MIN_VALUE);
+    Assert.assertEquals(-2d, resultV.vector[0]);
     Assert.assertEquals(true, resultV.isRepeating);
 
     resultV.isRepeating = false;
     b.cols[0].noNulls = true;
     expr.evaluate(b);
-    Assert.assertEquals(-2d, resultV.vector[0], Double.MIN_VALUE);
+    Assert.assertEquals(-2d, resultV.vector[0]);
     Assert.assertEquals(true, resultV.isRepeating);
   }
 
   @Test
-  public void testRoundToDecimalPlaces() throws HiveException {
+  public void testRoundToDecimalPlaces() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     VectorExpression expr = new RoundWithNumDigitsDoubleToDouble(0, 4, 1);
+    ((ISetLongArg) expr).setArg(4);  // set number of digits
     expr.evaluate(b);
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
 
     // Verify result is rounded to 4 digits
-    Assert.assertEquals(1.2346d, resultV.vector[7], Double.MIN_VALUE);
-  }
-
-  private static final int DAYS_LIMIT = 365 * 9999;
-  //approximate, so we get some negative values:
-  private static final int SMALLEST_EPOCH_DAY = -365 * 1969;
-
-  public static VectorizedRowBatch getVectorizedRowBatchDateInTimestampOut(int[] intValues) {
-    Random r = new Random(12099);
-    VectorizedRowBatch batch = new VectorizedRowBatch(2);
-    LongColumnVector inV;
-    TimestampColumnVector outV;
-    inV = new LongColumnVector(intValues.length);
-    outV = new TimestampColumnVector(intValues.length);
-
-    for (int i = 0; i < intValues.length; i++) {
-      intValues[i] = SMALLEST_EPOCH_DAY + r.nextInt() % DAYS_LIMIT;
-      inV.vector[i] = intValues[i];
-    }
-
-    batch.cols[0] = inV;
-    batch.cols[1] = outV;
-
-    batch.size = intValues.length;
-    return batch;
-  }
-
-  public static VectorizedRowBatch getVectorizedRowBatchDateInStringOut(int[] intValues) {
-    // get date in timestamp out, and change timestamp out to string out
-    VectorizedRowBatch batch =  getVectorizedRowBatchDateInTimestampOut(intValues);
-    BytesColumnVector outV = new BytesColumnVector(intValues.length);
-    batch.cols[1] = outV;
-    return batch;
-  }
-
-  // For testing CastDateToStringWithFormat with
-  // TestVectorTypeCastsWithFormat#testCastDateToStringWithFormat
-  public static VectorizedRowBatch getVectorizedRowBatchDateInStringOutFormatted() {
-    VectorizedRowBatch batch = new VectorizedRowBatch(2);
-    LongColumnVector dateColumnV;
-    BytesColumnVector stringColumnV;
-    dateColumnV = new LongColumnVector();
-    stringColumnV = new BytesColumnVector();
-
-    dateColumnV.vector[0] = Date.valueOf("2019-12-31").toEpochDay();
-    dateColumnV.vector[1] = Date.valueOf("1776-07-04").toEpochDay();
-    dateColumnV.vector[2] = Date.valueOf("2012-02-29").toEpochDay();
-    dateColumnV.vector[3] = Date.valueOf("1580-08-08").toEpochDay();
-    dateColumnV.vector[4] = Date.valueOf("0005-01-01").toEpochDay();
-    dateColumnV.vector[5] = Date.valueOf("9999-12-31").toEpochDay();
-
-    batch.cols[0] = dateColumnV;
-    batch.cols[1] = stringColumnV;
-    batch.size = 6;
-    return batch;
+    Assert.assertEquals(1.2346d, resultV.vector[7]);
   }
 
   public static VectorizedRowBatch getVectorizedRowBatchDoubleInLongOut() {
@@ -290,65 +231,6 @@ public class TestVectorMathFunctions {
     return batch;
   }
 
-  public static VectorizedRowBatch getVectorizedRowBatchStringInLongOut() {
-    VectorizedRowBatch batch = new VectorizedRowBatch(2);
-    BytesColumnVector inV;
-    LongColumnVector outV;
-    inV = new BytesColumnVector();
-    outV = new LongColumnVector();
-    inV.initBuffer();
-    inV.setVal(0, StandardCharsets.UTF_8.encode("true").array());
-    inV.setVal(1, StandardCharsets.UTF_8.encode("TRUE").array());
-    inV.setVal(2, StandardCharsets.UTF_8.encode("TrUe").array());
-    inV.setVal(3, StandardCharsets.UTF_8.encode("false").array());
-    inV.setVal(4, StandardCharsets.UTF_8.encode("FALSE").array());
-    inV.setVal(5, StandardCharsets.UTF_8.encode("FaLsE").array());
-    inV.setVal(6, StandardCharsets.UTF_8.encode("").array());
-    inV.setVal(7, StandardCharsets.UTF_8.encode("Other").array());
-
-    batch.cols[0] = inV;
-    batch.cols[1] = outV;
-
-    batch.size = 8;
-    return batch;
-  }
-
-  public static VectorizedRowBatch getVectorizedRowBatchStringInTimestampOutFormatted() {
-    VectorizedRowBatch batch = new VectorizedRowBatch(2);
-    BytesColumnVector inV;
-    inV = new BytesColumnVector();
-    inV.initBuffer();
-    inV.setVal(0, StandardCharsets.UTF_8.encode("2019-12-31 00:00:00.999999999").array());
-    inV.setVal(1, StandardCharsets.UTF_8.encode("1776-07-04 17:07:06.177617761").array());
-    inV.setVal(2, StandardCharsets.UTF_8.encode("2012-02-29 23:59:59.999999999").array());
-    inV.setVal(3, StandardCharsets.UTF_8.encode("1580-08-08 00:00:00.0").array());
-    inV.setVal(4, StandardCharsets.UTF_8.encode("0005-01-01 00:00:00.0").array());
-    inV.setVal(5, StandardCharsets.UTF_8.encode("9999-12-31 23:59:59.999999999").array());
-
-    batch.cols[0] = inV;
-
-    batch.size = 6;
-    return batch;
-  }
-
-  public static VectorizedRowBatch getVectorizedRowBatchStringInDateOutFormatted() {
-    VectorizedRowBatch batch = new VectorizedRowBatch(2);
-    BytesColumnVector inV;
-    inV = new BytesColumnVector();
-    inV.initBuffer();
-    inV.setVal(0, StandardCharsets.UTF_8.encode("19/12/31").array());
-    inV.setVal(1, StandardCharsets.UTF_8.encode("1776--07--04").array());
-    inV.setVal(2, StandardCharsets.UTF_8.encode("2012/02/29").array());
-    inV.setVal(3, StandardCharsets.UTF_8.encode("1580/08/08").array());
-    inV.setVal(4, StandardCharsets.UTF_8.encode("0005/01/01").array());
-    inV.setVal(5, StandardCharsets.UTF_8.encode("9999/12/31").array());
-
-    batch.cols[0] = inV;
-
-    batch.size = 6;
-    return batch;
-  }
-
   public static VectorizedRowBatch getVectorizedRowBatchTimestampInLongOut(long[] longValues) {
     Random r = new Random(345);
     VectorizedRowBatch batch = new VectorizedRowBatch(2);
@@ -358,8 +240,8 @@ public class TestVectorMathFunctions {
     outV = new LongColumnVector(longValues.length);
     for (int i = 0; i < longValues.length; i++) {
       Timestamp randTimestamp = RandomTypeUtil.getRandTimestamp(r);
-      longValues[i] = TimestampWritableV2.getLong(randTimestamp);
-      inV.set(0, randTimestamp.toSqlTimestamp());
+      longValues[i] = TimestampWritable.getLong(randTimestamp);
+      inV.set(0, randTimestamp);
     }
 
     batch.cols[0] = inV;
@@ -367,55 +249,6 @@ public class TestVectorMathFunctions {
 
     batch.size = longValues.length;
     return batch;
-  }
-
-
-  public static VectorizedRowBatch getVectorizedRowBatchTimestampInStringOut(
-      long[] epochSecondValues, int[] nanoValues) {
-    Random r = new Random(345);
-    VectorizedRowBatch batch = new VectorizedRowBatch(2);
-    batch.size = epochSecondValues.length;
-
-    TimestampColumnVector inV;
-    BytesColumnVector outV;
-    inV = new TimestampColumnVector(batch.size);
-    outV = new BytesColumnVector(batch.size);
-
-    for (int i = 0; i < batch.size; i++) {
-      Timestamp randTimestamp = RandomTypeUtil.getRandTimestamp(r);
-      epochSecondValues[i] = randTimestamp.toEpochSecond();
-      nanoValues[i] = randTimestamp.getNanos();
-      inV.set(i, randTimestamp.toSqlTimestamp());
-    }
-
-    batch.cols[0] = inV;
-    batch.cols[1] = outV;
-
-    return batch;
-  }
-
-  public static VectorizedRowBatch getVectorizedRowBatchTimestampInStringOutFormatted() {
-    VectorizedRowBatch batch = new VectorizedRowBatch(2);
-    TimestampColumnVector timestampColumnV;
-    BytesColumnVector stringColumnV;
-    timestampColumnV = new TimestampColumnVector();
-    stringColumnV = new BytesColumnVector();
-
-    timestampColumnV.set(0, getSqlTimestamp("2019-12-31 19:20:21.999999999"));
-    timestampColumnV.set(1, getSqlTimestamp("1776-07-04 17:07:06.177617761"));
-    timestampColumnV.set(2, getSqlTimestamp("2012-02-29 23:59:59.999999999"));
-    timestampColumnV.set(3, getSqlTimestamp("1580-08-08 00:00:00"));
-    timestampColumnV.set(4, getSqlTimestamp("0005-01-01 00:00:00"));
-    timestampColumnV.set(5, getSqlTimestamp("9999-12-31 23:59:59.999999999"));
-
-    batch.cols[0] = timestampColumnV;
-    batch.cols[1] = stringColumnV;
-    batch.size = 6;
-    return batch;
-  }
-
-  private static java.sql.Timestamp getSqlTimestamp(String s) {
-    return Timestamp.valueOf(s).toSqlTimestamp();
   }
 
   static long SECONDS_LIMIT = 60L * 24L * 365L * 9999L;
@@ -451,12 +284,15 @@ public class TestVectorMathFunctions {
     inL.vector[1] = 255;
     inL.vector[2] = 0;
     inS.initBuffer();
-
-    inS.setVal(0, "00".getBytes(StandardCharsets.UTF_8), 0, 2);
-    inS.setVal(1, "3232".getBytes(StandardCharsets.UTF_8), 0, 4);
-    byte[] bad = "bad data".getBytes(StandardCharsets.UTF_8);
-    inS.setVal(2, bad, 0, bad.length);
-
+    try {
+      inS.setVal(0, "00".getBytes("UTF-8"), 0, 2);
+      inS.setVal(1, "3232".getBytes("UTF-8"), 0, 4);
+      byte[] bad = "bad data".getBytes("UTF-8");
+      inS.setVal(2, bad, 0, bad.length);
+    } catch (UnsupportedEncodingException e) {
+      e.printStackTrace();
+      Assert.assertTrue(false);
+    }
 
     batch.cols[0] = inS;
     batch.cols[1] = inL;
@@ -474,87 +310,87 @@ public class TestVectorMathFunctions {
    * (for FuncRoundDoubleToDouble).
    */
   @Test
-  public void testVectorSin() throws HiveException {
+  public void testVectorSin() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncSinDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.sin(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.sin(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorCos() throws HiveException {
+  public void testVectorCos() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncCosDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.cos(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.cos(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorTan() throws HiveException {
+  public void testVectorTan() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncTanDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.tan(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.tan(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorASin() throws HiveException {
+  public void testVectorASin() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncASinDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.asin(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.asin(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorACos() throws HiveException {
+  public void testVectorACos() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncACosDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.acos(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.acos(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorATan() throws HiveException {
+  public void testVectorATan() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncATanDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.atan(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.atan(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorDegrees() throws HiveException {
+  public void testVectorDegrees() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncDegreesDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.toDegrees(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.toDegrees(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorRadians() throws HiveException {
+  public void testVectorRadians() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncRadiansDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.toRadians(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.toRadians(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorFloor() throws HiveException {
+  public void testVectorFloor() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInLongOut();
     LongColumnVector resultV = (LongColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
@@ -565,7 +401,7 @@ public class TestVectorMathFunctions {
   }
 
   @Test
-  public void testVectorCeil() throws HiveException {
+  public void testVectorCeil() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInLongOut();
     LongColumnVector resultV = (LongColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
@@ -576,17 +412,17 @@ public class TestVectorMathFunctions {
   }
 
   @Test
-  public void testVectorExp() throws HiveException {
+  public void testVectorExp() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncExpDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.exp(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.exp(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorLn() throws HiveException {
+  public void testVectorLn() {
 
     // test double->double version
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
@@ -594,7 +430,7 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncLnDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.log(0.5), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.log(0.5), resultV.vector[4]);
 
     // test long->double version
     b = getVectorizedRowBatchLongInDoubleOut();
@@ -602,11 +438,11 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     expr = new FuncLnLongToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.log(2), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.log(2), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorLog2() throws HiveException {
+  public void testVectorLog2() {
 
     // test double->double version
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
@@ -614,7 +450,7 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncLog2DoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.log(0.5d) / Math.log(2), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.log(0.5d) / Math.log(2), resultV.vector[4]);
 
     // test long->double version
     b = getVectorizedRowBatchLongInDoubleOut();
@@ -622,11 +458,11 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     expr = new FuncLog2LongToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.log(1) / Math.log(2), resultV.vector[3], Double.MIN_VALUE);
+    Assert.assertEquals(Math.log(1) / Math.log(2), resultV.vector[3]);
   }
 
   @Test
-  public void testVectorLog10() throws HiveException {
+  public void testVectorLog10() {
 
     // test double->double version
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
@@ -642,11 +478,11 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     expr = new FuncLog10LongToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.log(1) / Math.log(10), resultV.vector[3], Double.MIN_VALUE);
+    Assert.assertEquals(Math.log(1) / Math.log(10), resultV.vector[3]);
   }
 
   @Test
-  public void testVectorRand() throws HiveException {
+  public void testVectorRand() {
     VectorizedRowBatch b = new VectorizedRowBatch(1);
     DoubleColumnVector v = new DoubleColumnVector();
     b.cols[0] = v;
@@ -682,19 +518,20 @@ public class TestVectorMathFunctions {
   }
 
   @Test
-  public void testVectorLogBase() throws HiveException {
+  public void testVectorLogBase() {
 
     // test double->double version
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncLogWithBaseDoubleToDouble(10.0, 0, 1);
+    ((ISetDoubleArg) expr).setArg(10.0d);  // set base
     expr.evaluate(b);
     Assert.assertTrue(equalsWithinTolerance(Math.log(0.5d) / Math.log(10), resultV.vector[4]));
   }
 
   @Test
-  public void testVectorPosMod() throws HiveException {
+  public void testVectorPosMod() {
 
     // test double->double version
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
@@ -703,7 +540,7 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     inV.vector[4] = -4.0;
     VectorExpression expr = new PosModDoubleToDouble(0, 0.3d, 1);
-    expr.setOutputTypeInfo(TypeInfoFactory.getPrimitiveTypeInfo("double"));
+    //((ISetDoubleArg) expr).setArg(0.3d);  // set base
     expr.evaluate(b);
     Assert.assertTrue(equalsWithinTolerance(((-4.0d % 0.3d) + 0.3d) % 0.3d, resultV.vector[4]));
 
@@ -712,76 +549,34 @@ public class TestVectorMathFunctions {
     LongColumnVector resV2 = (LongColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     expr = new PosModLongToLong(0, 3, 1);
-    expr.setOutputTypeInfo(TypeInfoFactory.getPrimitiveTypeInfo("tinyint"));
-    //((ISetLongArg) expr).setArg(3);
-    expr.evaluate(b);
-    Assert.assertEquals(((-2 % 3) + 3) % 3, resV2.vector[0]);
-    //use smallint as outputTypeInfo
-    expr = new PosModLongToLong(0, 3, 1);
-    expr.setOutputTypeInfo(TypeInfoFactory.getPrimitiveTypeInfo("smallint"));
-    //((ISetLongArg) expr).setArg(3);
-    expr.evaluate(b);
-    Assert.assertEquals(((-2 % 3) + 3) % 3, resV2.vector[0]);
-    //use int as outputTypeInfo
-    expr = new PosModLongToLong(0, 3, 1);
-    expr.setOutputTypeInfo(TypeInfoFactory.getPrimitiveTypeInfo("int"));
-    //((ISetLongArg) expr).setArg(3);
-    expr.evaluate(b);
-    Assert.assertEquals(((-2 % 3) + 3) % 3, resV2.vector[0]);
-    //use bigint
-    expr = new PosModLongToLong(0, 3, 1);
-    expr.setOutputTypeInfo(TypeInfoFactory.getPrimitiveTypeInfo("bigint"));
     //((ISetLongArg) expr).setArg(3);
     expr.evaluate(b);
     Assert.assertEquals(((-2 % 3) + 3) % 3, resV2.vector[0]);
   }
 
   @Test
-  public void testVectorPosModWithFloatOutputType() throws HiveException {
-
-    // test double->double version
-    VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
-    DoubleColumnVector inV = (DoubleColumnVector) b.cols[0];
-    DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
-    b.cols[0].noNulls = true;
-    inV.vector[4] = -4.0;
-    VectorExpression expr = new PosModDoubleToDouble(0, 0.3d, 1);
-    expr.setOutputTypeInfo(TypeInfoFactory.getPrimitiveTypeInfo("float"));
-    expr.evaluate(b);
-    Assert.assertTrue(equalsWithinTolerance(((-4.0f % 0.3f) + 0.3f) % 0.3f, resultV.vector[4]));
-
-    // test long->long version
-    b = getVectorizedRowBatchLongInLongOut();
-    LongColumnVector resV2 = (LongColumnVector) b.cols[1];
-    b.cols[0].noNulls = true;
-    expr = new PosModLongToLong(0, 3, 1);
-    //((ISetLongArg) expr).setArg(3);
-    expr.evaluate(b);
-    Assert.assertEquals(((-2 % 3) + 3) % 3, resV2.vector[0]);
-  }
-
-  @Test
-  public void testVectorPower() throws HiveException {
+  public void testVectorPower() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncPowerDoubleToDouble(0, 2.0, 1);
+    ((ISetDoubleArg) expr).setArg(2.0d);  // set power
     expr.evaluate(b);
     Assert.assertTrue(equalsWithinTolerance(0.5d * 0.5d, resultV.vector[4]));
   }
 
   @Test
-  public void testVectorSqrt() throws HiveException {
+  public void testVectorSqrt() {
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
     DoubleColumnVector resultV = (DoubleColumnVector) b.cols[1];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncSqrtDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(Math.sqrt(0.5d), resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(Math.sqrt(0.5d), resultV.vector[4]);
   }
 
   @Test
-  public void testVectorAbs() throws HiveException {
+  public void testVectorAbs() {
 
     // test double->double version
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
@@ -789,8 +584,8 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncAbsDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(1.5, resultV.vector[0], Double.MIN_VALUE);
-    Assert.assertEquals(0.5, resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(1.5, resultV.vector[0]);
+    Assert.assertEquals(0.5, resultV.vector[4]);
 
     // test long->long version
     b = getVectorizedRowBatchLongInLongOut();
@@ -803,7 +598,7 @@ public class TestVectorMathFunctions {
   }
 
   @Test
-  public void testVectorSign() throws HiveException {
+  public void testVectorSign() {
 
     // test double->double version
     VectorizedRowBatch b = getVectorizedRowBatchDoubleInDoubleOut();
@@ -811,8 +606,8 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncSignDoubleToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(-1.0d, resultV.vector[0], Double.MIN_VALUE);
-    Assert.assertEquals(1.0d, resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(-1.0d, resultV.vector[0]);
+    Assert.assertEquals(1.0d, resultV.vector[4]);
 
     // test long->double version
     b = getVectorizedRowBatchLongInDoubleOut();
@@ -820,33 +615,31 @@ public class TestVectorMathFunctions {
     b.cols[0].noNulls = true;
     expr = new FuncSignLongToDouble(0, 1);
     expr.evaluate(b);
-    Assert.assertEquals(-1.0d, resultV.vector[0], Double.MIN_VALUE);
-    Assert.assertEquals(1.0d, resultV.vector[4], Double.MIN_VALUE);
+    Assert.assertEquals(-1.0d, resultV.vector[0]);
+    Assert.assertEquals(1.0d, resultV.vector[4]);
   }
 
   @Test
-  public void testVectorBin() throws HiveException {
+  public void testVectorBin() {
 
     // test conversion of long->string
     VectorizedRowBatch b = getBatchForStringMath();
     BytesColumnVector resultV = (BytesColumnVector) b.cols[2];
     b.cols[0].noNulls = true;
     VectorExpression expr = new FuncBin(1, 2);
-    expr.transientInit(hiveConf);
     expr.evaluate(b);
     String s = new String(resultV.vector[1], resultV.start[1], resultV.length[1]);
     Assert.assertEquals("11111111", s);
   }
 
   @Test
-  public void testVectorHex() throws HiveException {
+  public void testVectorHex() {
 
     // test long->string version
     VectorizedRowBatch b = getBatchForStringMath();
     BytesColumnVector resultV = (BytesColumnVector) b.cols[2];
     b.cols[1].noNulls = true;
     VectorExpression expr = new FuncHex(1, 2);
-    expr.transientInit(hiveConf);
     expr.evaluate(b);
     String s = new String(resultV.vector[1], resultV.start[1], resultV.length[1]);
     Assert.assertEquals("FF", s);

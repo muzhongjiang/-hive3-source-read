@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,12 +19,10 @@
 package org.apache.hadoop.hive.common.io;
 
 import org.apache.hadoop.hive.common.io.encoded.MemoryBuffer;
-import org.apache.hive.common.util.SuppressFBWarnings;
 
 /** An abstract data cache that IO formats can use to retrieve and cache data. */
 public interface DataCache {
-  @SuppressFBWarnings(value = "UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD", justification = "Used by interface consumers")
-  final class BooleanRef {
+  public static final class BooleanRef {
     public boolean value;
   }
 
@@ -62,7 +60,25 @@ public interface DataCache {
   DiskRangeList getFileData(Object fileKey, DiskRangeList range, long baseOffset,
       DiskRangeListFactory factory, BooleanRef gotAllData);
 
-  @Deprecated
+  /**
+   * Puts file data into cache, or gets older data in case of collisions.
+   *
+   * The memory buffers provided MUST be allocated via an allocator returned by getAllocator
+   * method, to allow cache implementations that evict and then de-allocate the buffer.
+   *
+   * It is assumed that the caller will use the data immediately, therefore any buffers provided
+   * to putFileData (or returned due to cache collision) are locked in cache to prevent eviction,
+   * and must therefore be released back to cache via a corresponding call (releaseBuffer) when the
+   * caller is done with it. Buffers rejected due to conflict will neither be locked, nor
+   * automatically deallocated. The caller must take care to discard these buffers.
+   *
+   * @param fileKey Unique ID of the target file on the file system.
+   * @param ranges The ranges for which the data is being cached. These objects will not be stored.
+   * @param data The data for the corresponding ranges.
+   * @param baseOffset base offset for the ranges (stripe/stream offset in case of ORC).
+   * @return null if all data was put; bitmask indicating which chunks were not put otherwise;
+   *         the replacement chunks from cache are updated directly in the array.
+   */
   long[] putFileData(Object fileKey, DiskRange[] ranges, MemoryBuffer[] data, long baseOffset);
 
   /**
@@ -84,33 +100,4 @@ public interface DataCache {
    * @return the allocator
    */
   Allocator getAllocator();
-
-  /**
-   * Gets the buffer object factory associated with this DataCache, to use with allocator.
-   * @return the factory
-   */
-  Allocator.BufferObjectFactory getDataBufferFactory();
-
-
-  /**
-   * Puts file data into cache, or gets older data in case of collisions.
-   *
-   * The memory buffers provided MUST be allocated via an allocator returned by getAllocator
-   * method, to allow cache implementations that evict and then de-allocate the buffer.
-   *
-   * It is assumed that the caller will use the data immediately, therefore any buffers provided
-   * to putFileData (or returned due to cache collision) are locked in cache to prevent eviction,
-   * and must therefore be released back to cache via a corresponding call (releaseBuffer) when the
-   * caller is done with it. Buffers rejected due to conflict will neither be locked, nor
-   * automatically deallocated. The caller must take care to discard these buffers.
-   *
-   * @param fileKey Unique ID of the target file on the file system.
-   * @param ranges The ranges for which the data is being cached. These objects will not be stored.
-   * @param data The data for the corresponding ranges.
-   * @param baseOffset base offset for the ranges (stripe/stream offset in case of ORC).
-   * @return null if all data was put; bitmask indicating which chunks were not put otherwise;
-   *         the replacement chunks from cache are updated directly in the array.
-   */
-  long[] putFileData(Object fileKey, DiskRange[] ranges,
-      MemoryBuffer[] data, long baseOffset, CacheTag tag);
 }

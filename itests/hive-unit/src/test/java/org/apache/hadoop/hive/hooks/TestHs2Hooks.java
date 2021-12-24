@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -121,7 +121,7 @@ public class TestHs2Hooks {
 
     @Override
     public void postAnalyze(HiveSemanticAnalyzerHookContext context,
-        List<Task<?>> rootTasks) throws SemanticException {
+        List<Task<? extends Serializable>> rootTasks) throws SemanticException {
       try {
         userName = context.getUserName();
         ipAddress = context.getIpAddress();
@@ -147,7 +147,6 @@ public class TestHs2Hooks {
     hiveConf.setVar(ConfVars.SEMANTIC_ANALYZER_HOOK,
         SemanticAnalysisHook.class.getName());
     hiveConf.setBoolVar(ConfVars.HIVE_SUPPORT_CONCURRENCY, false);
-    hiveConf.setBoolVar(ConfVars.HIVESTATSCOLAUTOGATHER, false);
 
     hiveServer2 = new HiveServer2();
     hiveServer2.init(hiveConf);

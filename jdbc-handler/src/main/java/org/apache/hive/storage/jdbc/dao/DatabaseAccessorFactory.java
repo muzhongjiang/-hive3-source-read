@@ -28,60 +28,12 @@ public class DatabaseAccessorFactory {
   }
 
 
-  public static DatabaseAccessor getAccessor(DatabaseType dbType, String driverClass) {
+  public static DatabaseAccessor getAccessor(DatabaseType dbType) {
 
     DatabaseAccessor accessor = null;
     switch (dbType) {
     case MYSQL:
       accessor = new MySqlDatabaseAccessor();
-      break;
-
-    case JETHRO_DATA:
-      accessor = new JethroDatabaseAccessor();
-      break;
-
-    case POSTGRES:
-      accessor = new PostgresDatabaseAccessor();
-      break;
-
-    case ORACLE:
-      accessor = new OracleDatabaseAccessor();
-      break;
-
-    case MSSQL:
-      accessor = new MsSqlDatabaseAccessor();
-      break;
-
-    case DB2:
-      accessor = new DB2DatabaseAccessor();
-      break;
-
-    case HIVE:
-      accessor = new HiveDatabaseAccessor();
-      break;
-
-    case DERBY:
-      accessor = new DerbyDatabaseAccessor();
-      break;
-
-    case METASTORE:
-      // For metastore, we infer the accessor from the jdbc driver string.
-      // TODO: We could also make a call to get the metadata from the connection
-      //       so we could obtain the database product. However, it seems an
-      //       overkill given that the metastore supported RDBMSs is a
-      //       well-defined set.
-      if (driverClass.contains("MYSQL")) {
-        accessor = new MySqlDatabaseAccessor();
-      } else if (driverClass.contains("POSTGRESQL")) {
-        accessor = new PostgresDatabaseAccessor();
-      } else if (driverClass.contains("ORACLE")) {
-        accessor = new OracleDatabaseAccessor();
-      } else if (driverClass.contains("SQLSERVER")) {
-        accessor = new MsSqlDatabaseAccessor();
-      } else {
-        // default
-        accessor = new GenericJdbcDatabaseAccessor();
-      }
       break;
 
     default:
@@ -94,11 +46,8 @@ public class DatabaseAccessorFactory {
 
 
   public static DatabaseAccessor getAccessor(Configuration conf) {
-    DatabaseType dbType = DatabaseType.valueOf(
-        conf.get(JdbcStorageConfig.DATABASE_TYPE.getPropertyName()).toUpperCase());
-    String driverClass =
-        conf.get(JdbcStorageConfig.JDBC_DRIVER_CLASS.getPropertyName()).toUpperCase();
-    return getAccessor(dbType, driverClass);
+    DatabaseType dbType = DatabaseType.valueOf(conf.get(JdbcStorageConfig.DATABASE_TYPE.getPropertyName()));
+    return getAccessor(dbType);
   }
 
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@ package org.apache.hive.common.util;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
-import java.util.TimeZone;
 
 /**
  * DateUtils. Thread-safe class
@@ -31,10 +30,7 @@ public class DateUtils {
   private static final ThreadLocal<SimpleDateFormat> dateFormatLocal = new ThreadLocal<SimpleDateFormat>() {
     @Override
     protected SimpleDateFormat initialValue() {
-      SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
-      simpleDateFormat.setLenient(false);
-      simpleDateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-      return simpleDateFormat;
+      return new SimpleDateFormat("yyyy-MM-dd");
     }
   };
 

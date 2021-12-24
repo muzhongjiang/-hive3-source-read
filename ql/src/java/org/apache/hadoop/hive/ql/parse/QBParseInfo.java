@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,11 +18,6 @@
 
 package org.apache.hadoop.hive.ql.parse;
 
-import static org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.unescapeIdentifier;
-import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_FUNCTION;
-import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_FUNCTIONDI;
-import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_FUNCTIONSTAR;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,10 +29,6 @@ import java.util.Set;
 import java.util.AbstractMap.SimpleEntry;
 
 import org.antlr.runtime.tree.Tree;
-import org.apache.hadoop.hive.common.StringInternUtils;
-import org.apache.hadoop.hive.ql.exec.FunctionInfo;
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
-import org.apache.hadoop.hive.ql.lib.Node;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.AnalyzeRewriteContext;
@@ -53,28 +44,25 @@ public class QBParseInfo {
   private String alias;
   private ASTNode joinExpr;
   private ASTNode hints;
-  private ASTNode colAliases;
-  private List<ASTNode> hintList;
-  private final Map<String, ASTNode> aliasToSrc;
+  private final HashMap<String, ASTNode> aliasToSrc;
   /**
    * insclause-0 -> TOK_TAB ASTNode
    */
-  private final Map<String, ASTNode> nameToDest;
+  private final HashMap<String, ASTNode> nameToDest;
   /**
    * For 'insert into FOO(x,y) select ...' this stores the
    * insclause-0 -> x,y mapping
    */
   private final Map<String, List<String>> nameToDestSchema;
-  private final Map<String, TableSample> nameToSample;
+  private final HashMap<String, TableSample> nameToSample;
   private final Map<ASTNode, String> exprToColumnAlias;
   private final Map<String, ASTNode> destToSelExpr;
-  private final Map<String, ASTNode> destToWhereExpr;
-  private final Map<String, ASTNode> destToGroupby;
+  private final HashMap<String, ASTNode> destToWhereExpr;
+  private final HashMap<String, ASTNode> destToGroupby;
   private final Set<String> destRollups;
   private final Set<String> destCubes;
   private final Set<String> destGroupingSets;
   private final Map<String, ASTNode> destToHaving;
-  private final Map<String, Boolean> destToOpType;
   // insertIntoTables/insertOverwriteTables map a table's fullName to its ast;
   private final Map<String, ASTNode> insertIntoTables;
   private final Map<String, ASTNode> insertOverwriteTables;
@@ -82,8 +70,10 @@ public class QBParseInfo {
 
   private boolean isAnalyzeCommand; // used for the analyze command (statistics)
   private boolean isNoScanAnalyzeCommand; // used for the analyze command (statistics) (noscan)
+  private boolean isPartialScanAnalyzeCommand; // used for the analyze command (statistics)
+                                               // (partialscan)
 
-  private final Map<String, TableSpec> tableSpecs; // used for statistics
+  private final HashMap<String, TableSpec> tableSpecs; // used for statistics
 
   private AnalyzeRewriteContext analyzeRewrite;
 
@@ -91,40 +81,40 @@ public class QBParseInfo {
   /**
    * ClusterBy is a short name for both DistributeBy and SortBy.
    */
-  private final Map<String, ASTNode> destToClusterby;
+  private final HashMap<String, ASTNode> destToClusterby;
   /**
    * DistributeBy controls the hashcode of the row, which determines which
    * reducer the rows will go to.
    */
-  private final Map<String, ASTNode> destToDistributeby;
+  private final HashMap<String, ASTNode> destToDistributeby;
   /**
    * SortBy controls the reduce keys, which affects the order of rows that the
    * reducer receives.
    */
 
-  private final Map<String, ASTNode> destToSortby;
+  private final HashMap<String, ASTNode> destToSortby;
 
   /**
    * Maping from table/subquery aliases to all the associated lateral view nodes.
    */
-  private final Map<String, List<ASTNode>> aliasToLateralViews;
+  private final HashMap<String, ArrayList<ASTNode>> aliasToLateralViews;
 
-  private final Map<String, ASTNode> destToLateralView;
+  private final HashMap<String, ASTNode> destToLateralView;
 
   /* Order by clause */
-  private final Map<String, ASTNode> destToOrderby;
+  private final HashMap<String, ASTNode> destToOrderby;
   // Use SimpleEntry to save the offset and rowcount of limit clause
   // KEY of SimpleEntry: offset
   // VALUE of SimpleEntry: rowcount
-  private final Map<String, SimpleEntry<Integer, Integer>> destToLimit;
+  private final HashMap<String, SimpleEntry<Integer, Integer>> destToLimit;
   private int outerQueryLimit;
 
   // used by GroupBy
-  private final Map<String, Map<String, ASTNode>> destToAggregationExprs;
-  private final Map<String, List<ASTNode>> destToDistinctFuncExprs;
+  private final LinkedHashMap<String, LinkedHashMap<String, ASTNode>> destToAggregationExprs;
+  private final HashMap<String, List<ASTNode>> destToDistinctFuncExprs;
 
   // used by Windowing
-  private final Map<String, Map<String, ASTNode>> destToWindowingExprs;
+  private final LinkedHashMap<String, LinkedHashMap<String, ASTNode>> destToWindowingExprs;
 
 
   @SuppressWarnings("unused")
@@ -146,28 +136,27 @@ public class QBParseInfo {
     destToSortby = new HashMap<String, ASTNode>();
     destToOrderby = new HashMap<String, ASTNode>();
     destToLimit = new HashMap<String, SimpleEntry<Integer, Integer>>();
-    destToOpType = new HashMap<>();
     insertIntoTables = new HashMap<String, ASTNode>();
     insertOverwriteTables = new HashMap<String, ASTNode>();
     destRollups = new HashSet<String>();
     destCubes = new HashSet<String>();
     destGroupingSets = new HashSet<String>();
 
-    destToAggregationExprs = new LinkedHashMap<String, Map<String, ASTNode>>();
-    destToWindowingExprs = new LinkedHashMap<String, Map<String, ASTNode>>();
+    destToAggregationExprs = new LinkedHashMap<String, LinkedHashMap<String, ASTNode>>();
+    destToWindowingExprs = new LinkedHashMap<String, LinkedHashMap<String, ASTNode>>();
     destToDistinctFuncExprs = new HashMap<String, List<ASTNode>>();
 
-    this.alias = StringInternUtils.internIfNotNull(alias);
+    this.alias = alias;
     this.isSubQ = isSubQ;
     outerQueryLimit = -1;
 
-    aliasToLateralViews = new HashMap<String, List<ASTNode>>();
+    aliasToLateralViews = new HashMap<String, ArrayList<ASTNode>>();
 
     tableSpecs = new HashMap<String, BaseSemanticAnalyzer.TableSpec>();
 
   }
 
-/*
+  /*
    * If a QB is such that the aggregation expressions need to be handled by
    * the Windowing PTF; we invoke this function to clear the AggExprs on the dest.
    */
@@ -175,11 +164,13 @@ public class QBParseInfo {
     destToAggregationExprs.get(clause).clear();
   }
 
-  public void setAggregationExprsForClause(String clause, Map<String, ASTNode> aggregationTrees) {
+  public void setAggregationExprsForClause(String clause,
+      LinkedHashMap<String, ASTNode> aggregationTrees) {
     destToAggregationExprs.put(clause, aggregationTrees);
   }
 
-  public void addAggregationExprsForClause(String clause, Map<String, ASTNode> aggregationTrees) {
+  public void addAggregationExprsForClause(String clause,
+      LinkedHashMap<String, ASTNode> aggregationTrees) {
     if (destToAggregationExprs.containsKey(clause)) {
       destToAggregationExprs.get(clause).putAll(aggregationTrees);
     } else {
@@ -189,18 +180,6 @@ public class QBParseInfo {
 
   public void addInsertIntoTable(String fullName, ASTNode ast) {
     insertIntoTables.put(fullName.toLowerCase(), ast);
-  }
-  
-  public void setDestToOpType(String clause, boolean value) {
-	destToOpType.put(clause, value);
-  }
-  
-  public boolean isDestToOpTypeInsertOverwrite(String clause) {
-	if (destToOpType.containsKey(clause)) {
-		return destToOpType.get(clause);
-	} else {
-	  return false;
-	}
   }
 
   /**
@@ -221,12 +200,12 @@ public class QBParseInfo {
     return insertIntoTables.containsKey(fullTableName.toLowerCase());
   }
 
-  public Map<String, ASTNode> getAggregationExprsForClause(String clause) {
+  public HashMap<String, ASTNode> getAggregationExprsForClause(String clause) {
     return destToAggregationExprs.get(clause);
   }
 
   public void addWindowingExprToClause(String clause, ASTNode windowingExprNode) {
-    Map<String, ASTNode> windowingExprs = destToWindowingExprs.get(clause);
+    LinkedHashMap<String, ASTNode> windowingExprs = destToWindowingExprs.get(clause);
     if ( windowingExprs == null ) {
       windowingExprs = new LinkedHashMap<String, ASTNode>();
       destToWindowingExprs.put(clause, windowingExprs);
@@ -234,7 +213,7 @@ public class QBParseInfo {
     windowingExprs.put(windowingExprNode.toStringTree(), windowingExprNode);
   }
 
-  public Map<String, ASTNode> getWindowingExprsForClause(String clause) {
+  public HashMap<String, ASTNode> getWindowingExprsForClause(String clause) {
     return destToWindowingExprs.get(clause);
   }
 
@@ -344,7 +323,7 @@ public class QBParseInfo {
     return destToWhereExpr.get(clause);
   }
 
-  public Map<String, ASTNode> getDestToWhereExpr() {
+  public HashMap<String, ASTNode> getDestToWhereExpr() {
     return destToWhereExpr;
   }
 
@@ -364,7 +343,7 @@ public class QBParseInfo {
     return destGroupingSets;
   }
 
-  public Map<String, ASTNode> getDestToGroupBy() {
+  public HashMap<String, ASTNode> getDestToGroupBy() {
     return destToGroupby;
   }
 
@@ -395,7 +374,7 @@ public class QBParseInfo {
     return destToClusterby.get(clause);
   }
 
-  public Map<String, ASTNode> getDestToClusterBy() {
+  public HashMap<String, ASTNode> getDestToClusterBy() {
     return destToClusterby;
   }
 
@@ -410,7 +389,7 @@ public class QBParseInfo {
     return destToDistributeby.get(clause);
   }
 
-  public Map<String, ASTNode> getDestToDistributeBy() {
+  public HashMap<String, ASTNode> getDestToDistributeBy() {
     return destToDistributeby;
   }
 
@@ -429,11 +408,11 @@ public class QBParseInfo {
     return destToOrderby.get(clause);
   }
 
-  public Map<String, ASTNode> getDestToSortBy() {
+  public HashMap<String, ASTNode> getDestToSortBy() {
     return destToSortby;
   }
 
-  public Map<String, ASTNode> getDestToOrderBy() {
+  public HashMap<String, ASTNode> getDestToOrderBy() {
     return destToOrderby;
   }
 
@@ -486,7 +465,7 @@ public class QBParseInfo {
   }
 
   public void setExprToColumnAlias(ASTNode expr, String alias) {
-    exprToColumnAlias.put(expr,  StringInternUtils.internIfNotNull(alias));
+    exprToColumnAlias.put(expr,  alias);
   }
 
   public void setDestLimit(String dest, Integer offset, Integer limit) {
@@ -573,19 +552,11 @@ public class QBParseInfo {
     hints = hint;
   }
 
-  public void setHintList(List<ASTNode> hintList) {
-    this.hintList = hintList;
-  }
-
-  public List<ASTNode> getHintList() {
-    return hintList;
-  }
-
   public ASTNode getHints() {
     return hints;
   }
 
-  public Map<String, List<ASTNode>> getAliasToLateralViews() {
+  public Map<String, ArrayList<ASTNode>> getAliasToLateralViews() {
     return aliasToLateralViews;
   }
 
@@ -594,7 +565,7 @@ public class QBParseInfo {
   }
 
   public void addLateralViewForAlias(String alias, ASTNode lateralView) {
-    List<ASTNode> lateralViews = aliasToLateralViews.get(alias);
+    ArrayList<ASTNode> lateralViews = aliasToLateralViews.get(alias);
     if (lateralViews == null) {
       lateralViews = new ArrayList<ASTNode>();
       aliasToLateralViews.put(alias, lateralViews);
@@ -627,23 +598,23 @@ public class QBParseInfo {
     return tableSpecs.get(tName.next());
   }
 
-  public Map<String, SimpleEntry<Integer,Integer>> getDestToLimit() {
+  public HashMap<String, SimpleEntry<Integer,Integer>> getDestToLimit() {
     return destToLimit;
   }
 
-  public Map<String, Map<String, ASTNode>> getDestToAggregationExprs() {
+  public LinkedHashMap<String, LinkedHashMap<String, ASTNode>> getDestToAggregationExprs() {
     return destToAggregationExprs;
   }
 
-  public Map<String, List<ASTNode>> getDestToDistinctFuncExprs() {
+  public HashMap<String, List<ASTNode>> getDestToDistinctFuncExprs() {
     return destToDistinctFuncExprs;
   }
 
-  public Map<String, TableSample> getNameToSample() {
+  public HashMap<String, TableSample> getNameToSample() {
     return nameToSample;
   }
 
-  public Map<String, ASTNode> getDestToLateralView() {
+  public HashMap<String, ASTNode> getDestToLateralView() {
     return destToLateralView;
   }
 
@@ -677,64 +648,26 @@ public class QBParseInfo {
   }
 
   /**
+   * @return the isPartialScanAnalyzeCommand
+   */
+  public boolean isPartialScanAnalyzeCommand() {
+    return isPartialScanAnalyzeCommand;
+  }
+
+  /**
+   * @param isPartialScanAnalyzeCommand the isPartialScanAnalyzeCommand to set
+   */
+  public void setPartialScanAnalyzeCommand(boolean isPartialScanAnalyzeCommand) {
+    this.isPartialScanAnalyzeCommand = isPartialScanAnalyzeCommand;
+  }
+
+  /**
    * See also {@link #isInsertIntoTable(String)}
    */
   public Map<String, ASTNode> getInsertOverwriteTables() {
     return insertOverwriteTables;
   }
 
-  public boolean hasInsertTables() {
-    return this.insertIntoTables.size() > 0 || this.insertOverwriteTables.size() > 0;
-  }
-
-  /**
-   * Check whether all the expressions in the select clause are aggregate function calls.
-   * This method starts iterating through the AST nodes representing the expressions in the select clause stored in
-   * this object. An expression is considered to be an aggregate function call if:
-   * <ul>
-   *   <li>the AST node type is either TOK_FUNCTION, TOK_FUNCTIONDI or TOK_FUNCTIONSTAR</li>
-   *   <li>the first child of the node is the name of the function</li>
-   *   <li>function is registered in Hive</li>
-   *   <li>the registered function with the specified name is a Generic User Defined Aggregate</li>
-   * </ul>
-   * If any of the mentioned criteria fails to match to the current expression this function returns false.
-   * @return true if all the expressions in the select clause are aggregate function calls.
-   * @throws SemanticException - thrown when {@link FunctionRegistry#getFunctionInfo} fails.
-   */
-  public boolean isFullyAggregate() throws SemanticException {
-    for (ASTNode selectClause : destToSelExpr.values()) {
-      for (Node node : selectClause.getChildren()) {
-        ASTNode selexpr = (ASTNode) node;
-        Tree expressionTypeToken = selexpr.getChild(0);
-        int selectExprType = expressionTypeToken.getType();
-        if (selectExprType != TOK_FUNCTION && selectExprType != TOK_FUNCTIONDI && selectExprType != TOK_FUNCTIONSTAR) {
-          return false;
-        }
-
-        if (expressionTypeToken.getChild(0).getType() != HiveParser.Identifier) {
-          return false;
-        }
-        String functionName = unescapeIdentifier(expressionTypeToken.getChild(0).getText());
-        FunctionInfo functionInfo = FunctionRegistry.getFunctionInfo(functionName);
-        if (functionInfo == null) {
-          return false;
-        }
-        if (functionInfo.getGenericUDAFResolver() == null) {
-          return false;
-        }
-      }
-    }
-
-    return true;
-  }
-
-  public ASTNode getColAliases() {
-    return colAliases;
-  }
-
-  public void setColAliases(ASTNode colAliases) {
-    this.colAliases = colAliases;
-  }
 }
 
 

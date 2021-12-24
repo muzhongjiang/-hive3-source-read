@@ -25,11 +25,11 @@ POSTHOOK: Output: default@mydata
 PREHOOK: query: SELECT * from mydata
 PREHOOK: type: QUERY
 PREHOOK: Input: default@mydata
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: SELECT * from mydata
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@mydata
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 238val_238	NULL
 86val_86	NULL
 311val_311	NULL

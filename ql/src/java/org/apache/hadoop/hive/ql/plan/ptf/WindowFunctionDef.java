@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,7 +33,6 @@ public class WindowFunctionDef extends WindowExpressionDef {
   WindowFrameDef windowFrame;
   GenericUDAFEvaluator wFnEval;
   boolean pivotResult;
-  boolean respectNulls = true;
 
   @Explain(displayName = "name")
   public String getName() {
@@ -125,11 +124,4 @@ public class WindowFunctionDef extends WindowExpressionDef {
     this.pivotResult = pivotResult;
   }
 
-  public boolean respectNulls() {
-    return respectNulls;
-  }
-
-  public void setRespectNulls(boolean respectNulls) {
-    this.respectNulls = respectNulls;
-  }
 }

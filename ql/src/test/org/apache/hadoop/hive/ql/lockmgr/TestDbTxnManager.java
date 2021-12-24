@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,20 +19,13 @@ package org.apache.hadoop.hive.ql.lockmgr;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.ThreadPool;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.GetOpenTxnsInfoResponse;
 import org.apache.hadoop.hive.metastore.api.ShowLocksResponse;
 import org.apache.hadoop.hive.metastore.api.ShowLocksResponseElement;
 import org.apache.hadoop.hive.metastore.api.TxnState;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
-import org.apache.hadoop.hive.metastore.api.TxnType;
-import org.apache.hadoop.hive.metastore.api.CommitTxnRequest;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
-import org.apache.hadoop.hive.metastore.metrics.Metrics;
-import org.apache.hadoop.hive.metastore.metrics.MetricsConstants;
-import org.apache.hadoop.hive.metastore.txn.AcidHouseKeeperService;
-import org.apache.hadoop.hive.metastore.utils.TestTxnDbUtil;
+import org.apache.hadoop.hive.metastore.txn.TxnDbUtil;
 import org.apache.hadoop.hive.metastore.txn.TxnStore;
 import org.apache.hadoop.hive.metastore.txn.TxnUtils;
 import org.apache.hadoop.hive.ql.Context;
@@ -43,12 +36,11 @@ import org.apache.hadoop.hive.ql.hooks.WriteEntity;
 import org.apache.hadoop.hive.ql.metadata.DummyPartition;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.plan.HiveOperation;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.ql.txn.AcidHouseKeeperService;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -56,7 +48,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import static junit.framework.Assert.assertEquals;
@@ -79,7 +70,7 @@ public class TestDbTxnManager {
     conf
     .setVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER,
         "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory");
-    TestTxnDbUtil.setConfValues(conf);
+    TxnDbUtil.setConfValues(conf);
     SessionState.start(conf);
     ctx = new Context(conf);
     tearDown();
@@ -88,14 +79,13 @@ public class TestDbTxnManager {
   @Test
   public void testSingleReadTable() throws Exception {
     addTableInput();
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
-    txnMgr.openTxn(ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
-    txnMgr.commitTxn();
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+    txnMgr.getLockManager().unlock(locks.get(0));
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
   }
@@ -103,14 +93,13 @@ public class TestDbTxnManager {
   @Test
   public void testSingleReadPartition() throws Exception {
     addPartitionInput(newTable(true));
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
-    txnMgr.openTxn(ctx, "fred");
-    txnMgr.acquireLocks(qp, ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
+    txnMgr.acquireLocks(qp, ctx, null);
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
-    txnMgr.commitTxn();
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+    txnMgr.getLockManager().unlock(locks.get(0));
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
 
@@ -122,14 +111,13 @@ public class TestDbTxnManager {
     addPartitionInput(t);
     addPartitionInput(t);
     addPartitionInput(t);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
-    txnMgr.openTxn(ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(3,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
-    txnMgr.commitTxn();
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+    txnMgr.getLockManager().unlock(locks.get(0));
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
   }
@@ -141,14 +129,13 @@ public class TestDbTxnManager {
     addPartitionInput(t);
     addPartitionInput(t);
     addTableInput();
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
-    txnMgr.openTxn(ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(4,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
-    txnMgr.commitTxn();
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+    txnMgr.getLockManager().unlock(locks.get(0));
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
   }
@@ -156,13 +143,13 @@ public class TestDbTxnManager {
   @Test
   public void testSingleWriteTable() throws Exception {
     WriteEntity we = addTableOutput(WriteEntity.WriteType.INSERT);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
     txnMgr.commitTxn();
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
@@ -172,13 +159,13 @@ public class TestDbTxnManager {
   @Test
   public void testSingleWritePartition() throws Exception {
     WriteEntity we = addPartitionOutput(newTable(true), WriteEntity.WriteType.INSERT);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
     txnMgr.commitTxn();
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
@@ -187,7 +174,7 @@ public class TestDbTxnManager {
   @Test
   public void testWriteDynamicPartition() throws Exception {
     WriteEntity we = addDynamicPartitionedOutput(newTable(true), WriteEntity.WriteType.INSERT);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
@@ -209,15 +196,29 @@ public class TestDbTxnManager {
    * aborts timed out transactions
    */
   private void runReaper() throws Exception {
-    houseKeeperService.run();
+    int lastCount = houseKeeperService.getIsAliveCounter();
+    houseKeeperService.start(conf);
+    int maxIter = 10;
+    int iterCount = 0;
+    while(houseKeeperService.getIsAliveCounter() <= lastCount) {
+      if(iterCount++ >= maxIter) {
+        //prevent test hangs
+        throw new IllegalStateException("Reaper didn't run after " + iterCount + " waits");
+      }
+      try {
+        Thread.sleep(100);//make sure it has run at least once
+      }
+      catch(InterruptedException ex) {
+        //...
+      }
+    }
+    houseKeeperService.stop();
   }
-
   @Test
   public void testExceptions() throws Exception {
     addPartitionOutput(newTable(true), WriteEntity.WriteType.INSERT);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
-    ((DbTxnManager) txnMgr).openTxn(ctx, "NicholasII", TxnType.DEFAULT,
-        HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS) * 2);
+    QueryPlan qp = new MockQueryPlan(this);
+    ((DbTxnManager) txnMgr).openTxn(ctx, "NicholasII", HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS) * 2);
     Thread.sleep(HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS));
     runReaper();
     LockException exception = null;
@@ -231,8 +232,7 @@ public class TestDbTxnManager {
     Assert.assertEquals("Wrong Exception1", ErrorMsg.TXN_ABORTED, exception.getCanonicalErrorMsg());
 
     exception = null;
-    ((DbTxnManager) txnMgr).openTxn(ctx, "AlexanderIII", TxnType.DEFAULT,
-        HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS) * 2);
+    ((DbTxnManager) txnMgr).openTxn(ctx, "AlexanderIII", HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS) * 2);
     Thread.sleep(HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS));
     runReaper();//this will abort the txn
     TxnStore txnHandler = TxnUtils.getTxnStore(conf);
@@ -243,11 +243,10 @@ public class TestDbTxnManager {
     txnMgr.rollbackTxn();//this is idempotent
   }
 
-  @Ignore("This seems useless now that we have a txn for everything")
   @Test
   public void testLockTimeout() throws Exception {
     addPartitionInput(newTable(true));
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     //make sure it works with nothing to expire
     testLockExpiration(txnMgr, 0, true);
 
@@ -295,13 +294,13 @@ public class TestDbTxnManager {
     addPartitionInput(t);
     addPartitionInput(t);
     WriteEntity we = addTableOutput(WriteEntity.WriteType.INSERT);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(4,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
     txnMgr.commitTxn();
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
@@ -310,13 +309,13 @@ public class TestDbTxnManager {
   @Test
   public void testUpdate() throws Exception {
     WriteEntity we = addTableOutput(WriteEntity.WriteType.UPDATE);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
     txnMgr.commitTxn();
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
@@ -325,13 +324,13 @@ public class TestDbTxnManager {
   @Test
   public void testDelete() throws Exception {
     WriteEntity we = addTableOutput(WriteEntity.WriteType.DELETE);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
     txnMgr.commitTxn();
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
@@ -340,13 +339,13 @@ public class TestDbTxnManager {
   @Test
   public void testRollback() throws Exception {
     WriteEntity we = addTableOutput(WriteEntity.WriteType.DELETE);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
     txnMgr.rollbackTxn();
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
@@ -355,14 +354,13 @@ public class TestDbTxnManager {
   @Test
   public void testDDLExclusive() throws Exception {
     WriteEntity we = addTableOutput(WriteEntity.WriteType.DDL_EXCLUSIVE);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.DROPTABLE);
-    txnMgr.openTxn(ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
-    txnMgr.rollbackTxn();
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+    txnMgr.getLockManager().unlock(locks.get(0));
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
   }
@@ -370,14 +368,13 @@ public class TestDbTxnManager {
   @Test
   public void testDDLShared() throws Exception {
     WriteEntity we = addTableOutput(WriteEntity.WriteType.DDL_SHARED);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.ALTERTABLE_EXCHANGEPARTITION);
-    txnMgr.openTxn(ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
     Assert.assertEquals(1,
-        TestTxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
-    txnMgr.commitTxn();
+        TxnDbUtil.countLockComponents(conf, ((DbLockManager.DbHiveLock) locks.get(0)).lockId));
+    txnMgr.getLockManager().unlock(locks.get(0));
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
   }
@@ -385,22 +382,15 @@ public class TestDbTxnManager {
   @Test
   public void testDDLNoLock() throws Exception {
     WriteEntity we = addTableOutput(WriteEntity.WriteType.DDL_NO_LOCK);
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.CREATEDATABASE);
-    txnMgr.openTxn(ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertNull(locks);
-    txnMgr.rollbackTxn();
   }
 
   @Test
   public void concurrencyFalse() throws Exception {
     HiveConf badConf = new HiveConf();
-    if(badConf.getBoolVar(HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY)) {
-      //TxnManagerFactory is a singleton, so if the default is true, it has already been
-      //created and won't throw
-      return;
-    }
     badConf.setVar(HiveConf.ConfVars.HIVE_TXN_MANAGER,
         "org.apache.hadoop.hive.ql.lockmgr.DbTxnManager");
     badConf.setBoolVar(HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY, false);
@@ -416,27 +406,25 @@ public class TestDbTxnManager {
   @Test
   public void testLockAcquisitionAndRelease() throws Exception {
     addTableInput();
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
-    txnMgr.openTxn(ctx, "fred");
+    QueryPlan qp = new MockQueryPlan(this);
     txnMgr.acquireLocks(qp, ctx, "fred");
     List<HiveLock> locks = ctx.getHiveLocks();
     Assert.assertEquals(1, locks.size());
-    txnMgr.commitTxn();
+    txnMgr.releaseLocks(locks);
     locks = txnMgr.getLockManager().getLocks(false, false);
     Assert.assertEquals(0, locks.size());
   }
 
   @Test
   public void testHeartbeater() throws Exception {
-    MetastoreConf.ConfVars timeThresholdConfVar = MetastoreConf.ConfVars.TXN_TIMEOUT;
     Assert.assertTrue(txnMgr instanceof DbTxnManager);
 
     addTableInput();
     LockException exception = null;
-    QueryPlan qp = new MockQueryPlan(this, HiveOperation.QUERY);
+    QueryPlan qp = new MockQueryPlan(this);
 
     // Case 1: If there's no delay for the heartbeat, txn should be able to commit
-    txnMgr.openTxn(ctx, "fred", TxnType.DEFAULT);
+    txnMgr.openTxn(ctx, "fred");
     txnMgr.acquireLocks(qp, ctx, "fred"); // heartbeat started..
     runReaper();
     try {
@@ -449,9 +437,9 @@ public class TestDbTxnManager {
 
     // Case 2: If there's delay for the heartbeat, but the delay is within the reaper's tolerance,
     //         then txt should be able to commit
-    // Start the heartbeat after a delay, which is shorter than the timeout threshold (e.g. TXN_TIMEOUT)
-    ((DbTxnManager) txnMgr).openTxn(ctx, "tom", TxnType.DEFAULT,
-            MetastoreConf.getTimeVar(conf, timeThresholdConfVar, TimeUnit.MILLISECONDS) / 2);
+    // Start the heartbeat after a delay, which is shorter than  the HIVE_TXN_TIMEOUT
+    ((DbTxnManager) txnMgr).openTxn(ctx, "tom",
+        HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS) / 2);
     txnMgr.acquireLocks(qp, ctx, "tom");
     runReaper();
     try {
@@ -465,11 +453,10 @@ public class TestDbTxnManager {
     // Case 3: If there's delay for the heartbeat, and the delay is long enough to trigger the reaper,
     //         then the txn will time out and be aborted.
     //         Here we just don't send the heartbeat at all - an infinite delay.
-    // Start the heartbeat after a delay, which exceeds the timeout threshold (e.g. TXN_TIMEOUT)
-    ((DbTxnManager) txnMgr).openTxn(ctx, "jerry", TxnType.DEFAULT,
-            MetastoreConf.getTimeVar(conf, timeThresholdConfVar, TimeUnit.MILLISECONDS) * 2);
+    // Start the heartbeat after a delay, which exceeds the HIVE_TXN_TIMEOUT
+    ((DbTxnManager) txnMgr).openTxn(ctx, "jerry", HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS) * 2);
     txnMgr.acquireLocks(qp, ctx, "jerry");
-    Thread.sleep(MetastoreConf.getTimeVar(conf, timeThresholdConfVar, TimeUnit.MILLISECONDS));
+    Thread.sleep(HiveConf.getTimeVar(conf, HiveConf.ConfVars.HIVE_TXN_TIMEOUT, TimeUnit.MILLISECONDS));
     runReaper();
     try {
       txnMgr.commitTxn();
@@ -478,74 +465,27 @@ public class TestDbTxnManager {
     }
     Assert.assertNotNull("Txn should have been aborted", exception);
     Assert.assertEquals(ErrorMsg.TXN_ABORTED, exception.getCanonicalErrorMsg());
-    Assert.assertEquals(1, Metrics.getOrCreateCounter(MetricsConstants.TOTAL_NUM_TIMED_OUT_TXNS).getCount());
   }
-
-  /**
-   * Same as testHeartbeater, but testing cleanup of replication txns (TxnType.REPL_CREATED)
-   * Note: in TestDbTxnManager metastore.repl.txn.timeout is set to 30s for testing purposes.
-   */
-  @Test
-  public void testHeartbeaterReplicationTxn() throws Exception {
-    MetastoreConf.ConfVars timeThresholdConfVar = MetastoreConf.ConfVars.REPL_TXN_TIMEOUT;
-    Assert.assertTrue(txnMgr instanceof DbTxnManager);
-
-    addTableInput();
-    LockException exception = null;
-    String replPolicy = "default.*";
-    // Case 1: If there's no delay for the heartbeat, txn should be able to commit
-    txnMgr.replOpenTxn(replPolicy, Arrays.asList(1L), "fred");
-    runReaper();
-    try {
-      CommitTxnRequest commitTxnRequest = new CommitTxnRequest(1);
-      commitTxnRequest.setReplPolicy(replPolicy);
-      commitTxnRequest.setTxn_type(TxnType.REPL_CREATED);
-      txnMgr.replCommitTxn(commitTxnRequest);
-    } catch (LockException e) {
-      exception = e;
-    }
-    Assert.assertNull("Txn commit should be successful", exception);
-    txnMgr.replOpenTxn(replPolicy, Arrays.asList(1L), "jerry");
-    Thread.sleep(MetastoreConf.getTimeVar(conf, timeThresholdConfVar, TimeUnit.MILLISECONDS));
-    runReaper();
-    try {
-      CommitTxnRequest commitTxnRequest = new CommitTxnRequest(1);
-      commitTxnRequest.setReplPolicy(replPolicy);
-      commitTxnRequest.setTxn_type(TxnType.REPL_CREATED);
-      txnMgr.replCommitTxn(commitTxnRequest);
-    } catch (LockException e) {
-      exception = e;
-    }
-    Assert.assertNotNull("Txn should have been aborted", exception);
-    Assert.assertEquals(ErrorMsg.TXN_ABORTED, exception.getCanonicalErrorMsg());
-    Assert.assertEquals(1, Metrics.getOrCreateCounter(MetricsConstants.TOTAL_NUM_TIMED_OUT_TXNS).getCount());
-  };
 
   @Before
   public void setUp() throws Exception {
-    TestTxnDbUtil.prepDb(conf);
-    MetastoreConf.setBoolVar(conf, MetastoreConf.ConfVars.METRICS_ENABLED, true);
+    TxnDbUtil.prepDb(conf);
     txnMgr = TxnManagerFactory.getTxnManagerFactory().getTxnManager(conf);
     txnMgr.getLockManager();//init lock manager
     Assert.assertTrue(txnMgr instanceof DbTxnManager);
     nextInput = 1;
     readEntities = new HashSet<ReadEntity>();
     writeEntities = new HashSet<WriteEntity>();
-    MetastoreConf.setTimeVar(conf, MetastoreConf.ConfVars.ACID_HOUSEKEEPER_SERVICE_START, 0, TimeUnit.SECONDS);
-    MetastoreConf.setTimeVar(conf, MetastoreConf.ConfVars.TXN_TIMEOUT, 10, TimeUnit.SECONDS);
+    conf.setTimeVar(HiveConf.ConfVars.HIVE_TIMEDOUT_TXN_REAPER_START, 0, TimeUnit.SECONDS);
+    conf.setTimeVar(HiveConf.ConfVars.HIVE_TXN_TIMEOUT, 10, TimeUnit.SECONDS);
     houseKeeperService = new AcidHouseKeeperService();
-    MetastoreConf.setTimeVar(conf, MetastoreConf.ConfVars.REPL_TXN_TIMEOUT, 30, TimeUnit.SECONDS);
-    houseKeeperService.setConf(conf);
-    // re-initialize metrics
-    Metrics.shutdown();
-    Metrics.initialize(conf);
   }
 
   @After
   public void tearDown() throws Exception {
+    if(houseKeeperService != null) houseKeeperService.stop();
     if (txnMgr != null) txnMgr.closeTxnManager();
-    TestTxnDbUtil.cleanDb(conf);
-    ThreadPool.shutdown();
+    TxnDbUtil.cleanDb(conf);
   }
 
   private static class MockQueryPlan extends QueryPlan {
@@ -553,8 +493,7 @@ public class TestDbTxnManager {
     private final HashSet<WriteEntity> outputs = new HashSet<>();
     private final String queryId;
     
-    MockQueryPlan(TestDbTxnManager test, HiveOperation operation) {
-      super(operation);
+    MockQueryPlan(TestDbTxnManager test) {
       inputs.addAll(test.readEntities);
       outputs.addAll(test.writeEntities);
       queryId = makeQueryId();

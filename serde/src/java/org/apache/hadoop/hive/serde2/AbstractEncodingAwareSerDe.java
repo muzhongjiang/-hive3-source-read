@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,6 +25,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.io.Writable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Charsets;
 
@@ -34,16 +36,16 @@ import com.google.common.base.Charsets;
  * transform data from UTF-8 to specified charset during deserialize.
  */
 public abstract class AbstractEncodingAwareSerDe extends AbstractSerDe {
-
+  private static final Logger LOG = LoggerFactory.getLogger(AbstractEncodingAwareSerDe.class);
   protected Charset charset;
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
+  @Deprecated
+  public void initialize(Configuration conf, Properties tbl)
       throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
-    charset = Charset.forName(properties.getProperty(serdeConstants.SERIALIZATION_ENCODING, "UTF-8"));
+    charset = Charset.forName(tbl.getProperty(serdeConstants.SERIALIZATION_ENCODING, "UTF-8"));
     if (this.charset.equals(Charsets.ISO_8859_1) || this.charset.equals(Charsets.US_ASCII)) {
-      log.warn("The data may not be properly converted to target charset " + charset);
+      LOG.warn("The data may not be properly converted to target charset " + charset);
     }
   }
 

@@ -1,6 +1,3 @@
---! qt:dataset:src
--- SORT_QUERY_RESULTS
-
 EXPLAIN EXTENDED
 FROM (
   FROM src

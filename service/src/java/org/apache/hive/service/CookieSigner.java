@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,8 +20,8 @@ package org.apache.hive.service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
 
+import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  */
 public class CookieSigner {
   private static final String SIGNATURE = "&s=";
-  private static final String SHA_STRING = "SHA-512";
+  private static final String SHA_STRING = "SHA-256";
   private byte[] secretBytes;
   private static final Logger LOG = LoggerFactory.getLogger(CookieSigner.class);
 
@@ -58,7 +58,9 @@ public class CookieSigner {
     }
     String signature = getSignature(str);
 
-    LOG.debug("Signature generated for {} is {}", str, signature);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Signature generated for " + str + " is " + signature);
+    }
     return str + SIGNATURE + signature;
   }
 
@@ -76,7 +78,9 @@ public class CookieSigner {
     String rawValue = signedStr.substring(0, index);
     String currentSignature = getSignature(rawValue);
 
-    LOG.debug("Signature generated for {} inside verify is {}", rawValue, currentSignature);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Signature generated for " + rawValue + " inside verify is " + currentSignature);
+    }
     if (!MessageDigest.isEqual(originalSignature.getBytes(), currentSignature.getBytes())) {
       throw new IllegalArgumentException("Invalid sign, original = " + originalSignature +
         " current = " + currentSignature);
@@ -95,7 +99,7 @@ public class CookieSigner {
       md.update(str.getBytes());
       md.update(secretBytes);
       byte[] digest = md.digest();
-      return Base64.getEncoder().encodeToString(digest);
+      return new Base64(0).encodeToString(digest);
     } catch (NoSuchAlgorithmException ex) {
       throw new RuntimeException("Invalid SHA digest String: " + SHA_STRING +
         " " + ex.getMessage(), ex);

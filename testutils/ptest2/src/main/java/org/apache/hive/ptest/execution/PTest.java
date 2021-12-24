@@ -26,10 +26,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedSet;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -43,7 +41,6 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.Options;
-import org.apache.hive.ptest.execution.conf.Context;
 import org.apache.hive.ptest.execution.conf.ExecutionContextConfiguration;
 import org.apache.hive.ptest.execution.conf.Host;
 import org.apache.hive.ptest.execution.conf.TestConfiguration;
@@ -76,7 +73,6 @@ public class PTest {
       .getLogger(PTest.class);
 
 
-  // dummy patch
   private final TestConfiguration mConfiguration;
   private final ListeningExecutorService mExecutor;
   private final Set<String> mAddedTests;
@@ -159,11 +155,8 @@ public class PTest {
     }
     mHostExecutors = new CopyOnWriteArrayList<HostExecutor>(hostExecutors);
     mPhases = Lists.newArrayList();
-    mPhases.add(new TestCheckPhase(mHostExecutors, localCommandFactory, templateDefaults,
-            configuration.getPatch(), patchFile, logger, mAddedTests));
+    mPhases.add(new TestCheckPhase(mHostExecutors, localCommandFactory, templateDefaults, patchFile, logger, mAddedTests));
     mPhases.add(new PrepPhase(mHostExecutors, localCommandFactory, templateDefaults, scratchDir, patchFile, logger));
-    mPhases.add(new YetusPhase(configuration, mHostExecutors, localCommandFactory, templateDefaults,
-        mExecutionContext.getLocalWorkingDirectory(), scratchDir, logger, logDir, patchFile));
     mPhases.add(new ExecutionPhase(mHostExecutors, mExecutionContext, hostExecutorBuilder, localCommandFactory, templateDefaults,
         succeededLogDir, failedLogDir, testParser.parse(), mExecutedTests, mFailedTests, logger));
     mPhases.add(new ReportingPhase(mHostExecutors, localCommandFactory, templateDefaults, logger));
@@ -186,14 +179,6 @@ public class PTest {
         } finally {
           long elapsedTime = TimeUnit.MINUTES.convert((System.currentTimeMillis() - start),
               TimeUnit.MILLISECONDS);
-          Map<String, Long> perfMetrics = phase.getPerfMetrics();
-          if (!perfMetrics.isEmpty()) {
-            mLogger.info("Adding perf metrics for " + phase.getClass().getSimpleName() + " phase");
-            for (Entry<String, Long> perfEntry : perfMetrics.entrySet()) {
-              elapsedTimes.put(phase.getClass().getSimpleName() + "." + perfEntry.getKey(),
-                  TimeUnit.MINUTES.convert(perfEntry.getValue(), TimeUnit.MILLISECONDS));
-            }
-          }
           elapsedTimes.put(phase.getClass().getSimpleName(), elapsedTime);
         }
       }
@@ -235,7 +220,7 @@ public class PTest {
       }
       mLogger.info("Executed " + mExecutedTests.size() + " tests");
       for(Map.Entry<String, Long> entry : elapsedTimes.entrySet()) {
-        mLogger.info(String.format("PERF: %s took %d minutes", entry.getKey(), entry.getValue()));
+        mLogger.info(String.format("PERF: Phase %s took %d minutes", entry.getKey(), entry.getValue()));
       }
       publishJiraComment(error, messages, failedTests, mAddedTests);
       if(error || !mFailedTests.isEmpty()) {
@@ -277,7 +262,6 @@ public class PTest {
   }
 
   private static final String PROPERTIES = "properties";
-  private static final String SERVER_ENV_PROPERTIES = "hive.ptest.server.env.properties";
   private static final String REPOSITORY = TestConfiguration.REPOSITORY;
   private static final String REPOSITORY_NAME = TestConfiguration.REPOSITORY_NAME;
   private static final String BRANCH = TestConfiguration.BRANCH;
@@ -298,7 +282,6 @@ public class PTest {
     CommandLineParser parser = new GnuParser();
     Options options = new Options();
     options.addOption(null, PROPERTIES, true, "properties file");
-    options.addOption(null, SERVER_ENV_PROPERTIES, true, "optional properties file with environment properties");
     options.addOption(null, REPOSITORY, true, "Overrides git repository in properties file");
     options.addOption(null, REPOSITORY_NAME, true, "Overrides git repository *name* in properties file");
     options.addOption(null, BRANCH, true, "Overrides git branch in properties file");
@@ -314,19 +297,8 @@ public class PTest {
           join(PTest.class.getName(), "--" + PROPERTIES,"config.properties"));
     }
     String testConfigurationFile = commandLine.getOptionValue(PROPERTIES);
-    String environmentConfigurationFile = commandLine.getOptionValue(SERVER_ENV_PROPERTIES);
-
-    Context.ContextBuilder builder = new Context.ContextBuilder();
-    builder.addPropertiesFile(testConfigurationFile);
-
-    if (environmentConfigurationFile != null) {
-      builder.addPropertiesFile(environmentConfigurationFile);
-    }
-
-    Context ctx = builder.build();
-
     ExecutionContextConfiguration executionContextConfiguration = ExecutionContextConfiguration.
-        withContext(ctx);
+        fromFile(testConfigurationFile);
     String buildTag = System.getenv("BUILD_TAG") == null ? "undefined-"
         + System.currentTimeMillis() : System.getenv("BUILD_TAG");
         File logDir = Dirs.create(new File(executionContextConfiguration.getGlobalLogDirectory(), buildTag));
@@ -335,7 +307,7 @@ public class PTest {
     cleaner.setName("LogCleaner-" + executionContextConfiguration.getGlobalLogDirectory());
     cleaner.setDaemon(true);
     cleaner.start();
-    TestConfiguration conf = TestConfiguration.withContext(ctx, LOG);
+    TestConfiguration conf = TestConfiguration.fromFile(testConfigurationFile, LOG);
     String repository = Strings.nullToEmpty(commandLine.getOptionValue(REPOSITORY)).trim();
     if(!repository.isEmpty()) {
       conf.setRepository(repository);

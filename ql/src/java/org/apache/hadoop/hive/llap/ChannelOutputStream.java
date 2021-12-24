@@ -23,7 +23,6 @@ import io.netty.channel.ChannelHandlerContext;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.concurrent.Semaphore;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,18 +40,24 @@ public class ChannelOutputStream extends OutputStream {
   private ByteBuf buf;
   private byte[] singleByte = new byte[1];
   private boolean closed = false;
+  private final Object writeMonitor = new Object();
   private final int maxPendingWrites;
-  private final Semaphore writeResources;
+  private volatile int pendingWrites = 0;
 
   private ChannelFutureListener writeListener = new ChannelFutureListener() {
     @Override
     public void operationComplete(ChannelFuture future) {
-      writeResources.release();
+
+      pendingWrites--;
 
       if (future.isCancelled()) {
         LOG.error("Write cancelled on ID " + id);
       } else if (!future.isSuccess()) {
         LOG.error("Write error on ID " + id, future.cause());
+      }
+
+      synchronized (writeMonitor) {
+        writeMonitor.notifyAll();
       }
     }
   };
@@ -74,7 +79,6 @@ public class ChannelOutputStream extends OutputStream {
     this.bufSize = bufSize;
     this.buf = chc.alloc().buffer(bufSize);
     this.maxPendingWrites = maxOutstandingWrites;
-    this.writeResources = new Semaphore(maxPendingWrites);
   }
 
   @Override
@@ -122,13 +126,13 @@ public class ChannelOutputStream extends OutputStream {
     try {
       flush();
     } catch (IOException err) {
-      LOG.error("Error flushing stream before close on " + id, err);
+      LOG.error("Error flushing stream before close", err);
     }
 
     closed = true;
 
     // Wait for all writes to finish before we actually close.
-    takeWriteResources(maxPendingWrites);
+    waitForWritesToFinish(0);
 
     try {
       chc.close().addListener(closeListener);
@@ -140,12 +144,16 @@ public class ChannelOutputStream extends OutputStream {
     }
   }
 
-  // Attempt to acquire write resources, waiting if they are not available.
-  private void takeWriteResources(int numResources) throws IOException {
-    try {
-      writeResources.acquire(numResources);
-    } catch (InterruptedException ie) {
-      throw new IOException("Interrupted while waiting for write resources for " + id);
+  private void waitForWritesToFinish(int desiredWriteCount) throws IOException {
+    synchronized (writeMonitor) {
+      // to prevent spurious wake up
+      while (pendingWrites > desiredWriteCount) {
+        try {
+          writeMonitor.wait();
+        } catch (InterruptedException ie) {
+          throw new IOException("Interrupted while waiting for write operations to finish for " + id);
+        }
+      }
     }
   }
 
@@ -154,7 +162,10 @@ public class ChannelOutputStream extends OutputStream {
       throw new IOException("Already closed: " + id);
     }
 
-    takeWriteResources(1);
+    // Wait if we have exceeded our max pending write count
+    waitForWritesToFinish(maxPendingWrites - 1);
+
+    pendingWrites++;
     chc.writeAndFlush(buf.copy()).addListener(writeListener);
     buf.clear();
   }

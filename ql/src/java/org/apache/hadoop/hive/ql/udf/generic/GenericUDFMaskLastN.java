@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -81,9 +81,6 @@ class MaskLastNTransformer extends MaskTransformer {
 
   @Override
   Byte transform(final Byte value) {
-    if (value == 0) {
-      return charCount > 0 ? (byte) maskedNumber : 0;
-    }
     byte val = value;
 
     if(value < 0) {
@@ -112,9 +109,6 @@ class MaskLastNTransformer extends MaskTransformer {
 
   @Override
   Short transform(final Short value) {
-    if (value == 0) {
-      return charCount > 0 ? (short) maskedNumber : 0;
-    }
     short val = value;
 
     if(value < 0) {
@@ -143,9 +137,6 @@ class MaskLastNTransformer extends MaskTransformer {
 
   @Override
   Integer transform(final Integer value) {
-    if (value == 0) {
-      return charCount > 0 ? maskedNumber : 0;
-    }
     int val = value;
 
     if(value < 0) {
@@ -174,9 +165,6 @@ class MaskLastNTransformer extends MaskTransformer {
 
   @Override
   Long transform(final Long value) {
-    if (value == 0) {
-      return charCount > 0 ? maskedNumber : 0L;
-    }
     long val = value;
 
     if(value < 0) {

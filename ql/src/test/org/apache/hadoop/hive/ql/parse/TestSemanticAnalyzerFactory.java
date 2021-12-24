@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,35 +17,34 @@
  */
 package org.apache.hadoop.hive.ql.parse;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.antlr.runtime.CommonToken;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.QueryState;
-import org.apache.hadoop.hive.ql.ddl.function.macro.create.CreateMacroAnalyzer;
-import org.apache.hadoop.hive.ql.ddl.function.macro.drop.DropMacroAnalyzer;
 import org.junit.Before;
 import org.junit.Test;
 
 public class TestSemanticAnalyzerFactory {
 
   private QueryState queryState;
-
+  private HiveConf conf;
+  
   @Before
   public void setup() throws Exception {
-    queryState = new QueryState.Builder().build();
+    queryState = new QueryState(null);
+    conf = queryState.getConf();
   }
-
   @Test
   public void testCreate() throws Exception {
     BaseSemanticAnalyzer analyzer = SemanticAnalyzerFactory.
         get(queryState, new ASTNode(new CommonToken(HiveParser.TOK_CREATEMACRO)));
-    Assert.assertTrue(analyzer.getClass().getSimpleName(), analyzer instanceof CreateMacroAnalyzer);
+    Assert.assertTrue(analyzer.getClass().getSimpleName(), analyzer instanceof MacroSemanticAnalyzer);
   }
-
   @Test
   public void testDrop() throws Exception {
     BaseSemanticAnalyzer analyzer = SemanticAnalyzerFactory.
         get(queryState, new ASTNode(new CommonToken(HiveParser.TOK_DROPMACRO)));
-    Assert.assertTrue(analyzer.getClass().getSimpleName(), analyzer instanceof DropMacroAnalyzer);
+    Assert.assertTrue(analyzer.getClass().getSimpleName(), analyzer instanceof MacroSemanticAnalyzer);
   }
 }

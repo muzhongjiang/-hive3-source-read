@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,8 +23,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hive.common.classification.InterfaceAudience;
-import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 
@@ -36,14 +34,12 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
  * Always use the TypeInfoFactory to create new TypeInfo objects, instead of
  * directly creating an instance of this class.
  */
-@InterfaceAudience.Public
-@InterfaceStability.Stable
 public final class StructTypeInfo extends TypeInfo implements Serializable {
 
   private static final long serialVersionUID = 1L;
 
-  private List<String> allStructFieldNames;
-  private List<TypeInfo> allStructFieldTypeInfos;
+  private ArrayList<String> allStructFieldNames;
+  private ArrayList<TypeInfo> allStructFieldTypeInfos;
 
   /**
    * For java serialization use only.
@@ -70,14 +66,15 @@ public final class StructTypeInfo extends TypeInfo implements Serializable {
   /**
    * For java serialization use only.
    */
-  public void setAllStructFieldNames(List<String> allStructFieldNames) {
+  public void setAllStructFieldNames(ArrayList<String> allStructFieldNames) {
     this.allStructFieldNames = allStructFieldNames;
   }
 
   /**
    * For java serialization use only.
    */
-  public void setAllStructFieldTypeInfos(List<TypeInfo> allStructFieldTypeInfos) {
+  public void setAllStructFieldTypeInfos(
+      ArrayList<TypeInfo> allStructFieldTypeInfos) {
     this.allStructFieldTypeInfos = allStructFieldTypeInfos;
   }
 
@@ -85,8 +82,8 @@ public final class StructTypeInfo extends TypeInfo implements Serializable {
    * For TypeInfoFactory use only.
    */
   StructTypeInfo(List<String> names, List<TypeInfo> typeInfos) {
-    allStructFieldNames = new ArrayList<>(names);
-    allStructFieldTypeInfos = new ArrayList<>(typeInfos);
+    allStructFieldNames = new ArrayList<String>(names);
+    allStructFieldTypeInfos = new ArrayList<TypeInfo>(typeInfos);
   }
 
   @Override
@@ -94,11 +91,11 @@ public final class StructTypeInfo extends TypeInfo implements Serializable {
     return Category.STRUCT;
   }
 
-  public List<String> getAllStructFieldNames() {
+  public ArrayList<String> getAllStructFieldNames() {
     return allStructFieldNames;
   }
 
-  public List<TypeInfo> getAllStructFieldTypeInfos() {
+  public ArrayList<TypeInfo> getAllStructFieldTypeInfos() {
     return allStructFieldTypeInfos;
   }
 

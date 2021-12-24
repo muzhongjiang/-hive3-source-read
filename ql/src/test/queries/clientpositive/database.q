@@ -1,6 +1,3 @@
---! qt:dataset:srcpart
---! qt:dataset:src1
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.support.concurrency = true;
 
@@ -39,46 +36,43 @@ CREATE DATABASE test_db;
 SHOW DATABASES;
 
 -- SHOW pattern
-SHOW DATABASES LIKE 'test%';
+SHOW DATABASES LIKE 'test*';
 
 -- SHOW pattern
-SHOW DATABASES LIKE '%ef%';
+SHOW DATABASES LIKE '*ef*';
 
--- SHOW pattern
-SHOW DATABASES LIKE 'test_d_';
-SHOW DATABASES LIKE 'test__';
 
 USE test_db;
 SHOW DATABASES;
 
 -- CREATE table in non-default DB
-CREATE TABLE test_table_n2 (col1 STRING) STORED AS TEXTFILE;
+CREATE TABLE test_table (col1 STRING) STORED AS TEXTFILE;
 SHOW TABLES;
 
 -- DESCRIBE table in non-default DB
-DESCRIBE test_table_n2;
+DESCRIBE test_table;
 
 -- DESCRIBE EXTENDED in non-default DB
-DESCRIBE EXTENDED test_table_n2;
+DESCRIBE EXTENDED test_table;
 
 -- CREATE LIKE in non-default DB
-CREATE TABLE test_table_like LIKE test_table_n2;
+CREATE TABLE test_table_like LIKE test_table;
 SHOW TABLES;
 DESCRIBE EXTENDED test_table_like;
 
 -- LOAD and SELECT
 LOAD DATA LOCAL INPATH '../../data/files/test.dat'
-OVERWRITE INTO TABLE test_table_n2;
-SELECT * FROM test_table_n2;
+OVERWRITE INTO TABLE test_table;
+SELECT * FROM test_table;
 
 -- DROP and CREATE w/o LOAD
-DROP TABLE test_table_n2;
+DROP TABLE test_table;
 SHOW TABLES;
 
-CREATE TABLE test_table_n2 (col1 STRING) STORED AS TEXTFILE;
+CREATE TABLE test_table (col1 STRING) STORED AS TEXTFILE;
 SHOW TABLES;
 
-SELECT * FROM test_table_n2;
+SELECT * FROM test_table;
 
 -- CREATE table that already exists in DEFAULT
 USE test_db;
@@ -94,7 +88,7 @@ SELECT * FROM src LIMIT 10;
 USE test_db;
 
 DROP TABLE src;
-DROP TABLE test_table_n2;
+DROP TABLE test_table;
 DROP TABLE test_table_like;
 SHOW TABLES;
 

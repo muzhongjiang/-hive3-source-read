@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,7 +30,7 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
+
 // Single-Column String hash table import.
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinBytesHashMap;
 
@@ -86,9 +86,9 @@ public class VectorMapJoinInnerStringOperator extends VectorMapJoinInnerGenerate
     super(ctx);
   }
 
-  public VectorMapJoinInnerStringOperator(CompilationOpContext ctx, OperatorDesc conf,
-      VectorizationContext vContext, VectorDesc vectorDesc) throws HiveException {
-    super(ctx, conf, vContext, vectorDesc);
+  public VectorMapJoinInnerStringOperator(CompilationOpContext ctx,
+      VectorizationContext vContext, OperatorDesc conf) throws HiveException {
+    super(ctx, vContext, conf);
   }
 
   //---------------------------------------------------------------------------
@@ -96,31 +96,40 @@ public class VectorMapJoinInnerStringOperator extends VectorMapJoinInnerGenerate
   //
 
   @Override
-  protected void commonSetup() throws HiveException {
-    super.commonSetup();
-
-    /*
-     * Initialize Single-Column String members for this specialized class.
-     */
-
-    singleJoinColumn = bigTableKeyColumnMap[0];
-  }
-
-  @Override
-  public void hashTableSetup() throws HiveException {
-    super.hashTableSetup();
-
-    /*
-     * Get our Single-Column String hash map information for this specialized class.
-     */
-
-    hashMap = (VectorMapJoinBytesHashMap) vectorMapJoinHashTable;
-  }
-
-  @Override
-  public void processBatch(VectorizedRowBatch batch) throws HiveException {
+  public void process(Object row, int tag) throws HiveException {
 
     try {
+      VectorizedRowBatch batch = (VectorizedRowBatch) row;
+
+      alias = (byte) tag;
+
+      if (needCommonSetup) {
+        // Our one time process method initialization.
+        commonSetup(batch);
+
+        /*
+         * Initialize Single-Column String members for this specialized class.
+         */
+
+        singleJoinColumn = bigTableKeyColumnMap[0];
+
+        needCommonSetup = false;
+      }
+
+      if (needHashTableSetup) {
+        // Setup our hash table specialization.  It will be the first time the process
+        // method is called, or after a Hybrid Grace reload.
+
+        /*
+         * Get our Single-Column String hash map information for this specialized class.
+         */
+
+        hashMap = (VectorMapJoinBytesHashMap) vectorMapJoinHashTable;
+
+        needHashTableSetup = false;
+      }
+
+      batchCounter++;
 
       // Do the per-batch setup for an inner join.
 
@@ -132,7 +141,11 @@ public class VectorMapJoinInnerStringOperator extends VectorMapJoinInnerGenerate
       }
 
       final int inputLogicalSize = batch.size;
+
       if (inputLogicalSize == 0) {
+        if (isLogDebugEnabled) {
+          LOG.debug(CLASS_NAME + " batch #" + batchCounter + " empty");
+        }
         return;
       }
 
@@ -186,7 +199,7 @@ public class VectorMapJoinInnerStringOperator extends VectorMapJoinInnerGenerate
          * Common repeated join result processing.
          */
 
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug(CLASS_NAME + " batch #" + batchCounter + " repeated joinResult " + joinResult.name());
         }
         finishInnerRepeated(batch, joinResult, hashMapResults[0]);
@@ -196,7 +209,7 @@ public class VectorMapJoinInnerStringOperator extends VectorMapJoinInnerGenerate
          * NOT Repeating.
          */
 
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug(CLASS_NAME + " batch #" + batchCounter + " non-repeated");
         }
 
@@ -343,7 +356,7 @@ public class VectorMapJoinInnerStringOperator extends VectorMapJoinInnerGenerate
           }
         }
 
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug(CLASS_NAME +
               " allMatchs " + intArrayToRangesString(allMatchs,allMatchCount) +
               " equalKeySeriesHashMapResultIndices " + intArrayToRangesString(equalKeySeriesHashMapResultIndices, equalKeySeriesCount) +

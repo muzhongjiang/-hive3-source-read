@@ -3,26 +3,22 @@ with q1 as ( select key from src where key = '5')
 select *
 from q1
 PREHOOK: type: QUERY
-PREHOOK: Input: default@q1
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 with q1 as ( select key from src where key = '5')
 select *
 from q1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@q1
-#### A masked pattern was here ####
 Plan optimized by CBO.
 
 Stage-2
   Dependency Collection{}
     Stage-1
-      Map 1 vectorized, llap
-      File Output Operator [FS_7]
+      Map 1 llap
+      File Output Operator [FS_3]
         table:{"name:":"default.q1"}
-        Select Operator [SEL_6] (rows=2 width=85)
+        Select Operator [SEL_2] (rows=2 width=85)
           Output:["_col0"]
-          Filter Operator [FIL_5] (rows=2 width=87)
+          Filter Operator [FIL_4] (rows=2 width=87)
             predicate:(key = '5')
             TableScan [TS_0] (rows=500 width=87)
               default@src,src,Tbl:COMPLETE,Col:COMPLETE,Output:["key"]
@@ -32,9 +28,9 @@ Stage-0
 Stage-3
   Fetch Operator
     limit:-1
-    Select Operator [SEL_9]
+    Select Operator [SEL_6]
       Output:["_col0"]
-      TableScan [TS_8]
+      TableScan [TS_5]
         Output:["key"]
 
 PREHOOK: query: with q1 as ( select key from src where key = '5')
@@ -62,25 +58,21 @@ PREHOOK: query: explain
 with q1 as ( select key from src where key = '5')
 select * from (select key from q1) a
 PREHOOK: type: QUERY
-PREHOOK: Input: default@q1
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 with q1 as ( select key from src where key = '5')
 select * from (select key from q1) a
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@q1
-#### A masked pattern was here ####
 Plan optimized by CBO.
 
 Stage-2
   Dependency Collection{}
     Stage-1
-      Map 1 vectorized, llap
-      File Output Operator [FS_7]
+      Map 1 llap
+      File Output Operator [FS_3]
         table:{"name:":"default.q1"}
-        Select Operator [SEL_6] (rows=2 width=85)
+        Select Operator [SEL_2] (rows=2 width=85)
           Output:["_col0"]
-          Filter Operator [FIL_5] (rows=2 width=87)
+          Filter Operator [FIL_4] (rows=2 width=87)
             predicate:(key = '5')
             TableScan [TS_0] (rows=500 width=87)
               default@src,src,Tbl:COMPLETE,Col:COMPLETE,Output:["key"]
@@ -90,9 +82,9 @@ Stage-0
 Stage-3
   Fetch Operator
     limit:-1
-    Select Operator [SEL_9]
+    Select Operator [SEL_6]
       Output:["_col0"]
-      TableScan [TS_8]
+      TableScan [TS_5]
         Output:["key"]
 
 PREHOOK: query: with q1 as ( select key from src where key = '5')
@@ -119,38 +111,34 @@ with q1 as ( select key from q2 where key = '5'),
 q2 as ( select key from src where key = '5')
 select * from (select key from q1) a
 PREHOOK: type: QUERY
-PREHOOK: Input: default@q1
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 with q1 as ( select key from q2 where key = '5'),
 q2 as ( select key from src where key = '5')
 select * from (select key from q1) a
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@q1
-#### A masked pattern was here ####
 Plan optimized by CBO.
 
 Stage-5
   Dependency Collection{}
     Stage-4
-      Map 2 vectorized, llap
-      File Output Operator [FS_15]
+      Map 2 llap
+      File Output Operator [FS_8]
         table:{"name:":"default.q1"}
-        Select Operator [SEL_14] (rows=1 width=184)
+        Select Operator [SEL_7] (rows=1 width=0)
           Output:["_col0"]
-          Filter Operator [FIL_13] (rows=1 width=184)
+          Filter Operator [FIL_9] (rows=1 width=0)
             predicate:(key = '5')
-            TableScan [TS_8] (rows=1 width=184)
-              default@q2,q2,Tbl:COMPLETE,Col:NONE,Output:["key"]
+            TableScan [TS_5] (rows=1 width=0)
+              default@q2,q2,Tbl:PARTIAL,Col:NONE,Output:["key"]
         Stage-2
           Dependency Collection{}
             Stage-1
-              Map 1 vectorized, llap
-              File Output Operator [FS_7]
+              Map 1 llap
+              File Output Operator [FS_3]
                 table:{"name:":"default.q2"}
-                Select Operator [SEL_6] (rows=2 width=85)
+                Select Operator [SEL_2] (rows=2 width=85)
                   Output:["_col0"]
-                  Filter Operator [FIL_5] (rows=2 width=87)
+                  Filter Operator [FIL_4] (rows=2 width=87)
                     predicate:(key = '5')
                     TableScan [TS_0] (rows=500 width=87)
                       default@src,src,Tbl:COMPLETE,Col:COMPLETE,Output:["key"]
@@ -163,9 +151,9 @@ Stage-3
 Stage-6
   Fetch Operator
     limit:-1
-    Select Operator [SEL_17]
+    Select Operator [SEL_11]
       Output:["_col0"]
-      TableScan [TS_16]
+      TableScan [TS_10]
         Output:["key"]
 
 PREHOOK: query: with q1 as ( select key from q2 where key = '5'),

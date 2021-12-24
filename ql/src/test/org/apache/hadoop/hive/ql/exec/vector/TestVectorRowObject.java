@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,14 +23,12 @@ import java.util.Random;
 
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 
-
-import static org.junit.Assert.fail;
-import org.junit.Test;
+import junit.framework.TestCase;
 
 /**
  * Unit test for the vectorized conversion to and from row object[].
  */
-public class TestVectorRowObject {
+public class TestVectorRowObject extends TestCase {
 
   void examineBatch(VectorizedRowBatch batch, VectorExtractRow vectorExtractRow,
               Object[][] randomRows, int firstRandomRowIndex ) {
@@ -41,13 +39,7 @@ public class TestVectorRowObject {
       vectorExtractRow.extractRow(batch, i, row);
       Object[] expectedRow = randomRows[firstRandomRowIndex + i];
       for (int c = 0; c < rowSize; c++) {
-        Object actualValue = row[c];
-        Object expectedValue = expectedRow[c];
-        if (actualValue == null || expectedValue == null) {
-          if (actualValue != expectedValue) {
-            fail("Row " + (firstRandomRowIndex + i) + " and column " + c + " mismatch");
-          }
-        } else if (!actualValue.equals(expectedValue)) {
+        if (!row[c].equals(expectedRow[c])) {
           fail("Row " + (firstRandomRowIndex + i) + " and column " + c + " mismatch");
         }
       }
@@ -59,9 +51,7 @@ public class TestVectorRowObject {
     String[] emptyScratchTypeNames = new String[0];
 
     VectorRandomRowSource source = new VectorRandomRowSource();
-
-    source.init(r, VectorRandomRowSource.SupportedTypes.ALL, 4,
-        /* allowNulls */ true, /* isUnicodeOk */ true);
+    source.init(r);
 
     VectorizedRowBatchCtx batchContext = new VectorizedRowBatchCtx();
     batchContext.init(source.rowStructObjectInspector(), emptyScratchTypeNames);
@@ -79,7 +69,7 @@ public class TestVectorRowObject {
     VectorExtractRow vectorExtractRow = new VectorExtractRow();
     vectorExtractRow.init(source.typeNames());
 
-    Object[][] randomRows = source.randomRows(1000);
+    Object[][] randomRows = source.randomRows(10000);
     if (sort) {
       source.sort(randomRows);
     }
@@ -100,7 +90,6 @@ public class TestVectorRowObject {
     }
   }
 
-  @Test
   public void testVectorRowObject() throws Throwable {
 
     try {

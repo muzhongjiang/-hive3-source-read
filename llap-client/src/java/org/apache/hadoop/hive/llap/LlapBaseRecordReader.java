@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,19 +18,25 @@
 
 package org.apache.hadoop.hive.llap;
 
-import com.google.common.base.Preconditions;
-
-import java.io.BufferedInputStream;
 import java.io.Closeable;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.DataInputStream;
 import java.util.concurrent.LinkedBlockingQueue;
-import org.apache.hadoop.hive.llap.io.ChunkedInputStream;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.llap.Schema;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.mapred.RecordReader;
+import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.JobConf;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,26 +46,24 @@ import org.slf4j.LoggerFactory;
 public class LlapBaseRecordReader<V extends WritableComparable> implements RecordReader<NullWritable, V> {
   private static final Logger LOG = LoggerFactory.getLogger(LlapBaseRecordReader.class);
 
-  protected final ChunkedInputStream cin;
   protected final DataInputStream din;
   protected final Schema schema;
   protected final Class<V> clazz;
 
   protected Thread readerThread = null;
   protected final LinkedBlockingQueue<ReaderEvent> readerEvents = new LinkedBlockingQueue<ReaderEvent>();
+  protected final long timeout;
   protected final Closeable client;
   private final Closeable socket;
-  private boolean closed = false;
 
   public LlapBaseRecordReader(InputStream in, Schema schema,
       Class<V> clazz, JobConf job, Closeable client, Closeable socket) {
-    String clientId = (client == null ? "" : client.toString());
-    this.cin = new ChunkedInputStream(in, clientId);  // Save so we can verify end of stream
-    // We need mark support - wrap with BufferedInputStream.
-    din = new DataInputStream(new BufferedInputStream(cin));
+    din = new DataInputStream(in);
     this.schema = schema;
     this.clazz = clazz;
     this.readerThread = Thread.currentThread();
+    this.timeout = 3 * HiveConf.getTimeVar(job,
+        HiveConf.ConfVars.LLAP_DAEMON_AM_LIVENESS_CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     this.client = client;
     this.socket = socket;
   }
@@ -69,31 +73,27 @@ public class LlapBaseRecordReader<V extends WritableComparable> implements Recor
   }
 
   @Override
-  public synchronized void close() throws IOException {
-    if (!closed) {
-      closed = true;
+  public void close() throws IOException {
+    Exception caughtException = null;
+    try {
+      din.close();
+    } catch (Exception err) {
+      LOG.error("Error closing input stream:" + err.getMessage(), err);
+      caughtException = err;
+    }
+    // Don't close the socket - the stream already does that if needed.
 
-      Exception caughtException = null;
+    if (client != null) {
       try {
-        din.close();
+        client.close();
       } catch (Exception err) {
-        LOG.error("Error closing input stream:" + err.getMessage(), err);
-        caughtException = err;
+        LOG.error("Error closing client:" + err.getMessage(), err);
+        caughtException = (caughtException == null ? err : caughtException);
       }
-      // Don't close the socket - the stream already does that if needed.
+    }
 
-      if (client != null) {
-        try {
-          client.close();
-        } catch (Exception err) {
-          LOG.error("Error closing client:" + err.getMessage(), err);
-          caughtException = (caughtException == null ? err : caughtException);
-        }
-      }
-
-      if (caughtException != null) {
-        throw new IOException("Exception during close: " + caughtException.getMessage(), caughtException);
-      }
+    if (caughtException != null) {
+      throw new IOException("Exception during close: " + caughtException.getMessage(), caughtException);
     }
   }
 
@@ -129,39 +129,20 @@ public class LlapBaseRecordReader<V extends WritableComparable> implements Recor
       // Need a way to know what thread to interrupt, since this is a blocking thread.
       setReaderThread(Thread.currentThread());
 
-      if (hasInput()) {
-        value.readFields(din);
-        return true;
-      } else {
-        // End of input. Confirm we got end of stream indicator from server,
-        // as well as DONE status from fragment execution.
-        if (!cin.isEndOfData()) {
-          throw new IOException("Hit end of input, but did not find expected end of data indicator");
-        }
-
-        processReaderEvent();
-        return false;
+      value.readFields(din);
+      return true;
+    } catch (EOFException eof) {
+      // End of input. There should be a reader event available, or coming soon, so okay to be blocking call.
+      ReaderEvent event = getReaderEvent();
+      switch (event.getEventType()) {
+        case DONE:
+          break;
+        default:
+          throw new IOException("Expected reader event with done status, but got "
+              + event.getEventType() + " with message " + event.getMessage());
       }
-    } catch (IOException io) {
-      failOnInterruption(io);
       return false;
-    }
-  }
-
-  protected void processReaderEvent() throws IOException {
-    // There should be a reader event available, or coming soon, so okay to be blocking call.
-    ReaderEvent event = getReaderEvent();
-    switch (event.getEventType()) {
-      case DONE:
-        break;
-      default:
-        throw new IOException("Expected reader event with done status, but got "
-            + event.getEventType() + " with message " + event.getMessage());
-    }
-  }
-
-  protected void failOnInterruption(IOException io) throws IOException {
-    try {
+    } catch (IOException io) {
       if (Thread.interrupted()) {
         // Either we were interrupted by one of:
         // 1. handleEvent(), in which case there is a reader (error) event waiting for us in the queue
@@ -184,16 +165,6 @@ public class LlapBaseRecordReader<V extends WritableComparable> implements Recor
       } else {
         // If we weren't interrupted, just propagate the error
         throw io;
-      }
-    } finally {
-      // The external client handling umbilical responses and the connection to read the incoming
-      // data are not coupled. Calling close() here to make sure an error in one will cause the
-      // other to be closed as well.
-      try {
-        close();
-      } catch (Exception err) {
-        // Don't propagate errors from close() since this will lose the original error above.
-        LOG.error("Closing RecordReader due to error and hit another error during close()", err);
       }
     }
   }
@@ -261,19 +232,12 @@ public class LlapBaseRecordReader<V extends WritableComparable> implements Recor
     }
   }
 
-  protected boolean hasInput() throws IOException {
-    din.mark(1);
-    if (din.read() >= 0) {
-      din.reset();
-      return true;
-    }
-    return false;
-  }
-
   protected ReaderEvent getReaderEvent() throws IOException {
     try {
-      ReaderEvent event = readerEvents.take();
-      Preconditions.checkNotNull(event);
+      ReaderEvent event = readerEvents.poll(timeout, TimeUnit.MILLISECONDS);
+      if (event == null) {
+        throw new IOException("Timed out getting readerEvents");
+      }
       return event;
     } catch (InterruptedException ie) {
       throw new RuntimeException("Interrupted while getting readerEvents, not expected: " + ie.getMessage(), ie);

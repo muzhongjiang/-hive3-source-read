@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,8 +14,8 @@
 package org.apache.hadoop.hive.ql.io.parquet;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
@@ -101,24 +101,27 @@ public class MapredParquetOutputFormat extends FileOutputFormat<NullWritable, Pa
       final Properties tableProperties,
       final Progressable progress) throws IOException {
 
-    LOG.info("Creating new record writer: {}", this);
+    LOG.info("creating new record writer..." + this);
 
     final String columnNameProperty = tableProperties.getProperty(IOConstants.COLUMNS);
     final String columnTypeProperty = tableProperties.getProperty(IOConstants.COLUMNS_TYPES);
-    List<String> columnNames = Collections.emptyList();
-    List<TypeInfo> columnTypes = Collections.emptyList();
+    List<String> columnNames;
+    List<TypeInfo> columnTypes;
     final String columnNameDelimiter = tableProperties.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? tableProperties
         .getProperty(serdeConstants.COLUMN_NAME_DELIMITER) : String.valueOf(SerDeUtils.COMMA);
-
-    if (!columnNameProperty.isEmpty()) {
+    if (columnNameProperty.length() == 0) {
+      columnNames = new ArrayList<String>();
+    } else {
       columnNames = Arrays.asList(columnNameProperty.split(columnNameDelimiter));
     }
 
-    if (!columnTypeProperty.isEmpty()) {
+    if (columnTypeProperty.length() == 0) {
+      columnTypes = new ArrayList<TypeInfo>();
+    } else {
       columnTypes = TypeInfoUtils.getTypeInfosFromTypeString(columnTypeProperty);
     }
 
-    DataWritableWriteSupport.setSchema(HiveSchemaConverter.convert(columnNames, columnTypes, jobConf), jobConf);
+    DataWritableWriteSupport.setSchema(HiveSchemaConverter.convert(columnNames, columnTypes), jobConf);
 
     return getParquerRecordWriterWrapper(realOutputFormat, jobConf, finalOutPath.toString(),
             progress,tableProperties);

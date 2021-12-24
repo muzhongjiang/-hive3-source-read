@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,15 +17,18 @@
  */
 package org.apache.hadoop.hive.common.log;
 
-import org.apache.commons.lang3.StringUtils;
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
+import jline.TerminalFactory;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.fusesource.jansi.Ansi;
 
+import javax.annotation.Nullable;
 import java.io.PrintStream;
 import java.io.StringWriter;
 import java.text.DecimalFormat;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static org.fusesource.jansi.Ansi.ansi;
 import static org.fusesource.jansi.internal.CLibrary.*;
@@ -155,8 +158,13 @@ public class InPlaceUpdate {
 
 
     // Map 1 .......... container  SUCCEEDED      7          7        0        0       0       0
-    List<String> printReady =
-        monitor.rows().stream().map(row -> String.format(VERTEX_FORMAT, row.toArray())).collect(Collectors.toList());
+    List<String> printReady = Lists.transform(monitor.rows(), new Function<List<String>, String>() {
+      @Nullable
+      @Override
+      public String apply(@Nullable List<String> row) {
+        return String.format(VERTEX_FORMAT, row.toArray());
+      }
+    });
     reprintMultiLine(StringUtils.join(printReady, "\n"));
 
     // -------------------------------------------------------------------------------
@@ -179,18 +187,10 @@ public class InPlaceUpdate {
 
 
   public static boolean canRenderInPlace(HiveConf conf) {
-    String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-    boolean inPlaceUpdates = false;
+    boolean inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.TEZ_EXEC_INPLACE_PROGRESS);
 
-    if (engine.equals("tez")) {
-      inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.TEZ_EXEC_INPLACE_PROGRESS);
-    }
-
-    if (engine.equals("spark")) {
-      inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.SPARK_EXEC_INPLACE_PROGRESS);
-    }
-
-    return inPlaceUpdates && isUnixTerminal();
+    // we need at least 80 chars wide terminal to display in-place updates properly
+    return inPlaceUpdates && isUnixTerminal() && TerminalFactory.get().getWidth() >= MIN_TERMINAL_WIDTH;
   }
 
   private static boolean isUnixTerminal() {

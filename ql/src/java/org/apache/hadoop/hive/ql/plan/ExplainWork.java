@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,14 +20,12 @@ package org.apache.hadoop.hive.ql.plan;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.hooks.ReadEntity;
-import org.apache.hadoop.hive.ql.hooks.WriteEntity;
-import org.apache.hadoop.hive.ql.parse.ASTNode;
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer;
 import org.apache.hadoop.hive.ql.parse.ExplainConfiguration;
 import org.apache.hadoop.hive.ql.parse.ExplainConfiguration.VectorizationDetailLevel;
@@ -41,22 +39,16 @@ public class ExplainWork implements Serializable {
   private static final long serialVersionUID = 1L;
 
   private Path resFile;
-  private List<Task<?>> rootTasks;
-  private Task<?> fetchTask;
-  private ASTNode astTree;
-  private String astStringTree;
-  private Set<ReadEntity> inputs;
-  private Set<WriteEntity> outputs;
+  private ArrayList<Task<? extends Serializable>> rootTasks;
+  private Task<? extends Serializable> fetchTask;
+  private HashSet<ReadEntity> inputs;
   private ParseContext pCtx;
 
   private ExplainConfiguration config;
 
-  private boolean appendTaskType;
+  boolean appendTaskType;
 
-  private String cboInfo;
-  private String cboPlan;
-
-  private String optimizedSQL;
+  String cboInfo;
 
   private transient BaseSemanticAnalyzer analyzer;
 
@@ -65,31 +57,20 @@ public class ExplainWork implements Serializable {
 
   public ExplainWork(Path resFile,
       ParseContext pCtx,
-      List<Task<?>> rootTasks,
-      Task<?> fetchTask,
-      ASTNode astTree,
+      List<Task<? extends Serializable>> rootTasks,
+      Task<? extends Serializable> fetchTask,
       BaseSemanticAnalyzer analyzer,
       ExplainConfiguration config,
-      String cboInfo,
-      String optimizedSQL,
-      String cboPlan) {
+      String cboInfo) {
     this.resFile = resFile;
-    this.rootTasks = new ArrayList<Task<?>>(rootTasks);
+    this.rootTasks = new ArrayList<Task<? extends Serializable>>(rootTasks);
     this.fetchTask = fetchTask;
-    if(astTree != null) {
-      this.astTree = astTree;
-    }
     this.analyzer = analyzer;
     if (analyzer != null) {
       this.inputs = analyzer.getInputs();
     }
-    if (analyzer != null) {
-      this.outputs = analyzer.getAllOutputs();
-    }
     this.pCtx = pCtx;
     this.cboInfo = cboInfo;
-    this.optimizedSQL = optimizedSQL;
-    this.cboPlan = cboPlan;
     this.config = config;
   }
 
@@ -101,47 +82,28 @@ public class ExplainWork implements Serializable {
     this.resFile = resFile;
   }
 
-  public List<Task<?>> getRootTasks() {
+  public ArrayList<Task<? extends Serializable>> getRootTasks() {
     return rootTasks;
   }
 
-  public void setRootTasks(List<Task<?>> rootTasks) {
+  public void setRootTasks(ArrayList<Task<? extends Serializable>> rootTasks) {
     this.rootTasks = rootTasks;
   }
 
-  public Task<?> getFetchTask() {
+  public Task<? extends Serializable> getFetchTask() {
     return fetchTask;
   }
 
-  public void setFetchTask(Task<?> fetchTask) {
+  public void setFetchTask(Task<? extends Serializable> fetchTask) {
     this.fetchTask = fetchTask;
   }
 
-  public Set<ReadEntity> getInputs() {
+  public HashSet<ReadEntity> getInputs() {
     return inputs;
   }
 
-  public void setInputs(Set<ReadEntity> inputs) {
+  public void setInputs(HashSet<ReadEntity> inputs) {
     this.inputs = inputs;
-  }
-
-  public Set<WriteEntity> getOutputs() {
-    return outputs;
-  }
-
-  public void setOutputs(Set<WriteEntity> outputs) {
-    this.outputs = outputs;
-  }
-
-  public ASTNode getAstTree() {
-    return astTree;
-  }
-
-  public String getAstStringTree() {
-    if (astStringTree == null) {
-      astStringTree = astTree.dump();
-    }
-    return astStringTree;
   }
 
   public boolean getExtended() {
@@ -168,20 +130,12 @@ public class ExplainWork implements Serializable {
     return config.getVectorizationDetailLevel();
   }
 
-  public boolean isDebug() {
-    return config.isDebug();
-  }
-
   public ParseContext getParseContext() {
     return pCtx;
   }
 
   public void setParseContext(ParseContext pCtx) {
     this.pCtx = pCtx;
-  }
-
-  public boolean isCbo() {
-    return config.isCbo();
   }
 
   public boolean isLogical() {
@@ -216,22 +170,6 @@ public class ExplainWork implements Serializable {
     this.cboInfo = cboInfo;
   }
 
-  public String getOptimizedSQL() {
-    return optimizedSQL;
-  }
-
-  public void setOptimizedSQL(String optimizedSQL) {
-    this.optimizedSQL = optimizedSQL;
-  }
-
-  public String getCboPlan() {
-    return cboPlan;
-  }
-
-  public void setCboPlan(String cboPlan) {
-    this.cboPlan = cboPlan;
-  }
-
   public ExplainConfiguration getConfig() {
     return config;
   }
@@ -240,14 +178,4 @@ public class ExplainWork implements Serializable {
     this.config = config;
   }
 
-  public boolean isLocks() {
-    return config.isLocks();
-  }
-  public boolean isAst() {
-    return config.isAst();
-  }
-
-  public boolean isDDL() {
-    return config.isDDL();
-  }
 }

@@ -20,8 +20,11 @@ package org.apache.hadoop.hive.serde2.avro;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
+import org.apache.hadoop.io.Writable;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Properties;
 
 //import static org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AVRO_SERDE_SCHEMA;
@@ -70,7 +73,7 @@ public class TestAvroSerde {
 
 
     AvroSerDe asd = new AvroSerDe();
-    asd.initialize(conf, props, null);
+    SerDeUtils.initializeSerDe(asd, conf, props, null);
 
     // Verify that the schema now within the configuration is the one passed
     // in via the properties
@@ -128,7 +131,7 @@ public class TestAvroSerde {
   private void verifyExpectedException(Properties props) {
     AvroSerDe asd = new AvroSerDe();
     try {
-      asd.initialize(new Configuration(), props, null);
+      SerDeUtils.initializeSerDe(asd, new Configuration(), props, null);
       fail("Expected Exception did not be thrown");
     } catch (SerDeException e) {
       // good

@@ -19,10 +19,7 @@ package org.apache.hadoop.hive.ql.io.avro;
 
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.rmi.server.UID;
-import java.time.DateTimeException;
-import java.time.ZoneId;
 import java.util.Map;
 import java.util.Properties;
 
@@ -32,8 +29,6 @@ import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.mapred.FsInput;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.hive.serde2.avro.AvroSerDe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.Path;
@@ -63,8 +58,6 @@ public class AvroGenericRecordReader implements
   final private org.apache.avro.file.FileReader<GenericRecord> reader;
   final private long start;
   final private long stop;
-  private ZoneId writerTimezone;
-  private Boolean writerProleptic;
   protected JobConf jobConf;
   final private boolean isEmptyInput;
   /**
@@ -89,37 +82,18 @@ public class AvroGenericRecordReader implements
     }
 
     if (split.getLength() == 0) {
-      this.reader = null;
       this.isEmptyInput = true;
-    } else {
-      this.reader = new DataFileReader<GenericRecord>(new FsInput(split.getPath(), job), gdr);
+      this.start = 0;
+      this.reader = null;
+    }
+    else {
       this.isEmptyInput = false;
+      this.reader = new DataFileReader<GenericRecord>(new FsInput(split.getPath(), job), gdr);
+      this.reader.sync(split.getStart());
+      this.start = reader.tell();
     }
-
-    try {
-      if (this.isEmptyInput) {
-        this.start = 0;
-      } else {
-        this.reader.sync(split.getStart());
-        this.start = reader.tell();
-      }
-      this.stop = split.getStart() + split.getLength();
-      this.recordReaderID = new UID();
-
-      this.writerTimezone = extractWriterTimezoneFromMetadata(job, split, gdr);
-      this.writerProleptic = extractWriterProlepticFromMetadata(job, split, gdr);
-    } catch (Exception e) {
-      if (this.reader != null) {
-        try {
-          this.reader.close();
-        } catch (Exception closeException) {
-          if (closeException != e) {
-            e.addSuppressed(closeException);
-          }
-        }
-      }
-      throw e;
-    }
+    this.stop = split.getStart() + split.getLength();
+    this.recordReaderID = new UID();
   }
 
   /**
@@ -139,8 +113,10 @@ public class AvroGenericRecordReader implements
       for (Map.Entry<Path,PartitionDesc> pathsAndParts: mapWork.getPathToPartitionInfo().entrySet()){
         Path partitionPath = pathsAndParts.getKey();
         if(pathIsInPartition(split.getPath(), partitionPath)) {
-          LOG.info("Matching partition {} with input split {}", partitionPath,
-              split);
+          if(LOG.isInfoEnabled()) {
+              LOG.info("Matching partition " + partitionPath +
+                      " with input split " + split);
+          }
 
           Properties props = pathsAndParts.getValue().getProperties();
           if(props.containsKey(AvroTableProperties.SCHEMA_LITERAL.getPropName()) || props.containsKey(AvroTableProperties.SCHEMA_URL.getPropName())) {
@@ -151,63 +127,20 @@ public class AvroGenericRecordReader implements
           }
         }
       }
-      LOG.info("Unable to match filesplit {} with a partition.", split);
+      if(LOG.isInfoEnabled()) {
+        LOG.info("Unable to match filesplit " + split + " with a partition.");
+      }
     }
 
     // In "select * from table" situations (non-MR), we can add things to the job
     // It's safe to add this to the job since it's not *actually* a mapred job.
     // Here the global state is confined to just this process.
     String s = job.get(AvroTableProperties.AVRO_SERDE_SCHEMA.getPropName());
-    if (StringUtils.isNotBlank(s)) {
-      LOG.info("Found the avro schema in the job");
-      LOG.debug("Avro schema: {}", s);
+    if(s != null) {
+      LOG.info("Found the avro schema in the job: " + s);
       return AvroSerdeUtils.getSchemaFor(s);
     }
     // No more places to get the schema from. Give up.  May have to re-encode later.
-    return null;
-  }
-
-  private ZoneId extractWriterTimezoneFromMetadata(JobConf job, FileSplit split,
-      GenericDatumReader<GenericRecord> gdr) {
-    if (job == null || gdr == null || split == null || split.getPath() == null) {
-      return null;
-    }
-    try (DataFileReader<GenericRecord> dataFileReader = new DataFileReader<GenericRecord>(
-        new FsInput(split.getPath(), job), gdr)) {
-      if (dataFileReader.getMeta(AvroSerDe.WRITER_TIME_ZONE) != null) {
-        try {
-          return ZoneId.of(new String(dataFileReader.getMeta(AvroSerDe.WRITER_TIME_ZONE),
-              StandardCharsets.UTF_8));
-        } catch (DateTimeException e) {
-          throw new RuntimeException("Can't parse writer time zone stored in file metadata", e);
-        }
-      }
-    } catch (IOException e) {
-      // Can't access metadata, carry on.
-      LOG.debug(e.getMessage(), e);
-    }
-    return null;
-  }
-
-  private Boolean extractWriterProlepticFromMetadata(JobConf job, FileSplit split,
-      GenericDatumReader<GenericRecord> gdr) {
-    if (job == null || gdr == null || split == null || split.getPath() == null) {
-      return null;
-    }
-    try (DataFileReader<GenericRecord> dataFileReader = new DataFileReader<GenericRecord>(
-        new FsInput(split.getPath(), job), gdr)) {
-      if (dataFileReader.getMeta(AvroSerDe.WRITER_PROLEPTIC) != null) {
-        try {
-          return Boolean.valueOf(new String(dataFileReader.getMeta(AvroSerDe.WRITER_PROLEPTIC),
-              StandardCharsets.UTF_8));
-        } catch (DateTimeException e) {
-          throw new RuntimeException("Can't parse writer proleptic property stored in file metadata", e);
-        }
-      }
-    } catch (IOException e) {
-      // Can't access metadata, carry on.
-      LOG.debug(e.getMessage(), e);
-    }
     return null;
   }
 
@@ -243,7 +176,7 @@ public class AvroGenericRecordReader implements
 
   @Override
   public AvroGenericRecordWritable createValue() {
-    return new AvroGenericRecordWritable(writerTimezone, writerProleptic);
+    return new AvroGenericRecordWritable();
   }
 
   @Override

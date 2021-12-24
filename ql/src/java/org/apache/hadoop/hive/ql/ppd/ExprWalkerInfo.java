@@ -250,9 +250,7 @@ public class ExprWalkerInfo implements NodeProcessorCtx {
     for (Map.Entry<String, List<ExprNodeDesc>> entry : nonFinalPreds.entrySet()) {
       List<ExprNodeDesc> converted = new ArrayList<ExprNodeDesc>();
       for (ExprNodeDesc newExpr : entry.getValue()) {
-        // We should clone it to avoid getting overwritten if two or more operator uses
-        // this same expression.
-        converted.add(newToOldExprMap.get(newExpr).clone());
+        converted.add(newToOldExprMap.get(newExpr));
       }
       oldExprs.put(entry.getKey(), converted);
     }

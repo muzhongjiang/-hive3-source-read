@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,7 +27,6 @@ import java.util.TreeMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.llap.LlapDaemonInfo;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -106,8 +105,8 @@ public class TopNHash {
     }
 
     final boolean isTez = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez");
-    final boolean isLlap = LlapDaemonInfo.INSTANCE.isLlap();
-    final int numExecutors = isLlap ? LlapDaemonInfo.INSTANCE.getNumExecutors() : 1;
+    final boolean isLlap = isTez && HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_EXECUTION_MODE).equals("llap");
+    final int numExecutors = isLlap ? HiveConf.getIntVar(hconf, HiveConf.ConfVars.LLAP_DAEMON_NUM_EXECUTORS) : 1;
 
     // Used Memory = totalMemory() - freeMemory();
     // Total Free Memory = maxMemory() - Used Memory;
@@ -264,7 +263,7 @@ public class TopNHash {
   /**
    * Get vectorized batch result for particular index.
    * @param batchIndex index of the key in the batch.
-   * @return the result, same as from {@link TopNHash#tryStoreKey(HiveKey,boolean)}
+   * @return the result, same as from {@link #tryStoreKey(HiveKey)}
    */
   public int getVectorizedBatchResult(int batchIndex) {
     int result = batchIndexToResult[batchIndex];
@@ -309,8 +308,9 @@ public class TopNHash {
   /**
    * Stores the value for the key in the heap.
    * @param index The index, either from tryStoreKey or from tryStoreVectorizedKey result.
-   * @param hashCode hashCode of key, used by ptfTopNHash.
+   * @param hasCode hashCode of key, used by ptfTopNHash.
    * @param value The value to store.
+   * @param keyHash The key hash to store.
    * @param vectorized Whether the result is coming from a vectorized batch.
    */
   public void storeValue(int index, int hashCode, BytesWritable value, boolean vectorized) {

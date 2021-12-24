@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,10 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+ 
 package org.apache.hadoop.hive.ql.exec.vector.expressions.gen;
-
-import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.MathExpr;
@@ -29,123 +27,100 @@ import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.DecimalUtil;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
+import java.util.Arrays;
 
 public class <ClassName> extends VectorExpression {
   private static final long serialVersionUID = 1L;
 
-  public <ClassName>(int colNum, int outputColumnNum) {
-    super(colNum, outputColumnNum);
-  }
+  private int colNum;
+  private int outputColumn;
 
+  public <ClassName>(int colNum, int outputColumn) {
+    this();
+    this.colNum = colNum;
+    this.outputColumn = outputColumn;
+  }
+  
   public <ClassName>() {
     super();
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
-
-    // return immediately if batch is empty
-    final int n = batch.size;
-    if (n == 0) {
-      return;
-    }
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       this.evaluateChildren(batch);
     }
 
-    DecimalColumnVector inputColVector = (DecimalColumnVector) batch.cols[inputColumnNum[0]];
-    <OutputColumnVectorType> outputColVector = (<OutputColumnVectorType>) batch.cols[outputColumnNum];
+    DecimalColumnVector inputColVector = (DecimalColumnVector) batch.cols[colNum];
+    <OutputColumnVectorType> outputColVector = (<OutputColumnVectorType>) batch.cols[outputColumn];
     int[] sel = batch.selected;
     boolean[] inputIsNull = inputColVector.isNull;
     boolean[] outputIsNull = outputColVector.isNull;
-
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
+    outputColVector.noNulls = inputColVector.noNulls;
+    int n = batch.size;
     HiveDecimalWritable[] vector = inputColVector.vector;
 
-    if (inputColVector.isRepeating) {
-     if (inputColVector.noNulls || !inputIsNull[0]) {
-        outputIsNull[0] = false;
-        <FuncName>(0, vector[0], outputColVector);
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-      }
-      outputColVector.isRepeating = true;
+    // return immediately if batch is empty
+    if (n == 0) {
       return;
     }
 
-    if (inputColVector.noNulls) {
-      if (batch.selectedInUse) {
+    if (inputColVector.isRepeating) {
 
-         // CONSIDER: For large n, fill n or all of isNull array and use the tighter ELSE loop.
-
-         if (!outputColVector.noNulls) {
-           for(int j = 0; j != n; j++) {
-            final int i = sel[j];
-            outputIsNull[i] = false;
-            // The following may override a "false" null setting if an error or overflow occurs.
-            <FuncName>(i, vector[i], outputColVector);
-          }
-         } else {
-           for(int j = 0; j != n; j++) {
-             final int i = sel[j];
-             // The following may override a "false" null setting if an error or overflow occurs.
-             <FuncName>(i, vector[i], outputColVector);
-           }
-         }
-      } else {
-        if (!outputColVector.noNulls) {
-
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
-        }
-        for(int i = 0; i != n; i++) {
-          // The following may override a "false" null setting if an error or overflow occurs.
-          <FuncName>(i, vector[i], outputColVector);
-        }
-      }
-    } else /* there are nulls in the inputColVector */ {
-
-      /*
-       * Do careful maintenance of the outputColVector.noNulls flag.
-       */
-
+      // All must be selected otherwise size would be zero
+      // Repeating property will not change.
+      outputIsNull[0] = inputIsNull[0];
+      <FuncName>(0, vector[0], outputColVector);
+      outputColVector.isRepeating = true;
+    } else if (inputColVector.noNulls) {
       if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
-          if (!inputIsNull[i]) {
-            outputIsNull[i] = false;
-            // The following may override a "false" null setting if an error or overflow occurs.
-            <FuncName>(i, vector[i], outputColVector);
-          } else {
-            outputIsNull[i] = true;
-            outputColVector.noNulls = false;
-          }
+
+          // Set isNull because decimal operation can yield a null.
+          outputIsNull[i] = false;
+          <FuncName>(i, vector[i], outputColVector);
         }
       } else {
+
+        // Set isNull because decimal operation can yield a null.
+        Arrays.fill(outputIsNull, 0, n, false);
         for(int i = 0; i != n; i++) {
-          if (!inputIsNull[i]) {
-            outputIsNull[i] = false;
-            // The following may override a "false" null setting if an error or overflow occurs.
-            <FuncName>(i, vector[i], outputColVector);
-          } else {
-            outputIsNull[i] = true;
-            outputColVector.noNulls = false;
-          }
+          <FuncName>(i, vector[i], outputColVector);
         }
       }
+      outputColVector.isRepeating = false;
+    } else /* there are nulls */ {
+      if (batch.selectedInUse) {
+        for(int j = 0; j != n; j++) {
+          int i = sel[j];
+          outputIsNull[i] = inputIsNull[i];
+          <FuncName>(i, vector[i], outputColVector);
+        }
+      } else {
+        System.arraycopy(inputIsNull, 0, outputIsNull, 0, n);
+        for(int i = 0; i != n; i++) {
+          <FuncName>(i, vector[i], outputColVector);
+        }
+      }
+      outputColVector.isRepeating = false;
     }
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+  
+  @Override
+  public String getOutputType() {
+    return outputType;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]);
+    return "col " + colNum;
   }
 
   @Override

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,31 +20,26 @@ package org.apache.hadoop.hive.common.metrics.metrics2;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hive.common.metrics.MetricsTestUtils;
 import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
 import org.apache.hadoop.hive.common.metrics.common.MetricsVariable;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static java.lang.Thread.sleep;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -52,44 +47,29 @@ import static org.junit.Assert.assertTrue;
  */
 public class TestCodahaleMetrics {
 
-  private static final Path tmpDir = Paths.get(System.getProperty("java.io.tmpdir"));
+  private static File workDir = new File(System.getProperty("test.tmp.dir"));
   private static File jsonReportFile;
-  private static MetricRegistry metricRegistry;
-  private static final long REPORT_INTERVAL_MS = 2000;
+  public static MetricRegistry metricRegistry;
 
-  @BeforeClass
-  public static void setUp() throws Exception {
-    if (!tmpDir.toFile().exists()) {
-      System.out.println("Creating directory " + tmpDir);
-      Files.createDirectories(tmpDir,
-              PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
-    }
-
+  @Before
+  public void before() throws Exception {
     HiveConf conf = new HiveConf();
 
-    jsonReportFile = File.createTempFile("TestCodahaleMetrics", ".json");
-    System.out.println("Json metrics saved in " + jsonReportFile.getAbsolutePath());
-
+    jsonReportFile = new File(workDir, "json_reporting");
+    jsonReportFile.delete();
+    conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "local");
     conf.setVar(HiveConf.ConfVars.HIVE_METRICS_CLASS, CodahaleMetrics.class.getCanonicalName());
-    conf.setVar(HiveConf.ConfVars.HIVE_CODAHALE_METRICS_REPORTER_CLASSES,
-        "org.apache.hadoop.hive.common.metrics.metrics2.JsonFileMetricsReporter, "
-            + "org.apache.hadoop.hive.common.metrics.metrics2.JmxMetricsReporter");
-    conf.setVar(HiveConf.ConfVars.HIVE_METRICS_JSON_FILE_LOCATION, jsonReportFile.getAbsolutePath());
-    conf.setTimeVar(HiveConf.ConfVars.HIVE_METRICS_JSON_FILE_INTERVAL, REPORT_INTERVAL_MS,
-        TimeUnit.MILLISECONDS);
+    conf.setVar(HiveConf.ConfVars.HIVE_METRICS_REPORTER, MetricsReporting.JSON_FILE.name() + "," + MetricsReporting.JMX.name());
+    conf.setVar(HiveConf.ConfVars.HIVE_METRICS_JSON_FILE_LOCATION, jsonReportFile.toString());
+    conf.setVar(HiveConf.ConfVars.HIVE_METRICS_JSON_FILE_INTERVAL, "100ms");
 
     MetricsFactory.init(conf);
     metricRegistry = ((CodahaleMetrics) MetricsFactory.getInstance()).getMetricRegistry();
   }
 
-  @AfterClass
-  public static void cleanup() {
-    try {
-      MetricsFactory.close();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-    jsonReportFile.delete();
+  @After
+  public void after() throws Exception {
+    MetricsFactory.close();
   }
 
   @Test
@@ -98,11 +78,10 @@ public class TestCodahaleMetrics {
     for (int i = 0; i < runs; i++) {
       MetricsFactory.getInstance().startStoredScope("method1");
       MetricsFactory.getInstance().endStoredScope("method1");
-      Timer timer = metricRegistry.getTimers().get("method1");
-      Assert.assertEquals(i + 1, timer.getCount());
     }
 
     Timer timer = metricRegistry.getTimers().get("method1");
+    Assert.assertEquals(5, timer.getCount());
     Assert.assertTrue(timer.getMeanRate() > 0);
   }
 
@@ -112,9 +91,9 @@ public class TestCodahaleMetrics {
     int runs = 5;
     for (int i = 0; i < runs; i++) {
       MetricsFactory.getInstance().incrementCounter("count1");
-      Counter counter = metricRegistry.getCounters().get("count1");
-      Assert.assertEquals(i + 1, counter.getCount());
     }
+    Counter counter = metricRegistry.getCounters().get("count1");
+    Assert.assertEquals(5L, counter.getCount());
   }
 
   @Test
@@ -139,32 +118,21 @@ public class TestCodahaleMetrics {
     Assert.assertTrue(timer.getMeanRate() > 0);
   }
 
-  /**
-   * Test JSON reporter.
-   * <ul>
-   *   <li>increment the counter value</li>
-   *   <li>wait a bit for the new repor to be written</li>
-   *   <li>read the value from JSON file</li>
-   *   <li>verify that the value matches expectation</li>
-   * </ul>
-   * This check is repeated a few times to verify that the values are updated over time.
-   * @throws Exception if fails to read counter value
-   */
   @Test
-  @org.junit.Ignore("flaky test HIVE-23692")
   public void testFileReporting() throws Exception {
     int runs = 5;
-    String  counterName = "count2";
-
-    // on the first write the metrics writer should initialize stuff
-    MetricsFactory.getInstance().incrementCounter(counterName);
-    sleep(5 * REPORT_INTERVAL_MS);
-
-    for (int i = 1; i <= runs; i++) {
-      MetricsFactory.getInstance().incrementCounter(counterName);
-      sleep(REPORT_INTERVAL_MS + REPORT_INTERVAL_MS / 2);
-      Assert.assertEquals(i + 1, getCounterValue(counterName));
+    for (int i = 0; i < runs; i++) {
+      MetricsFactory.getInstance().incrementCounter("count2");
     }
+
+    byte[] jsonData = MetricsTestUtils.getFileData(jsonReportFile.getAbsolutePath(), 2000, 3);
+    ObjectMapper objectMapper = new ObjectMapper();
+
+    JsonNode rootNode = objectMapper.readTree(jsonData);
+    JsonNode countersNode = rootNode.path("counters");
+    JsonNode methodCounterNode = countersNode.path("count2");
+    JsonNode countNode = methodCounterNode.path("count");
+    Assert.assertEquals(countNode.asInt(), 5);
   }
 
   class TestMetricsVariable implements MetricsVariable {
@@ -207,19 +175,6 @@ public class TestCodahaleMetrics {
     MetricsFactory.getInstance().markMeter("meter");
     json = ((CodahaleMetrics) MetricsFactory.getInstance()).dumpJson();
     MetricsTestUtils.verifyMetricsJson(json, MetricsTestUtils.METER, "meter", "2");
-  }
 
-  /**
-   * Read counter value from JSON metric report
-   * @param name counter name
-   * @return counter value
-   * @throws FileNotFoundException if file doesn't exist
-   */
-  private int getCounterValue(String name) throws FileNotFoundException {
-    JsonParser parser = new JsonParser();
-    JsonElement element = parser.parse(new FileReader(jsonReportFile.getAbsolutePath()));
-    JsonObject jobj = element.getAsJsonObject();
-    jobj = jobj.getAsJsonObject("counters").getAsJsonObject(name);
-    return jobj.get("count").getAsInt();
   }
 }

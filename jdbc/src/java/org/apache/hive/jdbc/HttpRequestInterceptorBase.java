@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,11 +22,11 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.apache.http.Header;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.client.CookieStore;
+import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.protocol.HttpContext;
 
 public abstract class HttpRequestInterceptorBase implements HttpRequestInterceptor {
@@ -35,20 +35,18 @@ public abstract class HttpRequestInterceptorBase implements HttpRequestIntercept
   String cookieName;
   boolean isSSL;
   Map<String, String> additionalHeaders;
-  Map<String, String> customCookies;
 
   // Abstract function to add HttpAuth Header
   protected abstract void addHttpAuthHeader(HttpRequest httpRequest, HttpContext httpContext)
     throws Exception;
 
   public HttpRequestInterceptorBase(CookieStore cs, String cn, boolean isSSL,
-      Map<String, String> additionalHeaders, Map<String, String> customCookies) {
+    Map<String, String> additionalHeaders) {
     this.cookieStore = cs;
     this.isCookieEnabled = (cs != null);
     this.cookieName = cn;
     this.isSSL = isSSL;
     this.additionalHeaders = additionalHeaders;
-    this.customCookies = customCookies;
   }
 
   @Override
@@ -59,7 +57,9 @@ public abstract class HttpRequestInterceptorBase implements HttpRequestIntercept
       // The necessary condition is either when there are no server side cookies in the
       // cookiestore which can be send back or when the server returns a 401 error code
       // indicating that the previous cookie has expired.
-
+      if (isCookieEnabled) {
+        httpContext.setAttribute(ClientContext.COOKIE_STORE, cookieStore);
+      }
       // Generate the kerberos ticket under the following scenarios:
       // 1. Cookie Authentication is disabled OR
       // 2. The first time when the request is sent OR
@@ -70,35 +70,17 @@ public abstract class HttpRequestInterceptorBase implements HttpRequestIntercept
           Utils.needToSendCredentials(cookieStore, cookieName, isSSL)))) ||
           (httpContext.getAttribute(Utils.HIVE_SERVER2_RETRY_KEY) != null &&
           httpContext.getAttribute(Utils.HIVE_SERVER2_RETRY_KEY).
-          equals(Utils.HIVE_SERVER2_CONST_TRUE)))) {
+          equals(Utils.HIVE_SERVER2_RETRY_TRUE)))) {
         addHttpAuthHeader(httpRequest, httpContext);
-        httpContext.setAttribute(Utils.HIVE_SERVER2_SENT_CREDENTIALS, Utils.HIVE_SERVER2_CONST_TRUE);
-      } else {
-        httpContext.setAttribute(Utils.HIVE_SERVER2_SENT_CREDENTIALS, Utils.HIVE_SERVER2_CONST_FALSE);
       }
       if (isCookieEnabled) {
-        httpContext.setAttribute(Utils.HIVE_SERVER2_RETRY_KEY, Utils.HIVE_SERVER2_CONST_FALSE);
+        httpContext.setAttribute(Utils.HIVE_SERVER2_RETRY_KEY, Utils.HIVE_SERVER2_RETRY_FALSE);
       }
       // Insert the additional http headers
       if (additionalHeaders != null) {
         for (Map.Entry<String, String> entry : additionalHeaders.entrySet()) {
           httpRequest.addHeader(entry.getKey(), entry.getValue());
         }
-      }
-      // Add custom cookies if passed to the jdbc driver
-      if (customCookies != null) {
-        String cookieHeaderKeyValues = "";
-        Header cookieHeaderServer = httpRequest.getFirstHeader("Cookie");
-        if ((cookieHeaderServer != null) && (cookieHeaderServer.getValue() != null)) {
-          cookieHeaderKeyValues = cookieHeaderServer.getValue();
-        }
-        for (Map.Entry<String, String> entry : customCookies.entrySet()) {
-          cookieHeaderKeyValues += ";" + entry.getKey() + "=" + entry.getValue();
-        }
-        if (cookieHeaderKeyValues.startsWith(";")) {
-          cookieHeaderKeyValues = cookieHeaderKeyValues.substring(1);
-        }
-        httpRequest.addHeader("Cookie", cookieHeaderKeyValues);
       }
     } catch (Exception e) {
       throw new HttpException(e.getMessage(), e);

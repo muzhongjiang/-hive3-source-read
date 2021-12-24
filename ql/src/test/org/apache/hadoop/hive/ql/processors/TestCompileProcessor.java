@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,7 @@ package org.apache.hadoop.hive.ql.processors;
 
 import java.io.File;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.junit.Test;
 
@@ -29,25 +29,17 @@ public class TestCompileProcessor {
   @Test
   public void testSyntax() throws Exception {
     CompileProcessor cp = new CompileProcessor();
-    cp.run("` public class x { \n }` AS GROOVY NAMED x.groovy");
+    Assert.assertEquals(0, cp.run("` public class x { \n }` AS GROOVY NAMED x.groovy").getResponseCode());
     Assert.assertEquals("GROOVY", cp.getLang());
     Assert.assertEquals(" public class x { \n }", cp.getCode());
     Assert.assertEquals("x.groovy", cp.getNamed());
-    try {
-      cp.run("");
-    } catch (CommandProcessorException e) {
-      Assert.assertEquals(1, e.getResponseCode());
-    }
-    try {
-      cp.run("bla bla ");
-    } catch (CommandProcessorException e) {
-      Assert.assertEquals(1, e.getResponseCode());
-    }
-
+    Assert.assertEquals(1, cp.run("").getResponseCode());
+    Assert.assertEquals(1, cp.run("bla bla ").getResponseCode());
     CompileProcessor cp2 = new CompileProcessor();
     CommandProcessorResponse response = cp2.run(
         "` import org.apache.hadoop.hive.ql.exec.UDF \n public class x { \n }` AS GROOVY NAMED x.groovy");
-    File f = new File(response.getMessage());
+    Assert.assertEquals(0, response.getResponseCode());
+    File f = new File(response.getErrorMessage());
     Assert.assertTrue(f.exists());
     f.delete();
   }

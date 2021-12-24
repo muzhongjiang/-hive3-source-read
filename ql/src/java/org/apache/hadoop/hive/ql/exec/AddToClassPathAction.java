@@ -20,9 +20,10 @@ package org.apache.hadoop.hive.ql.exec;
 
 import java.net.URL;
 import java.security.PrivilegedAction;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Objects;
 
 /**
  * Helper class to create UDFClassLoader when running under a security manager. To create a class loader:
@@ -43,7 +44,7 @@ public class AddToClassPathAction implements PrivilegedAction<UDFClassLoader> {
 
   public AddToClassPathAction(ClassLoader parentLoader, Collection<String> newPaths, boolean forceNewClassLoader) {
     this.parentLoader = parentLoader;
-    this.newPaths = newPaths != null ? newPaths : Collections.emptyList();
+    this.newPaths = newPaths != null ? newPaths : Collections.EMPTY_LIST;
     this.forceNewClassLoader = forceNewClassLoader;
     if (parentLoader == null) {
       throw new IllegalArgumentException("UDFClassLoader is not designed to be a bootstrap class loader!");
@@ -79,9 +80,13 @@ public class AddToClassPathAction implements PrivilegedAction<UDFClassLoader> {
   }
 
   private UDFClassLoader createUDFClassLoader() {
-    return new UDFClassLoader(newPaths.stream()
-        .map(Utilities::urlFromPathString)
-        .filter(Objects::nonNull)
-        .toArray(URL[]::new), parentLoader);
+    List<URL> urls = new ArrayList<>();
+    for (String path : newPaths) {
+      URL url = Utilities.urlFromPathString(path);
+      if (url != null) {
+        urls.add(url);
+      }
+    }
+    return new UDFClassLoader(urls.toArray(new URL[urls.size()]), parentLoader);
   }
 }

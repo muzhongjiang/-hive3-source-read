@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,9 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.hive.common.MemoryEstimate;
-import org.apache.hadoop.hive.ql.util.JavaDataModel;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -48,7 +46,7 @@ import com.google.common.annotations.VisibleForTesting;
  * Initially inspired by HPPC LongLongOpenHashMap; however, the code is almost completely reworked
  * and there's very little in common left save for quadratic probing (and that with some changes).
  */
-public final class BytesBytesMultiHashMap implements MemoryEstimate {
+public final class BytesBytesMultiHashMap {
   public static final Logger LOG = LoggerFactory.getLogger(BytesBytesMultiHashMap.class);
 
   /*
@@ -466,18 +464,16 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
    * @param key Key buffer.
    * @param offset the offset to the key in the buffer
    * @param hashMapResult The object to fill in that can read the values.
-   * @param matchTracker Opitional object for tracking key matches.
    * @return The state byte.
    */
-  public byte getValueResult(byte[] key, int offset, int length, Result hashMapResult,
-      MatchTracker matchTracker) {
+  public byte getValueResult(byte[] key, int offset, int length, Result hashMapResult) {
 
     hashMapResult.forget();
 
     WriteBuffers.Position readPos = hashMapResult.getReadPos();
 
     // First, find first record for the key.
-    long ref = findKeyRefToRead(key, offset, length, readPos, matchTracker);
+    long ref = findKeyRefToRead(key, offset, length, readPos);
     if (ref == 0) {
       return 0;
     }
@@ -493,60 +489,12 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
   }
 
   /**
-   * Take the segment reference from getValueRefs(byte[],int,List)
+   * Take the segment reference from {@link #getValueRefs(byte[], int, List)}
    * result and makes it self-contained - adds byte array where the value is stored, and
    * updates the offset from "global" write buffers offset to offset within that array.
    */
   public void populateValue(WriteBuffers.ByteSegmentRef valueRef) {
     writeBuffers.populateValue(valueRef);
-  }
-
-  /**
-   * Finds the next non matched Small Table key and value.  Supports FULL OUTER MapJoin.
-   *
-   * @param currentSlotNum  Start by specifying -1; the return index from the previous call.
-   * @param keyRef          If the return value is not -1, a reference to the key bytes.
-   * @param hashMapResult   If the return value is not -1, the key's values.
-   * @param matchTracker    The object that tracks matches (non-shared).
-   * @return The current index of the non-matched key; or -1 if no more.
-   */
-  public int findNextNonMatched(int currentSlotNum, WriteBuffers.ByteSegmentRef keyRef,
-      Result hashMapResult, MatchTracker matchTracker) {
-    currentSlotNum++;
-
-    hashMapResult.forget();
-
-    WriteBuffers.Position readPos = hashMapResult.getReadPos();
-
-    while (true) {
-      if (currentSlotNum >= refs.length) {
-
-        // No more.
-        return -1;
-      }
-      long ref = refs[currentSlotNum];
-      if (ref != 0 && !matchTracker.wasMatched(currentSlotNum)) {
-
-        // An unmatched key.
-        writeBuffers.setReadPoint(getFirstRecordLengthsOffset(ref, readPos), readPos);
-        int valueLength = (int) writeBuffers.readVLong(readPos);
-        int keyLength = (int) writeBuffers.readVLong(readPos);
-        long keyOffset = Ref.getOffset(ref) - (valueLength + keyLength);
-
-        keyRef.reset(keyOffset, keyLength);
-        if (keyLength > 0) {
-          writeBuffers.populateValue(keyRef);
-        }
-
-        boolean hasList = Ref.hasList(ref);
-        long offsetAfterListRecordKeyLen = hasList ? writeBuffers.getReadPoint(readPos) : 0;
-
-        hashMapResult.set(this, Ref.getOffset(ref), hasList, offsetAfterListRecordKeyLen);
-
-        return currentSlotNum;
-      }
-      currentSlotNum++;
-    }
   }
 
   /**
@@ -566,29 +514,14 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
     return numValues;
   }
 
-  public int getNumHashBuckets() {
-    return refs.length;
-  }
-
   /**
-   * Number of bytes used by the hashmap.
+   * Number of bytes used by the hashmap
    * There are two main components that take most memory: writeBuffers and refs
    * Others include instance fields: 100
    * @return number of bytes
    */
   public long memorySize() {
-    return getEstimatedMemorySize();
-  }
-
-  @Override
-  public long getEstimatedMemorySize() {
-    JavaDataModel jdm = JavaDataModel.get();
-    long size = 0;
-    size += writeBuffers.getEstimatedMemorySize();
-    size += jdm.lengthForLongArrayOfSize(refs.length);
-    // 11 primitive1 fields, 2 refs above with alignment
-    size += JavaDataModel.alignUp(15 * jdm.primitive1(), jdm.memoryAlign());
-    return size;
+    return writeBuffers.size() + refs.length * 8 + 100;
   }
 
   public void seal() {
@@ -608,7 +541,7 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
     int newRefsCount = oldRefsCount + estimateNewRowCount;
     if (resizeThreshold <= newRefsCount) {
       newRefsCount =
-          (Long.bitCount(newRefsCount) == 1) ? newRefsCount : nextHighestPowerOfTwo(newRefsCount);
+          (Long.bitCount(newRefsCount) == 1) ? estimateNewRowCount : nextHighestPowerOfTwo(newRefsCount);
       expandAndRehashImpl(newRefsCount);
       LOG.info("Expand and rehash to " + newRefsCount + " from " + oldRefsCount);
     }
@@ -616,7 +549,7 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
 
   private static void validateCapacity(long capacity) {
     if (Long.bitCount(capacity) != 1) {
-      throw new AssertionError("Capacity must be a power of two but got " + capacity);
+      throw new AssertionError("Capacity must be a power of two");
     }
     if (capacity <= 0) {
       throw new AssertionError("Invalid capacity " + capacity);
@@ -652,7 +585,9 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
       slot = (int)(probeSlot & bucketMask);
     }
     if (largestNumberOfSteps < i) {
-      LOG.debug("Probed {} slots (the longest so far) to find space", i);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Probed " + i + " slots (the longest so far) to find space");
+      }
       largestNumberOfSteps = i;
       // debugDumpKeyProbe(keyOffset, keyLength, hashCode, slot);
     }
@@ -666,7 +601,7 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
    * @return The ref to use for reading.
    */
   private long findKeyRefToRead(byte[] key, int offset, int length,
-          WriteBuffers.Position readPos, MatchTracker matchTracker) {
+          WriteBuffers.Position readPos) {
     final int bucketMask = (refs.length - 1);
     int hashCode = writeBuffers.hashCode(key, offset, length);
     int slot = hashCode & bucketMask;
@@ -681,13 +616,6 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
         return 0;
       }
       if (isSameKey(key, offset, length, ref, hashCode, readPos)) {
-
-        if (matchTracker != null) {
-
-          // Support for FULL OUTER MapJoin.  Track matches of the slot table entry.
-          matchTracker.trackMatch(slot);
-        }
-
         return ref;
       }
       ++metricGetConflict;
@@ -956,7 +884,7 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
       dump.append(Utils.toStringBinary(key, 0, key.length)).append(" ref [").append(dumpRef(ref))
         .append("]: ");
       Result hashMapResult = new Result();
-      getValueResult(key, 0, key.length, hashMapResult, null);
+      getValueResult(key, 0, key.length, hashMapResult);
       List<WriteBuffers.ByteSegmentRef> results = new ArrayList<WriteBuffers.ByteSegmentRef>();
       WriteBuffers.ByteSegmentRef byteSegmentRef = hashMapResult.first();
       while (byteSegmentRef != null) {

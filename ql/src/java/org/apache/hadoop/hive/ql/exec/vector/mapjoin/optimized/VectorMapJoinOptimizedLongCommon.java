@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.vector.mapjoin.optimized;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.optimized.VectorMapJoinOptimizedHashTable.SerializedBytes;
@@ -38,11 +37,11 @@ public class VectorMapJoinOptimizedLongCommon {
 
   private static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinOptimizedLongCommon.class.getName());
 
-  private final boolean isOuterJoin;
-  private final transient TableDesc tableDesc;
-
+  private boolean isOuterJoin;
 
   private HashTableKeyType hashTableKeyType;
+
+  // private BinarySortableDeserializeRead keyBinarySortableDeserializeRead;
 
   private BinarySortableSerializeWrite keyBinarySortableSerializeWrite;
 
@@ -82,9 +81,6 @@ public class VectorMapJoinOptimizedLongCommon {
     case INT:
       keyBinarySortableSerializeWrite.writeInt((int) key);
       break;
-    case DATE:
-      keyBinarySortableSerializeWrite.writeDate((int) key);
-        break;
     case LONG:
       keyBinarySortableSerializeWrite.writeLong(key);
       break;
@@ -103,20 +99,15 @@ public class VectorMapJoinOptimizedLongCommon {
   }
 
   public VectorMapJoinOptimizedLongCommon(
-          boolean minMaxEnabled, boolean isOuterJoin, HashTableKeyType hashTableKeyType, TableDesc tableDesc) {
+        boolean minMaxEnabled, boolean isOuterJoin, HashTableKeyType hashTableKeyType) {
     this.isOuterJoin = isOuterJoin;
     // useMinMax = minMaxEnabled;
     min = Long.MAX_VALUE;
     max = Long.MIN_VALUE;
     this.hashTableKeyType = hashTableKeyType;
-    this.tableDesc = tableDesc;
-    keyBinarySortableSerializeWrite = BinarySortableSerializeWrite.with(tableDesc.getProperties(), 1);
+    keyBinarySortableSerializeWrite = new BinarySortableSerializeWrite(1);
     output = new Output();
     keyBinarySortableSerializeWrite.set(output);
     serializedBytes = new SerializedBytes();
-  }
-
-  public TableDesc getTableDesc() {
-    return tableDesc;
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,6 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator.RecordWriter;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.io.WritableComparable;
@@ -49,42 +48,21 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
     private boolean isCompressed = false;
     private Properties properties;
     private Reporter reporter;
-    private long minimumWriteId;
-    private long maximumWriteId;
-    private Integer attemptId;
-    /**
-     * actual bucketId (as opposed to bucket property via BucketCodec)
-     */
-    private int bucketId;
+    private long minimumTransactionId;
+    private long maximumTransactionId;
+    private int bucket;
     private PrintStream dummyStream = null;
     private boolean oldStyle = false;
     private int recIdCol = -1;  // Column the record identifier is in, -1 indicates no record id
     //unique within a transaction
-    /**
-     * todo: Link to AcidUtils?
-     */
     private int statementId = 0;
     private Path finalDestination;
-    /**
-     * todo: link to AcidUtils?
-     */
-    private long visibilityTxnId = 0;
-    private boolean temporary = false;
-
-    private final boolean writeVersionFile;
-    private int maxStmtId = -1;
-
     /**
      * Create the options object.
      * @param conf Use the given configuration
      */
     public Options(Configuration conf) {
       this.configuration = conf;
-      if (conf != null) {
-        writeVersionFile = HiveConf.getBoolVar(configuration, HiveConf.ConfVars.HIVE_WRITE_ACID_VERSION_FILE);
-      } else {
-        writeVersionFile = true;
-      }
     }
 
     /**
@@ -172,32 +150,32 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
     }
 
     /**
-     * The minimum write id that is included in this file.
-     * @param min minimum write id
+     * The minimum transaction id that is included in this file.
+     * @param min minimum transaction id
      * @return this
      */
-    public Options minimumWriteId(long min) {
-      this.minimumWriteId = min;
+    public Options minimumTransactionId(long min) {
+      this.minimumTransactionId = min;
       return this;
     }
 
     /**
-     * The maximum write id that is included in this file.
-     * @param max maximum write id
+     * The maximum transaction id that is included in this file.
+     * @param max maximum transaction id
      * @return this
      */
-    public Options maximumWriteId(long max) {
-      this.maximumWriteId = max;
+    public Options maximumTransactionId(long max) {
+      this.maximumTransactionId = max;
       return this;
     }
 
     /**
-     * The bucketId that is included in this file.
-     * @param bucket the bucketId number
+     * The bucket that is included in this file.
+     * @param bucket the bucket number
      * @return this
      */
     public Options bucket(int bucket) {
-      this.bucketId = bucket;
+      this.bucket = bucket;
       return this;
     }
 
@@ -232,11 +210,6 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
       return this;
     }
 
-    public Options attemptId(Integer attemptId) {
-      this.attemptId = attemptId;
-      return this;
-    }
-
     /**
      * @since 1.3.0
      * This can be set to -1 to make the system generate old style (delta_xxxx_yyyy) file names.
@@ -245,7 +218,7 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
      */
     public Options statementId(int id) {
       if(id >= AcidUtils.MAX_STATEMENTS_PER_TXN) {
-        throw new RuntimeException("Too many statements for writeId: " + maximumWriteId);
+        throw new RuntimeException("Too many statements for transactionId: " + maximumTransactionId);
       }
       if(id < -1) {
         throw new IllegalArgumentException("Illegal statementId value: " + id);
@@ -259,10 +232,6 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
      */
     public Options finalDestination(Path p) {
       this.finalDestination = p;
-      return this;
-    }
-    public Options visibilityTxnId(long visibilityTxnId) {
-      this.visibilityTxnId = visibilityTxnId;
       return this;
     }
 
@@ -290,12 +259,12 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
       return reporter;
     }
 
-    public long getMinimumWriteId() {
-      return minimumWriteId;
+    public long getMinimumTransactionId() {
+      return minimumTransactionId;
     }
 
-    public long getMaximumWriteId() {
-      return maximumWriteId;
+    public long getMaximumTransactionId() {
+      return maximumTransactionId;
     }
 
     public boolean isWritingBase() {
@@ -306,12 +275,8 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
       return writingDeleteDelta;
     }
 
-    public int getBucketId() {
-      return bucketId;
-    }
-
-    public Integer getAttemptId() {
-      return attemptId;
+    public int getBucket() {
+      return bucket;
     }
 
     public int getRecordIdColumn() {
@@ -330,31 +295,6 @@ public interface AcidOutputFormat<K extends WritableComparable, V> extends HiveO
     }
     public Path getFinalDestination() {
       return finalDestination;
-    }
-    public long getVisibilityTxnId() {
-      return visibilityTxnId;
-    }
-
-    public boolean isWriteVersionFile() {
-      return writeVersionFile;
-    }
-
-    public Options temporary(boolean temporary) {
-      this.temporary = temporary;
-      return this;
-    }
-
-    public boolean isTemporary() {
-      return temporary;
-    }
-
-    public Options maxStmtId(int maxStmtId) {
-      this.maxStmtId = maxStmtId;
-      return this;
-    }
-
-    public int getMaxStmtId() {
-      return maxStmtId;
     }
   }
 

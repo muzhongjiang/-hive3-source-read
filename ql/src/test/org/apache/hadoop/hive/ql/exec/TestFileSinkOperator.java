@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.StatsSetupConst;
-import org.apache.hadoop.hive.common.ValidWriteIdList;
+import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
@@ -264,7 +264,7 @@ public class TestFileSinkOperator {
 
   private FileSinkOperator getFileSink(AcidUtils.Operation writeType,
                                        boolean dynamic,
-                                       long writeId) throws IOException, HiveException {
+                                       long txnId) throws IOException, HiveException {
     TableDesc tableDesc = null;
     switch (writeType) {
       case DELETE:
@@ -283,21 +283,16 @@ public class TestFileSinkOperator {
       partCols.add(new ExprNodeColumnDesc(TypeInfoFactory.stringTypeInfo, PARTCOL_NAME, "a", true));
       Map<String, String> partColMap= new LinkedHashMap<String, String>(1);
       partColMap.put(PARTCOL_NAME, null);
-      DynamicPartitionCtx dpCtx = new DynamicPartitionCtx(partColMap, "Sunday", 100);
+      DynamicPartitionCtx dpCtx = new DynamicPartitionCtx(null, partColMap, "Sunday", 100);
       //todo: does this need the finalDestination?
-      desc = new FileSinkDesc(basePath, tableDesc, false, 1, false,
-          false, 1, 1, partCols, dpCtx, null, null, false, false, false, false, false, writeType);
+      desc = new FileSinkDesc(basePath, tableDesc, false, 1, false, false, 1, 1, partCols, dpCtx, null);
     } else {
       desc = new FileSinkDesc(basePath, tableDesc, false);
     }
     desc.setWriteType(writeType);
     desc.setGatherStats(true);
-    if (writeId > 0) {
-      desc.setTableWriteId(writeId);
-    }
-    if (writeType != AcidUtils.Operation.NOT_ACID) {
-      desc.setTableWriteId(1L);
-    }
+    if (txnId > 0) desc.setTransactionId(txnId);
+    if (writeType != AcidUtils.Operation.NOT_ACID) desc.setTransactionId(1L);
 
     FileSinkOperator op = (FileSinkOperator)OperatorFactory.get(
         new CompilationOpContext(), FileSinkDesc.class);
@@ -703,10 +698,9 @@ public class TestFileSinkOperator {
     public RawReader<Row> getRawReader(Configuration conf,
                                               boolean collapseEvents,
                                               int bucket,
-                                              ValidWriteIdList validWriteIdList,
+                                              ValidTxnList validTxnList,
                                               Path baseDirectory,
-                                              Path[] deltaDirectory,
-                                              Map<String,Integer> deltaToAttemptId) throws
+                                              Path[] deltaDirectory) throws
         IOException {
       return null;
     }
@@ -730,18 +724,18 @@ public class TestFileSinkOperator {
 
       return new RecordUpdater() {
         @Override
-        public void insert(long currentWriteId, Object row) throws IOException {
+        public void insert(long currentTransaction, Object row) throws IOException {
           addRow(row);
           numRecordsAdded++;
         }
 
         @Override
-        public void update(long currentWriteId, Object row) throws IOException {
+        public void update(long currentTransaction, Object row) throws IOException {
           addRow(row);
         }
 
         @Override
-        public void delete(long currentWriteId, Object row) throws IOException {
+        public void delete(long currentTransaction, Object row) throws IOException {
           addRow(row);
           numRecordsAdded--;
         }
@@ -773,16 +767,6 @@ public class TestFileSinkOperator {
           SerDeStats stats = new SerDeStats();
           stats.setRowCount(numRecordsAdded);
           return stats;
-        }
-
-        @Override
-        public long getBufferedRowCount() {
-          return records.size();
-        }
-
-        @Override
-        public Path getUpdatedFilePath() {
-          return null;
         }
       };
     }
@@ -839,8 +823,8 @@ public class TestFileSinkOperator {
   public static class TFSOSerDe extends AbstractSerDe {
 
     @Override
-    public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-        throws SerDeException {
+    public void initialize(Configuration conf, Properties tbl) throws SerDeException {
+
     }
 
     @Override
@@ -862,6 +846,11 @@ public class TestFileSinkOperator {
 
     @Override
     public ObjectInspector getObjectInspector() throws SerDeException {
+      return null;
+    }
+
+    @Override
+    public SerDeStats getSerDeStats() {
       return null;
     }
   }

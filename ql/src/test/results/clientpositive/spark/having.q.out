@@ -1,11 +1,7 @@
 PREHOOK: query: EXPLAIN SELECT count(value) AS c FROM src GROUP BY key HAVING c > 3
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN SELECT count(value) AS c FROM src GROUP BY key HAVING c > 3
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -29,20 +25,16 @@ STAGE PLANS:
                     Group By Operator
                       aggregations: count(value)
                       keys: key (type: string)
-                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: bigint)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: count(VALUE._col0)
@@ -55,7 +47,7 @@ STAGE PLANS:
                   outputColumnNames: _col1
                   Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: (_col1 > 3L) (type: boolean)
+                    predicate: (_col1 > 3) (type: boolean)
                     Statistics: Num rows: 83 Data size: 881 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: _col1 (type: bigint)
@@ -95,12 +87,8 @@ POSTHOOK: Input: default@src
 5
 PREHOOK: query: EXPLAIN SELECT key, max(value) AS c FROM src GROUP BY key HAVING key != 302
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN SELECT key, max(value) AS c FROM src GROUP BY key HAVING key != 302
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -116,28 +104,23 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: (UDFToDouble(key) <> 302.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: (UDFToDouble(key) <> 302.0D) (type: boolean)
+                    predicate: (UDFToDouble(key) <> 302.0) (type: boolean)
                     Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                     Group By Operator
                       aggregations: max(value)
                       keys: key (type: string)
-                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: max(VALUE._col0)
@@ -477,12 +460,8 @@ POSTHOOK: Input: default@src
 98	val_98
 PREHOOK: query: EXPLAIN SELECT key FROM src GROUP BY key HAVING max(value) > "val_255"
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN SELECT key FROM src GROUP BY key HAVING max(value) > "val_255"
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -506,20 +485,16 @@ STAGE PLANS:
                     Group By Operator
                       aggregations: max(value)
                       keys: key (type: string)
-                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: max(VALUE._col0)
@@ -757,12 +732,8 @@ POSTHOOK: Input: default@src
 98
 PREHOOK: query: EXPLAIN SELECT key FROM src where key > 300 GROUP BY key HAVING max(value) > "val_255"
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN SELECT key FROM src where key > 300 GROUP BY key HAVING max(value) > "val_255"
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -778,28 +749,23 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: (UDFToDouble(key) > 300.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: (UDFToDouble(key) > 300.0D) (type: boolean)
+                    predicate: (UDFToDouble(key) > 300.0) (type: boolean)
                     Statistics: Num rows: 166 Data size: 1763 Basic stats: COMPLETE Column stats: NONE
                     Group By Operator
                       aggregations: max(value)
                       keys: key (type: string)
-                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 166 Data size: 1763 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 166 Data size: 1763 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: max(VALUE._col0)
@@ -963,12 +929,8 @@ POSTHOOK: Input: default@src
 498
 PREHOOK: query: EXPLAIN SELECT key, max(value) FROM src GROUP BY key HAVING max(value) > "val_255"
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN SELECT key, max(value) FROM src GROUP BY key HAVING max(value) > "val_255"
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -992,20 +954,16 @@ STAGE PLANS:
                     Group By Operator
                       aggregations: max(value)
                       keys: key (type: string)
-                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: max(VALUE._col0)
@@ -1239,12 +1197,8 @@ POSTHOOK: Input: default@src
 98	val_98
 PREHOOK: query: EXPLAIN SELECT key, COUNT(value) FROM src GROUP BY key HAVING count(value) >= 4
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: EXPLAIN SELECT key, COUNT(value) FROM src GROUP BY key HAVING count(value) >= 4
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -1268,20 +1222,16 @@ STAGE PLANS:
                     Group By Operator
                       aggregations: count(value)
                       keys: key (type: string)
-                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: bigint)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: count(VALUE._col0)
@@ -1290,7 +1240,7 @@ STAGE PLANS:
                 outputColumnNames: _col0, _col1
                 Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                 Filter Operator
-                  predicate: (_col1 >= 4L) (type: boolean)
+                  predicate: (_col1 >= 4) (type: boolean)
                   Statistics: Num rows: 83 Data size: 881 Basic stats: COMPLETE Column stats: NONE
                   File Output Operator
                     compressed: false

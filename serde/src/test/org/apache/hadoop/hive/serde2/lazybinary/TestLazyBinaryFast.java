@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,48 +17,37 @@
  */
 package org.apache.hadoop.hive.serde2.lazybinary;
 
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerdeRandomRowSource;
 import org.apache.hadoop.hive.serde2.VerifyFast;
 import org.apache.hadoop.hive.serde2.binarysortable.MyTestClass;
-import org.apache.hadoop.hive.serde2.lazy.VerifyLazy;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinaryDeserializeRead;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.UnionObject;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import org.junit.Test;
 
-/**
- * TestLazyBinaryFast.
- */
-public class TestLazyBinaryFast {
+public class TestLazyBinaryFast extends TestCase {
 
   private void testLazyBinaryFast(
       SerdeRandomRowSource source, Object[][] rows,
       AbstractSerDe serde, StructObjectInspector rowOI,
       AbstractSerDe serde_fewer, StructObjectInspector writeRowOI,
-      TypeInfo[] typeInfos,
+      PrimitiveTypeInfo[] primitiveTypeInfos,
       boolean useIncludeColumns, boolean doWriteFewerColumns, Random r) throws Throwable {
 
     int rowCount = rows.length;
-    int columnCount = typeInfos.length;
-    boolean[] columnsToInclude = null;
+    int columnCount = primitiveTypeInfos.length;
 
+    boolean[] columnsToInclude = null;
     if (useIncludeColumns) {
       columnsToInclude = new boolean[columnCount];
       for (int i = 0; i < columnCount; i++) {
@@ -67,10 +56,10 @@ public class TestLazyBinaryFast {
     }
 
     int writeColumnCount = columnCount;
-    TypeInfo[] writeTypeInfos = typeInfos;
+    PrimitiveTypeInfo[] writePrimitiveTypeInfos = primitiveTypeInfos;
     if (doWriteFewerColumns) {
       writeColumnCount = writeRowOI.getAllStructFieldRefs().size();
-      writeTypeInfos = Arrays.copyOf(typeInfos, writeColumnCount);
+      writePrimitiveTypeInfos = Arrays.copyOf(primitiveTypeInfos, writeColumnCount);
     }
 
     LazyBinarySerializeWrite lazyBinarySerializeWrite =
@@ -84,7 +73,10 @@ public class TestLazyBinaryFast {
       lazyBinarySerializeWrite.set(output);
 
       for (int index = 0; index < writeColumnCount; index++) {
-        VerifyFast.serializeWrite(lazyBinarySerializeWrite, typeInfos[index], row[index]);
+
+        Writable writable = (Writable) row[index];
+
+        VerifyFast.serializeWrite(lazyBinarySerializeWrite, primitiveTypeInfos[index], writable);
       }
 
       BytesWritable bytesWritable = new BytesWritable();
@@ -100,7 +92,7 @@ public class TestLazyBinaryFast {
       // column.
       LazyBinaryDeserializeRead lazyBinaryDeserializeRead =
               new LazyBinaryDeserializeRead(
-                  writeTypeInfos,
+                  writePrimitiveTypeInfos,
                   /* useExternalBuffer */ false);
 
       BytesWritable bytesWritable = serializeWriteBytes[i];
@@ -111,13 +103,14 @@ public class TestLazyBinaryFast {
           lazyBinaryDeserializeRead.skipNextField();
         } else if (index >= writeColumnCount) {
           // Should come back a null.
-          VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, typeInfos[index], null);
+          VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, primitiveTypeInfos[index], null);
         } else {
-          verifyRead(lazyBinaryDeserializeRead, typeInfos[index], row[index]);
+          Writable writable = (Writable) row[index];
+          VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, primitiveTypeInfos[index], writable);
         }
       }
       if (writeColumnCount == columnCount) {
-        assertTrue(lazyBinaryDeserializeRead.isEndOfInputReached());
+        TestCase.assertTrue(lazyBinaryDeserializeRead.isEndOfInputReached());
       }
     }
 
@@ -134,14 +127,15 @@ public class TestLazyBinaryFast {
       Object[] row = rows[i];
 
       for (int index = 0; index < writeColumnCount; index++) {
-        TypeInfo typeInfo = typeInfos[index];
+        PrimitiveTypeInfo primitiveTypeInfo = primitiveTypeInfos[index];
+        Writable writable = (Writable) row[index];
         Object object = lazyBinaryStruct.getField(index);
-        if (row[index] == null || object == null) {
-          if (row[index] != null || object != null) {
+        if (writable == null || object == null) {
+          if (writable != null || object != null) {
             fail("SerDe deserialized NULL column mismatch");
           }
         } else {
-          if (!VerifyLazy.lazyCompare(typeInfo, object, row[index])) {
+          if (!object.equals(writable)) {
             fail("SerDe deserialized value does not match");
           }
         }
@@ -178,10 +172,10 @@ public class TestLazyBinaryFast {
       if (bytes1.length != bytes2.length) {
         fail("SerializeWrite length " + bytes2.length + " and " +
               "SerDe serialization length " + bytes1.length +
-              " do not match (" + Arrays.toString(typeInfos) + ")");
+              " do not match (" + Arrays.toString(primitiveTypeInfos) + ")");
       }
       if (!Arrays.equals(bytes1, bytes2)) {
-        fail("SerializeWrite and SerDe serialization does not match (" + Arrays.toString(typeInfos) + ")");
+        fail("SerializeWrite and SerDe serialization does not match (" + Arrays.toString(primitiveTypeInfos) + ")");
       }
       serdeBytes[i] = bytesWritable;
     }
@@ -193,7 +187,7 @@ public class TestLazyBinaryFast {
       // When doWriteFewerColumns, try to read more fields than exist in buffer.
       LazyBinaryDeserializeRead lazyBinaryDeserializeRead =
               new LazyBinaryDeserializeRead(
-                  typeInfos,
+                  primitiveTypeInfos,
                   /* useExternalBuffer */ false);
 
       BytesWritable bytesWritable = serdeBytes[i];
@@ -204,56 +198,24 @@ public class TestLazyBinaryFast {
           lazyBinaryDeserializeRead.skipNextField();
         } else if (index >= writeColumnCount) {
           // Should come back a null.
-          VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, typeInfos[index], null);
+          VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, primitiveTypeInfos[index], null);
         } else {
-          verifyRead(lazyBinaryDeserializeRead, typeInfos[index], row[index]);
+          Writable writable = (Writable) row[index];
+          VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, primitiveTypeInfos[index], writable);
         }
       }
       if (writeColumnCount == columnCount) {
-        assertTrue(lazyBinaryDeserializeRead.isEndOfInputReached());
+        TestCase.assertTrue(lazyBinaryDeserializeRead.isEndOfInputReached());
       }
     }
   }
 
-  private void verifyRead(LazyBinaryDeserializeRead lazyBinaryDeserializeRead,
-      TypeInfo typeInfo, Object expectedObject) throws IOException {
-    if (typeInfo.getCategory() == ObjectInspector.Category.PRIMITIVE) {
-      VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, typeInfo, expectedObject);
-    } else {
-      Object complexFieldObj = VerifyFast.deserializeReadComplexType(lazyBinaryDeserializeRead, typeInfo);
-      if (expectedObject == null) {
-        if (complexFieldObj != null) {
-          fail("Field reports not null but object is null (class " + complexFieldObj.getClass().getName() +
-              ", " + complexFieldObj.toString() + ")");
-        }
-      } else {
-        if (complexFieldObj == null) {
-          // It's hard to distinguish a union with null from a null union.
-          if (expectedObject instanceof UnionObject) {
-            UnionObject expectedUnion = (UnionObject) expectedObject;
-            if (expectedUnion.getObject() == null) {
-              return;
-            }
-          }
-          fail("Field reports null but object is not null (class " + expectedObject.getClass().getName() +
-              ", " + expectedObject.toString() + ")");
-        }
-      }
-      if (!VerifyLazy.lazyCompare(typeInfo, complexFieldObj, expectedObject)) {
-        fail("Comparision failed typeInfo " + typeInfo.toString());
-      }
-    }
-  }
-
-  public void testLazyBinaryFastCase(
-      int caseNum, boolean doNonRandomFill, Random r, SerdeRandomRowSource.SupportedTypes supportedTypes, int depth)
-      throws Throwable {
+  public void testLazyBinaryFastCase(int caseNum, boolean doNonRandomFill, Random r) throws Throwable {
 
     SerdeRandomRowSource source = new SerdeRandomRowSource();
+    source.init(r);
 
-    source.init(r, supportedTypes, depth);
-
-    int rowCount = 100;
+    int rowCount = 1000;
     Object[][] rows = source.randomRows(rowCount);
 
     if (doNonRandomFill) {
@@ -262,8 +224,8 @@ public class TestLazyBinaryFast {
 
     StructObjectInspector rowStructObjectInspector = source.rowStructObjectInspector();
 
-    TypeInfo[] typeInfos = source.typeInfos();
-    int columnCount = typeInfos.length;
+    PrimitiveTypeInfo[] primitiveTypeInfos = source.primitiveTypeInfos();
+    int columnCount = primitiveTypeInfos.length;
 
     int writeColumnCount = columnCount;
     StructObjectInspector writeRowStructObjectInspector = rowStructObjectInspector;
@@ -280,29 +242,28 @@ public class TestLazyBinaryFast {
     String fieldNames = ObjectInspectorUtils.getFieldNames(rowStructObjectInspector);
     String fieldTypes = ObjectInspectorUtils.getFieldTypes(rowStructObjectInspector);
 
-    TestLazyBinarySerDe testLazyBinarySerDe = new TestLazyBinarySerDe();
-    AbstractSerDe serde = testLazyBinarySerDe.getSerDe(fieldNames, fieldTypes);
+    AbstractSerDe serde = TestLazyBinarySerDe.getSerDe(fieldNames, fieldTypes);
 
     AbstractSerDe serde_fewer = null;
     if (doWriteFewerColumns) {
       String partialFieldNames = ObjectInspectorUtils.getFieldNames(writeRowStructObjectInspector);
       String partialFieldTypes = ObjectInspectorUtils.getFieldTypes(writeRowStructObjectInspector);
 
-        serde_fewer = testLazyBinarySerDe.getSerDe(partialFieldNames, partialFieldTypes);;
+        serde_fewer = TestLazyBinarySerDe.getSerDe(partialFieldNames, partialFieldTypes);;
     }
 
     testLazyBinaryFast(
         source, rows,
         serde, rowStructObjectInspector,
         serde_fewer, writeRowStructObjectInspector,
-        typeInfos,
+        primitiveTypeInfos,
         /* useIncludeColumns */ false, /* doWriteFewerColumns */ false, r);
 
     testLazyBinaryFast(
         source, rows,
         serde, rowStructObjectInspector,
         serde_fewer, writeRowStructObjectInspector,
-        typeInfos,
+        primitiveTypeInfos,
         /* useIncludeColumns */ true, /* doWriteFewerColumns */ false, r);
 
     /*
@@ -325,13 +286,14 @@ public class TestLazyBinaryFast {
     // }
   }
 
-  private void testLazyBinaryFast(SerdeRandomRowSource.SupportedTypes supportedTypes, int depth) throws Throwable {
+  public void testLazyBinaryFast() throws Throwable {
+
     try {
-      Random r = new Random(9983);
+      Random r = new Random(35790);
 
       int caseNum = 0;
       for (int i = 0; i < 10; i++) {
-        testLazyBinaryFastCase(caseNum, (i % 2 == 0), r, supportedTypes, depth);
+        testLazyBinaryFastCase(caseNum, (i % 2 == 0), r);
         caseNum++;
       }
 
@@ -339,20 +301,5 @@ public class TestLazyBinaryFast {
       e.printStackTrace();
       throw e;
     }
-  }
-
-  @Test
-  public void testLazyBinaryFastPrimitive() throws Throwable {
-    testLazyBinaryFast(SerdeRandomRowSource.SupportedTypes.PRIMITIVE, 0);
-  }
-
-  @Test
-  public void testLazyBinaryFastComplexDepthOne() throws Throwable {
-    testLazyBinaryFast(SerdeRandomRowSource.SupportedTypes.ALL, 1);
-  }
-
-  @Test
-  public void testLazyBinaryFastComplexDepthFour() throws Throwable {
-    testLazyBinaryFast(SerdeRandomRowSource.SupportedTypes.ALL, 4);
   }
 }

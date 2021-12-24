@@ -1,5 +1,0 @@
-databaseIncludeLists:
-  default:
-    - "manwhwh"
-  custdb:
-    - "custmanwhwh"

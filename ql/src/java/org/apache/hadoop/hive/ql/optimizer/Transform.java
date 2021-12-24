@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -42,15 +42,15 @@ public abstract class Transform {
   
   public void beginPerfLogging() {
     PerfLogger perfLogger = SessionState.getPerfLogger();
-    perfLogger.perfLogBegin(this.getClass().getName(), PerfLogger.OPTIMIZER);
+    perfLogger.PerfLogBegin(this.getClass().getName(), PerfLogger.OPTIMIZER);
   }
 
   public void endPerfLogging() {
     PerfLogger perfLogger = SessionState.getPerfLogger();
-    perfLogger.perfLogEnd(this.getClass().getName(), PerfLogger.OPTIMIZER);
+    perfLogger.PerfLogEnd(this.getClass().getName(), PerfLogger.OPTIMIZER);
   }
   public void endPerfLogging(String additionalInfo) {
     PerfLogger perfLogger = SessionState.getPerfLogger();
-	perfLogger.perfLogEnd(this.getClass().getName(), PerfLogger.OPTIMIZER, additionalInfo);
+	perfLogger.PerfLogEnd(this.getClass().getName(), PerfLogger.OPTIMIZER, additionalInfo);
   }  
 }

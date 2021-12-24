@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,9 +19,6 @@
 package org.apache.hadoop.hive.ql.plan;
 
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 
 
@@ -35,12 +32,12 @@ public class LateralViewJoinDesc extends AbstractOperatorDesc {
   private static final long serialVersionUID = 1L;
 
   private int numSelColumns;
-  private List<String> outputInternalColNames;
+  private ArrayList<String> outputInternalColNames;
 
   public LateralViewJoinDesc() {
   }
 
-  public LateralViewJoinDesc(int numSelColumns, List<String> outputInternalColNames) {
+  public LateralViewJoinDesc(int numSelColumns, ArrayList<String> outputInternalColNames) {
     this.numSelColumns = numSelColumns;
     this.outputInternalColNames = outputInternalColNames;
   }
@@ -50,12 +47,12 @@ public class LateralViewJoinDesc extends AbstractOperatorDesc {
   }
 
   @Explain(displayName = "outputColumnNames")
-  public List<String> getOutputInternalColNames() {
+  public ArrayList<String> getOutputInternalColNames() {
     return outputInternalColNames;
   }
 
   @Explain(displayName = "Output", explainLevels = { Level.USER })
-  public List<String> getUserLevelExplainOutputInternalColNames() {
+  public ArrayList<String> getUserLevelExplainOutputInternalColNames() {
     return outputInternalColNames;
   }
 
@@ -66,14 +63,4 @@ public class LateralViewJoinDesc extends AbstractOperatorDesc {
   public void setNumSelColumns(int numSelColumns) {
     this.numSelColumns = numSelColumns;
   }
-
-  @Override
-  public boolean isSame(OperatorDesc other) {
-    if (getClass().getName().equals(other.getClass().getName())) {
-      LateralViewJoinDesc otherDesc = (LateralViewJoinDesc) other;
-      return Objects.equals(getOutputInternalColNames(), otherDesc.getOutputInternalColNames());
-    }
-    return false;
-  }
-
 }

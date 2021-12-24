@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -58,7 +58,7 @@ public class MathExpr {
   }
 
   public static double log2(double d) {
-    return StrictMath.log(d) / StrictMath.log(2);
+    return Math.log(d) / Math.log(2);
   }
 
   public static long abs(long v) {

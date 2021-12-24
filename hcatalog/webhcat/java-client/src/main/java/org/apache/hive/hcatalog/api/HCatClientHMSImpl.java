@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,22 +21,21 @@ package org.apache.hive.hcatalog.api;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import javax.annotation.Nullable;
 
-import org.apache.commons.lang3.tuple.Pair;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.common.ObjectPair;
 import org.apache.hadoop.hive.common.classification.InterfaceAudience;
 import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.metastore.TableType;
-import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -585,7 +584,8 @@ public class HCatClientHMSImpl extends HCatClient {
       throws SemanticException, TException {
     LOG.info("HCatClient: Dropping partitions using partition-predicate Expressions.");
     ExprNodeGenericFuncDesc partitionExpression = new ExpressionBuilder(table, partitionSpec).build();
-    Pair<Integer, byte[]> serializedPartitionExpression = Pair.of(partitionSpec.size(),
+    ObjectPair<Integer, byte[]> serializedPartitionExpression =
+        new ObjectPair<Integer, byte[]>(partitionSpec.size(),
             SerializationUtilities.serializeExpressionToKryo(partitionExpression));
     hmsClient.dropPartitions(table.getDbName(), table.getTableName(), Arrays.asList(serializedPartitionExpression),
         deleteData && !isExternal(table),  // Delete data?
@@ -891,7 +891,7 @@ public class HCatClientHMSImpl extends HCatClient {
 
   private String checkDB(String name) {
     if (StringUtils.isEmpty(name)) {
-      return Warehouse.DEFAULT_DATABASE_NAME;
+      return MetaStoreUtils.DEFAULT_DATABASE_NAME;
     } else {
       return name;
     }
@@ -1008,7 +1008,7 @@ public class HCatClientHMSImpl extends HCatClient {
           }
         });
       } else {
-        return Collections.emptyList();
+        return new ArrayList<HCatNotificationEvent>();
       }
     } catch (TException e) {
       throw new ConnectionFailureException("TException while getting notifications", e);

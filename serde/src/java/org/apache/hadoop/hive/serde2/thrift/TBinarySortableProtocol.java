@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,8 +18,8 @@
 
 package org.apache.hadoop.hive.serde2.thrift;
 
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Properties;
 
@@ -147,7 +147,7 @@ public class TBinarySortableProtocol extends TProtocol implements
           .charAt(topLevelStructFieldID) != '-');
     } else {
       writeRawBytes(nonNullByte, 0, 1);
-      // If the struct is null and level > 1, SerDes will call
+      // If the struct is null and level > 1, DynamicSerDe will call
       // writeNull();
     }
   }
@@ -336,7 +336,12 @@ public class TBinarySortableProtocol extends TProtocol implements
 
   @Override
   public void writeString(String str) throws TException {
-    byte[] dat = str.getBytes(StandardCharsets.UTF_8);
+    byte[] dat;
+    try {
+      dat = str.getBytes("UTF-8");
+    } catch (UnsupportedEncodingException uex) {
+      throw new TException("JVM DOES NOT SUPPORT UTF-8: ",uex);
+    }
     writeTextBytes(dat, 0, dat.length);
   }
 
@@ -415,7 +420,7 @@ public class TBinarySortableProtocol extends TProtocol implements
 
   @Override
   public TField readFieldBegin() throws TException {
-    // slight hack to communicate to SerDes that the field ids are not
+    // slight hack to communicate to DynamicSerDe that the field ids are not
     // being set but things are ordered.
     f = new TField("", ORDERED_TYPE, (short) -1);
     return f;
@@ -626,7 +631,12 @@ public class TBinarySortableProtocol extends TProtocol implements
       stringBytes[i] = bin[0];
       i++;
     }
-    return new String(stringBytes, 0, i, StandardCharsets.UTF_8);
+    try {
+      String r = new String(stringBytes, 0, i, "UTF-8");
+      return r;
+    } catch (UnsupportedEncodingException uex) {
+      throw new TException("JVM DOES NOT SUPPORT UTF-8: ",uex);
+    }
   }
 
   @Override

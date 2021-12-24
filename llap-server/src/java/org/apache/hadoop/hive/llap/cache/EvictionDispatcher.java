@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,11 +17,10 @@
  */
 package org.apache.hadoop.hive.llap.cache;
 
-import org.apache.hadoop.hive.common.io.encoded.MemoryBuffer;
-import org.apache.hadoop.hive.llap.cache.SerDeLowLevelCacheImpl.LlapSerDeDataBuffer;
 import org.apache.hadoop.hive.llap.io.metadata.OrcFileEstimateErrors;
-import org.apache.hadoop.hive.llap.io.metadata.MetadataCache;
-import org.apache.hadoop.hive.llap.io.metadata.MetadataCache.LlapMetadataBuffer;
+import org.apache.hadoop.hive.llap.io.metadata.OrcFileMetadata;
+import org.apache.hadoop.hive.llap.io.metadata.OrcMetadataCache;
+import org.apache.hadoop.hive.llap.io.metadata.OrcStripeMetadata;
 
 /**
  * Eviction dispatcher - uses double dispatch to route eviction notifications to correct caches.
@@ -29,11 +28,11 @@ import org.apache.hadoop.hive.llap.io.metadata.MetadataCache.LlapMetadataBuffer;
 public final class EvictionDispatcher implements EvictionListener {
   private final LowLevelCache dataCache;
   private final SerDeLowLevelCacheImpl serdeCache;
-  private final MetadataCache metadataCache;
+  private final OrcMetadataCache metadataCache;
   private final EvictionAwareAllocator allocator;
 
   public EvictionDispatcher(LowLevelCache dataCache, SerDeLowLevelCacheImpl serdeCache,
-      MetadataCache metadataCache, EvictionAwareAllocator allocator) {
+      OrcMetadataCache metadataCache, EvictionAwareAllocator allocator) {
     this.dataCache = dataCache;
     this.metadataCache = metadataCache;
     this.serdeCache = serdeCache;
@@ -42,45 +41,25 @@ public final class EvictionDispatcher implements EvictionListener {
 
   @Override
   public void notifyEvicted(LlapCacheableBuffer buffer) {
-    // This will call one of the specific notifyEvicted overloads.
-    buffer.notifyEvicted(this, false);
+    buffer.notifyEvicted(this); // This will call one of the specific notifyEvicted overloads.
   }
 
-  @Override
-  public void notifyProactivelyEvicted(LlapCacheableBuffer buffer) {
-    // This will call one of the specific notifyEvicted overloads.
-    buffer.notifyEvicted(this, true);
-  }
-
-  public void notifyEvicted(LlapSerDeDataBuffer buffer, boolean isProactiveEviction) {
-    serdeCache.notifyEvicted(buffer);
-    requestDeallocation(buffer, isProactiveEviction);
-  }
-
-  public void notifyEvicted(LlapDataBuffer buffer, boolean isProactiveEviction) {
+  public void notifyEvicted(LlapDataBuffer buffer) {
+    // Note: we don't know which cache this is from, so we notify both. They can noop if they
+    //       want to find the buffer in their structures and can't.
     dataCache.notifyEvicted(buffer);
-    requestDeallocation(buffer, isProactiveEviction);
-  }
-
-  public void notifyEvicted(LlapMetadataBuffer<?> buffer, boolean isProactiveEviction) {
-    metadataCache.notifyEvicted(buffer);
-    // Note: the metadata cache may deallocate additional buffers, but not this one.
-    requestDeallocation(buffer, isProactiveEviction);
-  }
-
-  /**
-   * For normal (reactive) evictions, MM expects the free'd up memory to be used for the originating reserve call, thus
-   * deallocateEvicted method should be used.
-   * For proactive eviction we can give back the MM the free'd up space right away, deallocate method will do that.
-   * @param buffer
-   * @param isProactiveEviction
-   */
-  private void requestDeallocation(MemoryBuffer buffer, boolean isProactiveEviction) {
-    if (isProactiveEviction) {
-      allocator.deallocateProactivelyEvicted(buffer);
-    } else {
-      allocator.deallocateEvicted(buffer);
+    if (serdeCache != null) {
+      serdeCache.notifyEvicted(buffer);
     }
+    allocator.deallocateEvicted(buffer);
+  }
+
+  public void notifyEvicted(OrcFileMetadata buffer) {
+    metadataCache.notifyEvicted(buffer);
+  }
+
+  public void notifyEvicted(OrcStripeMetadata buffer) {
+    metadataCache.notifyEvicted(buffer);
   }
 
   public void notifyEvicted(OrcFileEstimateErrors buffer) {

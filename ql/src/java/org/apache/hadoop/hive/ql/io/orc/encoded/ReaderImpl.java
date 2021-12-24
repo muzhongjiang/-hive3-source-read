@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,9 +21,7 @@ package org.apache.hadoop.hive.ql.io.orc.encoded;
 import java.io.IOException;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.common.io.CacheTag;
 import org.apache.hadoop.hive.common.io.DataCache;
-import org.apache.orc.CompressionCodec;
 import org.apache.orc.DataReader;
 import org.apache.hadoop.hive.ql.io.orc.OrcFile.ReaderOptions;
 
@@ -35,9 +33,9 @@ class ReaderImpl extends org.apache.hadoop.hive.ql.io.orc.ReaderImpl implements 
   }
 
   @Override
-  public EncodedReader encodedReader(Object fileKey, DataCache dataCache, LlapDataReader dataReader,
-      PoolFactory pf, IoTrace trace, boolean useCodecPool, CacheTag tag, boolean isReadCacheOnly) throws IOException {
-    return new EncodedReaderImpl(fileKey, this.getTypes(), getSchema(), this.getCompressionKind(), getWriterVersion(),
-        bufferSize, rowIndexStride, dataCache, dataReader, pf, trace, useCodecPool, tag, isReadCacheOnly);
+  public EncodedReader encodedReader(
+      Object fileKey, DataCache dataCache, DataReader dataReader, PoolFactory pf) throws IOException {
+    return new EncodedReaderImpl(fileKey, types,
+        bufferSize, rowIndexStride, dataCache, dataReader, pf);
   }
 }

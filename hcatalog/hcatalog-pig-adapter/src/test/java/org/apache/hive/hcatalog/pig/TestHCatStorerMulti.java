@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,14 +30,15 @@ import java.util.Set;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.hive.cli.CliSessionState;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.DriverFactory;
-import org.apache.hadoop.hive.ql.IDriver;
+import org.apache.hadoop.hive.ql.CommandNeedRetryException;
+import org.apache.hadoop.hive.ql.Driver;
 import org.apache.hadoop.hive.ql.io.StorageFormats;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
 import org.apache.hive.hcatalog.common.HCatUtil;
 import org.apache.hive.hcatalog.data.Pair;
-import org.apache.hive.hcatalog.mapreduce.HCatBaseTest;
+
+import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
 
 import org.junit.After;
@@ -59,7 +60,7 @@ public class TestHCatStorerMulti {
 
   private static final String BASIC_TABLE = "junit_unparted_basic";
   private static final String PARTITIONED_TABLE = "junit_parted_basic";
-  private static IDriver driver;
+  private static Driver driver;
 
   private static Map<Integer, Pair<Integer, String>> basicInputData;
 
@@ -77,15 +78,24 @@ public class TestHCatStorerMulti {
     this.storageFormat = storageFormat;
   }
 
-  private void dropTable(String tablename) throws Exception {
+  private void dropTable(String tablename) throws IOException, CommandNeedRetryException {
     driver.run("drop table " + tablename);
   }
 
-  private void createTable(String tablename, String schema, String partitionedBy) throws Exception {
-    AbstractHCatLoaderTest.createTableDefaultDB(tablename, schema, partitionedBy, driver, storageFormat);
+  private void createTable(String tablename, String schema, String partitionedBy) throws IOException, CommandNeedRetryException {
+    String createTable;
+    createTable = "create table " + tablename + "(" + schema + ") ";
+    if ((partitionedBy != null) && (!partitionedBy.trim().isEmpty())) {
+      createTable = createTable + "partitioned by (" + partitionedBy + ") ";
+    }
+    createTable = createTable + "stored as " + storageFormat;
+    int retCode = driver.run(createTable).getResponseCode();
+    if (retCode != 0) {
+      throw new IOException("Failed to create table. [" + createTable + "], return code from hive driver : [" + retCode + "]");
+    }
   }
 
-  private void createTable(String tablename, String schema) throws Exception {
+  private void createTable(String tablename, String schema) throws IOException, CommandNeedRetryException {
     createTable(tablename, schema, null);
   }
 
@@ -103,7 +113,7 @@ public class TestHCatStorerMulti {
       hiveConf
       .setVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER,
           "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory");
-      driver = DriverFactory.newDriver(hiveConf);
+      driver = new Driver(hiveConf);
       SessionState.start(new CliSessionState(hiveConf));
     }
 
@@ -122,7 +132,7 @@ public class TestHCatStorerMulti {
 
     populateBasicFile();
 
-    PigServer server = HCatBaseTest.createPigServer(false);
+    PigServer server = new PigServer(ExecType.LOCAL);
     server.setBatchOn();
     server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
     server.registerQuery("store A into '" + BASIC_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer();");
@@ -142,7 +152,7 @@ public class TestHCatStorerMulti {
 
     populateBasicFile();
 
-    PigServer server = HCatBaseTest.createPigServer(false);
+    PigServer server = new PigServer(ExecType.LOCAL);
     server.setBatchOn();
     server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
 
@@ -167,7 +177,7 @@ public class TestHCatStorerMulti {
 
     populateBasicFile();
 
-    PigServer server = HCatBaseTest.createPigServer(false);
+    PigServer server = new PigServer(ExecType.LOCAL);
     server.setBatchOn();
     server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
     server.registerQuery("store A into '" + BASIC_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer();");
@@ -210,7 +220,7 @@ public class TestHCatStorerMulti {
     writer.close();
   }
 
-  private void cleanup() throws Exception {
+  private void cleanup() throws IOException, CommandNeedRetryException {
     File f = new File(TEST_WAREHOUSE_DIR);
     if (f.exists()) {
       FileUtil.fullyDelete(f);

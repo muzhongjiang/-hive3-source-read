@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,8 +21,6 @@ package org.apache.hive.jdbc;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
-import javax.security.auth.Subject;
-
 import org.apache.hive.service.auth.HttpAuthUtils;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
@@ -39,30 +37,33 @@ public class HttpKerberosRequestInterceptor extends HttpRequestInterceptorBase {
   String principal;
   String host;
   String serverHttpUrl;
-  Subject loggedInSubject;
+  boolean assumeSubject;
 
   // A fair reentrant lock
   private static ReentrantLock kerberosLock = new ReentrantLock(true);
 
-  public HttpKerberosRequestInterceptor(String principal, String host, String serverHttpUrl, Subject loggedInSubject,
-      CookieStore cs, String cn, boolean isSSL, Map<String, String> additionalHeaders,
-      Map<String, String> customCookies) {
-    super(cs, cn, isSSL, additionalHeaders, customCookies);
+  public HttpKerberosRequestInterceptor(String principal, String host,
+      String serverHttpUrl, boolean assumeSubject, CookieStore cs, String cn,
+      boolean isSSL, Map<String, String> additionalHeaders) {
+    super(cs, cn, isSSL, additionalHeaders);
     this.principal = principal;
     this.host = host;
     this.serverHttpUrl = serverHttpUrl;
-    this.loggedInSubject = loggedInSubject;
+    this.assumeSubject = assumeSubject;
   }
 
   @Override
-  protected void addHttpAuthHeader(HttpRequest httpRequest, HttpContext httpContext) throws Exception {
-    try {
+  protected void addHttpAuthHeader(HttpRequest httpRequest,
+    HttpContext httpContext) throws Exception {
+	try {
       // Generate the service ticket for sending to the server.
       // Locking ensures the tokens are unique in case of concurrent requests
       kerberosLock.lock();
-      String kerberosAuthHeader = HttpAuthUtils.getKerberosServiceTicket(principal, host, serverHttpUrl, loggedInSubject);
+      String kerberosAuthHeader = HttpAuthUtils.getKerberosServiceTicket(
+        principal, host, serverHttpUrl, assumeSubject);
       // Set the session key token (Base64 encoded) in the headers
-      httpRequest.addHeader(HttpAuthUtils.AUTHORIZATION + ": " + HttpAuthUtils.NEGOTIATE + " ", kerberosAuthHeader);
+      httpRequest.addHeader(HttpAuthUtils.AUTHORIZATION + ": " +
+        HttpAuthUtils.NEGOTIATE + " ", kerberosAuthHeader);
     } catch (Exception e) {
       throw new HttpException(e.getMessage(), e);
     } finally {

@@ -24,7 +24,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.StringReader;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import com.google.common.base.Charsets;
 

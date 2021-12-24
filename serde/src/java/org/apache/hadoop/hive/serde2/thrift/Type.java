@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,10 +19,8 @@
 package org.apache.hadoop.hive.serde2.thrift;
 
 import java.sql.DatabaseMetaData;
-import java.sql.Types;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hive.service.rpc.thrift.TTypeId;
@@ -72,9 +70,6 @@ public enum Type {
   TIMESTAMP_TYPE("TIMESTAMP",
       java.sql.Types.TIMESTAMP,
       TTypeId.TIMESTAMP_TYPE),
-  TIMESTAMPLOCALTZ_TYPE(serdeConstants.TIMESTAMPLOCALTZ_TYPE_NAME.toUpperCase(),
-      java.sql.Types.OTHER,
-      TTypeId.TIMESTAMPLOCALTZ_TYPE),
   INTERVAL_YEAR_MONTH_TYPE("INTERVAL_YEAR_MONTH",
       java.sql.Types.OTHER,
       TTypeId.INTERVAL_YEAR_MONTH_TYPE),
@@ -230,9 +225,6 @@ public enum Type {
       case TIMESTAMP: {
         return Type.TIMESTAMP_TYPE;
       }
-      case TIMESTAMPLOCALTZ: {
-        return Type.TIMESTAMPLOCALTZ_TYPE;
-      }
       case INTERVAL_YEAR_MONTH: {
         return Type.INTERVAL_YEAR_MONTH_TYPE;
       }
@@ -316,15 +308,6 @@ public enum Type {
     default:
       return false;
     }
-  }
-
-  public static Type fromJavaSQLType(int javaSQLType) {
-    for (Type each : Type.values()) {
-      if (each.javaSQLType == javaSQLType) {
-        return each;
-      }
-    }
-    return null;
   }
 
   /**

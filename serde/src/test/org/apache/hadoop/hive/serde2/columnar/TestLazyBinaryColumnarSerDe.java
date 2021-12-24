@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 import junit.framework.TestCase;
 
 import org.apache.hadoop.conf.Configuration;
@@ -40,14 +40,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.SimpleMapEqualComparer;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.LongWritable;
-import static org.junit.Assert.fail;
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
-/**
- * LazyBinaryColumnarSerDe Test.
- */
-public class TestLazyBinaryColumnarSerDe {
+public class TestLazyBinaryColumnarSerDe extends TestCase {
 
   private static class InnerStruct {
     public InnerStruct(Integer i, Long l) {
@@ -72,7 +66,6 @@ public class TestLazyBinaryColumnarSerDe {
     InnerStruct mStruct;
   }
 
-  @Test
   public void testSerDe() throws SerDeException {
     StructObjectInspector oi = (StructObjectInspector) ObjectInspectorFactory
         .getReflectionObjectInspector(OuterStruct.class, ObjectInspectorOptions.JAVA);
@@ -81,7 +74,7 @@ public class TestLazyBinaryColumnarSerDe {
     props.setProperty(serdeConstants.LIST_COLUMNS, cols);
     props.setProperty(serdeConstants.LIST_COLUMN_TYPES, ObjectInspectorUtils.getFieldTypes(oi));
     LazyBinaryColumnarSerDe serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     OuterStruct outerStruct = new OuterStruct();
     outerStruct.mByte  = 1;
@@ -114,7 +107,6 @@ public class TestLazyBinaryColumnarSerDe {
     }
   }
 
-  @Test
   public void testSerDeEmpties() throws SerDeException {
     StructObjectInspector oi = (StructObjectInspector) ObjectInspectorFactory
         .getReflectionObjectInspector(OuterStruct.class, ObjectInspectorOptions.JAVA);
@@ -123,7 +115,7 @@ public class TestLazyBinaryColumnarSerDe {
     props.setProperty(serdeConstants.LIST_COLUMNS, cols);
     props.setProperty(serdeConstants.LIST_COLUMN_TYPES, ObjectInspectorUtils.getFieldTypes(oi));
     LazyBinaryColumnarSerDe serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     OuterStruct outerStruct = new OuterStruct();
     outerStruct.mByte  = 101;
@@ -150,7 +142,6 @@ public class TestLazyBinaryColumnarSerDe {
     }
   }
 
-  @Test
   public void testLazyBinaryColumnarSerDeWithEmptyBinary() throws SerDeException {
     StructObjectInspector oi = (StructObjectInspector) ObjectInspectorFactory
         .getReflectionObjectInspector(OuterStruct.class, ObjectInspectorOptions.JAVA);
@@ -159,7 +150,7 @@ public class TestLazyBinaryColumnarSerDe {
     props.setProperty(serdeConstants.LIST_COLUMNS, cols);
     props.setProperty(serdeConstants.LIST_COLUMN_TYPES, ObjectInspectorUtils.getFieldTypes(oi));
     LazyBinaryColumnarSerDe serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     OuterStruct outerStruct = new OuterStruct();
     outerStruct.mByte  = 101;
@@ -184,7 +175,6 @@ public class TestLazyBinaryColumnarSerDe {
     assert false;
   }
 
-  @Test
   public void testSerDeOuterNulls() throws SerDeException {
     StructObjectInspector oi = (StructObjectInspector) ObjectInspectorFactory
         .getReflectionObjectInspector(OuterStruct.class, ObjectInspectorOptions.JAVA);
@@ -193,7 +183,7 @@ public class TestLazyBinaryColumnarSerDe {
     props.setProperty(serdeConstants.LIST_COLUMNS, cols);
     props.setProperty(serdeConstants.LIST_COLUMN_TYPES, ObjectInspectorUtils.getFieldTypes(oi));
     LazyBinaryColumnarSerDe serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     OuterStruct outerStruct = new OuterStruct();
     BytesRefArrayWritable braw = (BytesRefArrayWritable) serde.serialize(outerStruct, oi);
@@ -209,7 +199,6 @@ public class TestLazyBinaryColumnarSerDe {
     }
   }
 
-  @Test
   public void testSerDeInnerNulls() throws SerDeException {
     StructObjectInspector oi = (StructObjectInspector) ObjectInspectorFactory
         .getReflectionObjectInspector(OuterStruct.class, ObjectInspectorOptions.JAVA);
@@ -218,7 +207,7 @@ public class TestLazyBinaryColumnarSerDe {
     props.setProperty(serdeConstants.LIST_COLUMNS, cols);
     props.setProperty(serdeConstants.LIST_COLUMN_TYPES, ObjectInspectorUtils.getFieldTypes(oi));
     LazyBinaryColumnarSerDe serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     OuterStruct outerStruct = new OuterStruct();
     outerStruct.mByte  = 1;
@@ -272,7 +261,6 @@ public class TestLazyBinaryColumnarSerDe {
    * in the new schema, and seeing if this serde can to read both types of data from the resultant table.
    * @throws SerDeException
    */
-  @Test
   public void testHandlingAlteredSchemas() throws SerDeException {
     StructObjectInspector oi = (StructObjectInspector) ObjectInspectorFactory
         .getReflectionObjectInspector(BeforeStruct.class,
@@ -285,7 +273,7 @@ public class TestLazyBinaryColumnarSerDe {
 
     // serialize some data in the schema before it is altered.
     LazyBinaryColumnarSerDe serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     BeforeStruct bs1 = new BeforeStruct();
     bs1.l1 = 1L;
@@ -303,7 +291,7 @@ public class TestLazyBinaryColumnarSerDe {
     props.setProperty(serdeConstants.LIST_COLUMN_TYPES,
         ObjectInspectorUtils.getFieldTypes(oi));
     serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     // serialize some data in the schema after it is altered.
     AfterStruct as = new AfterStruct();
@@ -315,7 +303,7 @@ public class TestLazyBinaryColumnarSerDe {
 
     // fetch operator
     serde = new LazyBinaryColumnarSerDe();
-    serde.initialize(new Configuration(), props, null);
+    SerDeUtils.initializeSerDe(serde, new Configuration(), props, null);
 
     //fetch the row inserted before schema is altered and verify
     LazyBinaryColumnarStruct struct1 = (LazyBinaryColumnarStruct) serde

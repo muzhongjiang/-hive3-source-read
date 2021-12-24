@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,12 +20,12 @@ package org.apache.hadoop.hive.ql.hooks;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.metastore.api.DataConnector;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
@@ -83,13 +83,6 @@ public class ReadEntity extends Entity implements Serializable {
   }
 
   /**
-   * Constructor for a dataconnector.
-   */
-  public ReadEntity(DataConnector connector) {
-    super(connector, true);
-  }
-
-  /**
    * Constructor.
    *
    * @param t
@@ -113,19 +106,6 @@ public class ReadEntity extends Entity implements Serializable {
   public ReadEntity(Table t, ReadEntity parent, boolean isDirect) {
     this(t, parent);
     this.isDirect = isDirect;
-  }
-
-  /**
-   * Constructor for objects represented as String. Currently applicable only
-   * for function names.
-   *
-   * @param db
-   * @param objName
-   * @param className
-   * @param type
-   */
-  public ReadEntity(Database db, String objName, String className, Type type) {
-    super(db, objName, className, type);
   }
 
   /**

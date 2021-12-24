@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,15 +19,5 @@
 package org.apache.hadoop.hive.llap.cache;
 
 public interface EvictionListener {
-  /**
-   * To be used for normal (reactive) eviction path where we don't expect MM to release memory right after this call
-   * @param buffer
-   */
   void notifyEvicted(LlapCacheableBuffer buffer);
-
-  /**
-   * To be used for proactive eviction only where we want to let MM release memory previously occupied by this buffer
-   * @param buffer
-   */
-  void notifyProactivelyEvicted(LlapCacheableBuffer buffer);
 }

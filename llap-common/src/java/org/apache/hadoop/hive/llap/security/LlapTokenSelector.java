@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,21 +20,23 @@ package org.apache.hadoop.hive.llap.security;
 
 import java.util.Collection;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.security.token.TokenSelector;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class LlapTokenSelector implements TokenSelector<LlapTokenIdentifier> {
-  private static final Logger LOG = LoggerFactory.getLogger(LlapTokenSelector.class);
+  private static final Log LOG = LogFactory.getLog(LlapTokenSelector.class);
 
   @Override
   public Token<LlapTokenIdentifier> selectToken(Text service,
       Collection<Token<? extends TokenIdentifier>> tokens) {
     if (service == null) return null;
-    LOG.debug("Looking for a token with service {}", service);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Looking for a token with service " + service);
+    }
     for (Token<? extends TokenIdentifier> token : tokens) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Token = " + token.getKind() + "; service = " + token.getService());

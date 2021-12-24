@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,8 +24,6 @@ import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
-import org.apache.hadoop.hive.ql.plan.VectorDesc;
-import org.apache.hadoop.hive.ql.plan.VectorFileSinkDesc;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -33,13 +31,11 @@ import com.google.common.annotations.VisibleForTesting;
 /**
  * File Sink operator implementation.
  **/
-public class VectorFileSinkOperator extends FileSinkOperator
-    implements VectorizationOperator {
+public class VectorFileSinkOperator extends FileSinkOperator {
 
   private static final long serialVersionUID = 1L;
 
   private VectorizationContext vContext;
-  private VectorFileSinkDesc vectorDesc;
 
   // The above members are initialized by the constructor and must not be
   // transient.
@@ -51,12 +47,11 @@ public class VectorFileSinkOperator extends FileSinkOperator
 
   protected transient Object[] singleRow;
 
-  public VectorFileSinkOperator(CompilationOpContext ctx, OperatorDesc conf,
-      VectorizationContext vContext, VectorDesc vectorDesc) {
+  public VectorFileSinkOperator(CompilationOpContext ctx,
+      VectorizationContext vContext, OperatorDesc conf) {
     this(ctx);
     this.conf = (FileSinkDesc) conf;
     this.vContext = vContext;
-    this.vectorDesc = (VectorFileSinkDesc) vectorDesc;
   }
 
   /** Kryo ctor. */
@@ -67,11 +62,6 @@ public class VectorFileSinkOperator extends FileSinkOperator
 
   public VectorFileSinkOperator(CompilationOpContext ctx) {
     super(ctx);
-  }
-
-  @Override
-  public VectorizationContext getInputVectorizationContext() {
-    return vContext;
   }
 
   @Override
@@ -111,10 +101,5 @@ public class VectorFileSinkOperator extends FileSinkOperator
         super.process(singleRow, tag);
       }
     }
-  }
-
-  @Override
-  public VectorDesc getVectorDesc() {
-    return vectorDesc;
   }
 }

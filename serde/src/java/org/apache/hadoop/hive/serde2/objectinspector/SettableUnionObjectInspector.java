@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,9 +26,9 @@ package org.apache.hadoop.hive.serde2.objectinspector;
 public abstract class SettableUnionObjectInspector implements
     UnionObjectInspector {
 
-  /* Creates an empty union object. */
+  /* Create an empty object */
   public abstract Object create();
 
-  /* Sets the field and tag in the union. Returns the union. */
-  public abstract Object setFieldAndTag(Object union, Object field, byte tag);
+  /* Add field to the object */
+  public abstract Object addField(Object union, Object field);
 }

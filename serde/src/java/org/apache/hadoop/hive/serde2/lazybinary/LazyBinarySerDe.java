@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,9 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
-import org.apache.hadoop.hive.serde2.io.TimestampLocalTZWritable;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampLocalTZObjectInspector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -38,11 +35,12 @@ import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeSpec;
 import org.apache.hadoop.hive.serde2.SerDeStats;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde2.io.HiveIntervalDayTimeWritable;
 import org.apache.hadoop.hive.serde2.io.HiveIntervalYearMonthWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.lazy.ByteArrayRef;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
@@ -86,39 +84,62 @@ import org.apache.hadoop.io.Writable;
 public class LazyBinarySerDe extends AbstractSerDe {
   public static final Logger LOG = LoggerFactory.getLogger(LazyBinarySerDe.class.getName());
 
+  public LazyBinarySerDe() throws SerDeException {
+  }
+
+  List<String> columnNames;
+  List<TypeInfo> columnTypes;
+
   TypeInfo rowTypeInfo;
   ObjectInspector cachedObjectInspector;
 
   // The object for storing row data
   LazyBinaryStruct cachedLazyBinaryStruct;
 
-  int serializedSize;
-  SerDeStats stats;
-  boolean lastOperationSerialize;
-  boolean lastOperationDeserialize;
+  private int serializedSize;
+  private SerDeStats stats;
+  private boolean lastOperationSerialize;
+  private boolean lastOperationDeserialize;
 
   /**
    * Initialize the SerDe with configuration and table information.
    */
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
+  public void initialize(Configuration conf, Properties tbl)
       throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
-
+    // Get column names and types
+    String columnNameProperty = tbl.getProperty(serdeConstants.LIST_COLUMNS);
+    String columnNameDelimiter = tbl.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? tbl
+        .getProperty(serdeConstants.COLUMN_NAME_DELIMITER) : String.valueOf(SerDeUtils.COMMA);
+    String columnTypeProperty = tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES);
+    if (columnNameProperty.length() == 0) {
+      columnNames = new ArrayList<String>();
+    } else {
+      columnNames = Arrays.asList(columnNameProperty.split(columnNameDelimiter));
+    }
+    if (columnTypeProperty.length() == 0) {
+      columnTypes = new ArrayList<TypeInfo>();
+    } else {
+      columnTypes = TypeInfoUtils
+          .getTypeInfosFromTypeString(columnTypeProperty);
+    }
+    assert (columnNames.size() == columnTypes.size());
     // Create row related objects
-    rowTypeInfo = TypeInfoFactory.getStructTypeInfo(getColumnNames(), getColumnTypes());
+    rowTypeInfo = TypeInfoFactory.getStructTypeInfo(columnNames, columnTypes);
     // Create the object inspector and the lazy binary struct object
     cachedObjectInspector = LazyBinaryUtils
         .getLazyBinaryObjectInspectorFromTypeInfo(rowTypeInfo);
     cachedLazyBinaryStruct = (LazyBinaryStruct) LazyBinaryFactory
         .createLazyBinaryObject(cachedObjectInspector);
     // output debug info
-    log.debug("LazyBinarySerDe initialized with: columnNames={} columnTypes={}", getColumnNames(), getColumnTypes());
+    LOG.debug("LazyBinarySerDe initialized with: columnNames=" + columnNames
+        + " columnTypes=" + columnTypes);
 
     serializedSize = 0;
     stats = new SerDeStats();
     lastOperationSerialize = false;
     lastOperationDeserialize = false;
+
   }
 
   /**
@@ -274,7 +295,7 @@ public class LazyBinarySerDe extends AbstractSerDe {
     serialize(byteStream, uoi.getField(obj), uoi.getObjectInspectors().get(tag), false, warnedOnceNullMapKey);
   }
 
-  protected static void serializeText(
+  private static void serializeText(
       RandomAccessOutput byteStream, Text t, boolean skipLengthPrefix) {
     /* write byte size of the string which is a vint */
     int length = t.getLength();
@@ -294,8 +315,8 @@ public class LazyBinarySerDe extends AbstractSerDe {
     public boolean value;
   }
 
-  public static void writeDateToByteStream(RandomAccessOutput byteStream,
-                                            DateWritableV2 date) {
+  private static void writeDateToByteStream(RandomAccessOutput byteStream,
+                                            DateWritable date) {
     LazyBinaryUtils.writeVInt(byteStream, date.getDays());
   }
 
@@ -330,14 +351,13 @@ public class LazyBinarySerDe extends AbstractSerDe {
    * @param byteStream
    * @param dec
    * @param scratchLongs
-   * @param scratchBytes
-   * @param scratchLongBytes
+   * @param buffer
    */
   public static void writeToByteStream(
       RandomAccessOutput byteStream,
       HiveDecimal dec,
-      long[] scratchLongs, byte[] scratchBytes, byte[] scratchLongBytes) {
-    LazyBinaryUtils.writeVInt(byteStream, dec.scale(), scratchLongBytes);
+      long[] scratchLongs, byte[] scratchBytes) {
+    LazyBinaryUtils.writeVInt(byteStream, dec.scale());
 
     // Convert decimal into the scratch buffer without allocating a byte[] each time
     // for better performance.
@@ -347,7 +367,7 @@ public class LazyBinarySerDe extends AbstractSerDe {
     if (byteLength == 0) {
       throw new RuntimeException("Decimal to binary conversion failed");
     }
-    LazyBinaryUtils.writeVInt(byteStream, byteLength, scratchLongBytes);
+    LazyBinaryUtils.writeVInt(byteStream, byteLength);
     byteStream.write(scratchBytes, 0, byteLength);
   }
 
@@ -357,9 +377,9 @@ public class LazyBinarySerDe extends AbstractSerDe {
   * And, allocate scratch buffer with HiveDecimal.SCRATCH_BUFFER_LEN_BIG_INTEGER_BYTES bytes.
   *
   * @param byteStream
-  * @param decWritable
+  * @param dec
   * @param scratchLongs
-  * @param scratchBytes
+  * @param buffer
   */
   public static void writeToByteStream(
       RandomAccessOutput byteStream,
@@ -370,18 +390,6 @@ public class LazyBinarySerDe extends AbstractSerDe {
         decWritable.bigIntegerBytes(
             scratchLongs, scratchBytes);
     LazyBinaryUtils.writeVInt(byteStream, byteLength);
-    byteStream.write(scratchBytes, 0, byteLength);
-  }
-
-  public static void writeToByteStream(
-      RandomAccessOutput byteStream,
-      HiveDecimalWritable decWritable,
-      long[] scratchLongs, byte[] scratchBytes, byte[] scratchLongBytes) {
-    LazyBinaryUtils.writeVInt(byteStream, decWritable.scale(), scratchLongBytes);
-    int byteLength =
-        decWritable.bigIntegerBytes(
-            scratchLongs, scratchBytes);
-    LazyBinaryUtils.writeVInt(byteStream, byteLength, scratchLongBytes);
     byteStream.write(scratchBytes, 0, byteLength);
   }
 
@@ -495,18 +503,13 @@ public class LazyBinarySerDe extends AbstractSerDe {
       }
 
       case DATE: {
-        DateWritableV2 d = ((DateObjectInspector) poi).getPrimitiveWritableObject(obj);
+        DateWritable d = ((DateObjectInspector) poi).getPrimitiveWritableObject(obj);
         writeDateToByteStream(byteStream, d);
         return;
       }
       case TIMESTAMP: {
         TimestampObjectInspector toi = (TimestampObjectInspector) poi;
-        TimestampWritableV2 t = toi.getPrimitiveWritableObject(obj);
-        t.writeToByteStream(byteStream);
-        return;
-      }
-      case TIMESTAMPLOCALTZ: {
-        TimestampLocalTZWritable t = ((TimestampLocalTZObjectInspector) poi).getPrimitiveWritableObject(obj);
+        TimestampWritable t = toi.getPrimitiveWritableObject(obj);
         t.writeToByteStream(byteStream);
         return;
       }
@@ -682,7 +685,7 @@ public class LazyBinarySerDe extends AbstractSerDe {
     }
   }
 
-  protected static void writeSizeAtOffset(
+  private static void writeSizeAtOffset(
       RandomAccessOutput byteStream, int byteSizeStart, int size) {
     byteStream.writeInt(byteSizeStart, size);
   }

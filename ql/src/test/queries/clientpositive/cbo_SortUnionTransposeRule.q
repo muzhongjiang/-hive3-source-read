@@ -1,31 +1,29 @@
---! qt:dataset:src1
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 
-create table s_n3 as select * from src limit 10;
+create table s as select * from src limit 10;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 order by key;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 limit 0;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 limit 5;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 order by key
 limit 5;
 
@@ -46,27 +44,27 @@ limit 5;
 set hive.optimize.limittranspose=true;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 order by key;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 limit 0;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 limit 5;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 order by key
 limit 5;
 
@@ -87,16 +85,16 @@ limit 5;
 set hive.optimize.limittranspose.reductionpercentage=0.1f;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 limit 5;
 
 set hive.optimize.limittranspose.reductionpercentage=1f;
 set hive.optimize.limittranspose.reductiontuples=8;
 
 explain
-select key from s_n3 a
+select key from s a
 union all
-select key from s_n3 b
+select key from s b
 limit 5;

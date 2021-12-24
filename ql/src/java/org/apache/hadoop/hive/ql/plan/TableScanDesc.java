@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,28 +18,20 @@
 
 package org.apache.hadoop.hive.ql.plan;
 
-import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
-import org.apache.hadoop.hive.ql.exec.TableScanOperator;
-import org.apache.hadoop.hive.ql.io.AcidUtils;
-import org.apache.hadoop.hive.ql.metadata.HiveStorageHandler;
-import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
-import org.apache.hadoop.hive.ql.optimizer.signature.Signature;
-import org.apache.hadoop.hive.ql.parse.TableSample;
-import org.apache.hadoop.hive.ql.plan.BaseWork.BaseExplainVectorization;
-import org.apache.hadoop.hive.ql.plan.Explain.Level;
-import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
-import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
-import org.apache.hadoop.mapred.TextInputFormat;
-
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+
+import org.apache.hadoop.hive.ql.io.AcidUtils;
+import org.apache.hadoop.hive.ql.metadata.Table;
+import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
+import org.apache.hadoop.hive.ql.parse.TableSample;
+import org.apache.hadoop.hive.ql.plan.Explain.Level;
+import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
+import org.apache.hadoop.hive.serde.serdeConstants;
 
 /**
  * Table Scan Descriptor Currently, data is only read from a base source as part
@@ -47,7 +39,7 @@ import java.util.Objects;
  * things will be added here as table scan is invoked as part of local work.
  **/
 @Explain(displayName = "TableScan", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED })
-public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherDesc {
+public class TableScanDesc extends AbstractOperatorDesc {
   private static final long serialVersionUID = 1L;
 
   private String alias;
@@ -55,10 +47,10 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
   private List<VirtualColumn> virtualCols;
   private String statsAggKeyPrefix;   // stats publishing/aggregating key prefix
 
-  /**
-   * A list of the partition columns of the table.
-   * Set by the semantic analyzer only in case of the analyze command.
-   */
+ /**
+  * A list of the partition columns of the table.
+  * Set by the semantic analyzer only in case of the analyze command.
+  */
   private List<String> partColumns;
 
   /**
@@ -78,7 +70,7 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
   private String tmpStatsDir;
 
   private ExprNodeGenericFuncDesc filterExpr;
-  private Serializable filterObject;
+  private transient Serializable filterObject;
   private String serializedFilterExpr;
   private String serializedFilterObject;
 
@@ -92,41 +84,29 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
   private List<String> neededNestedColumnPaths;
 
   // all column names referenced including virtual columns. used in ColumnAccessAnalyzer
-  private List<String> referencedColumns;
+  private transient List<String> referencedColumns;
 
   public static final String FILTER_EXPR_CONF_STR =
-      "hive.io.filter.expr.serialized";
+    "hive.io.filter.expr.serialized";
 
   public static final String FILTER_TEXT_CONF_STR =
-      "hive.io.filter.text";
+    "hive.io.filter.text";
 
   public static final String FILTER_OBJECT_CONF_STR =
-      "hive.io.filter.object";
-
-  public static final String PARTITION_PRUNING_FILTER =
-      "hive.io.pruning.filter";
+    "hive.io.filter.object";
 
   // input file name (big) to bucket number
   private Map<String, Integer> bucketFileNameMapping;
 
-  private String dbName = null;
-  private String tableName = null;
-
   private boolean isMetadataOnly = false;
 
-  private boolean isTranscationalTable;
-
-  private boolean vectorized;
+  private boolean isAcidTable;
 
   private AcidUtils.AcidOperationalProperties acidOperationalProperties = null;
 
-  private boolean fetchDeletedRows = false;
+  private transient TableSample tableSample;
 
-  private TableScanOperator.ProbeDecodeContext probeDecodeContext = null;
-
-  private TableSample tableSample;
-
-  private Table tableMetadata;
+  private transient Table tableMetadata;
 
   private BitSet includedBuckets;
 
@@ -142,35 +122,23 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
   }
 
   public TableScanDesc(final String alias, Table tblMetadata) {
-    this(alias, null, tblMetadata, null);
+    this(alias, null, tblMetadata);
   }
 
   public TableScanDesc(final String alias, List<VirtualColumn> vcs, Table tblMetadata) {
-    this(alias, vcs, tblMetadata, null);
-  }
-
-  public TableScanDesc(final String alias, List<VirtualColumn> vcs, Table tblMetadata,
-      TableScanOperator.ProbeDecodeContext probeDecodeContext) {
     this.alias = alias;
     this.virtualCols = vcs;
     this.tableMetadata = tblMetadata;
-
-    if (tblMetadata != null) {
-      dbName = tblMetadata.getDbName();
-      tableName = tblMetadata.getTableName();
-      numBuckets = tblMetadata.getNumBuckets();
-    }
-    isTranscationalTable = AcidUtils.isTransactionalTable(this.tableMetadata);
-    if (isTranscationalTable) {
+    isAcidTable = AcidUtils.isAcidTable(this.tableMetadata);
+    if (isAcidTable) {
       acidOperationalProperties = AcidUtils.getAcidOperationalProperties(this.tableMetadata);
     }
-    this.probeDecodeContext = probeDecodeContext;
   }
 
   @Override
   public Object clone() {
     List<VirtualColumn> vcs = new ArrayList<VirtualColumn>(getVirtualCols());
-    return new TableScanDesc(getAlias(), vcs, this.tableMetadata, this.probeDecodeContext);
+    return new TableScanDesc(getAlias(), vcs, this.tableMetadata);
   }
 
   @Explain(displayName = "alias")
@@ -178,43 +146,13 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     return alias;
   }
 
-  @Signature
-  public String getPredicateString() {
-    if (filterExpr == null) {
-      return null;
-    }
-    return PlanUtils.getExprListString(Arrays.asList(filterExpr));
-  }
-
-  @Explain(displayName = "table", jsonOnly = true)
-  public String getTableName() {
-    return this.tableName;
-  }
-
-  @Explain(displayName = "database", jsonOnly = true)
-  public String getDatabaseName() {
-    return this.dbName;
-  }
-
-  @Explain(displayName = "columns", jsonOnly = true)
-  public List<String> getColumnNamesForExplain() {
-    return this.neededColumns;
-  }
-
-  @Explain(displayName = "isTempTable", jsonOnly = true)
-  public boolean isTemporary() {
-    return tableMetadata.isTemporary();
-  }
-
   @Explain(explainLevels = { Level.USER })
   public String getTbl() {
-    StringBuilder sb = new StringBuilder();
+    StringBuffer sb = new StringBuffer();
     sb.append(this.tableMetadata.getCompleteName());
     sb.append("," + alias);
-    if (AcidUtils.isFullAcidTable(tableMetadata)) {
+    if (isAcidTable()) {
       sb.append(", ACID table");
-    } else if (isTranscationalTable()) {
-      sb.append(", transactional table");
     }
     sb.append(",Tbl:");
     sb.append(this.statistics.getBasicStatsState());
@@ -223,20 +161,12 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     return sb.toString();
   }
 
-  public boolean isTranscationalTable() {
-    return isTranscationalTable;
+  public boolean isAcidTable() {
+    return isAcidTable;
   }
 
   public AcidUtils.AcidOperationalProperties getAcidOperationalProperties() {
     return acidOperationalProperties;
-  }
-
-  public boolean isFetchDeletedRows() {
-    return fetchDeletedRows;
-  }
-
-  public void setFetchDeletedRows(boolean fetchDeletedRows) {
-    this.fetchDeletedRows = fetchDeletedRows;
   }
 
   @Explain(displayName = "Output", explainLevels = { Level.USER })
@@ -244,34 +174,17 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     return this.neededColumns;
   }
 
-
   @Explain(displayName = "filterExpr")
   public String getFilterExprString() {
-    if (filterExpr == null) {
-      return null;
-    }
     return PlanUtils.getExprListString(Arrays.asList(filterExpr));
   }
 
-  // @Signature // XXX
   public ExprNodeGenericFuncDesc getFilterExpr() {
     return filterExpr;
   }
 
   public void setFilterExpr(ExprNodeGenericFuncDesc filterExpr) {
     this.filterExpr = filterExpr;
-  }
-
-  @Explain(displayName = "probeDecodeDetails", explainLevels = { Level.DEFAULT, Level.EXTENDED })
-  public String getProbeDecodeString() {
-    if (probeDecodeContext == null) {
-      return null;
-    }
-    return probeDecodeContext.toString();
-  }
-
-  public void setProbeDecodeContext(TableScanOperator.ProbeDecodeContext probeDecodeContext) {
-    this.probeDecodeContext = probeDecodeContext;
   }
 
   public Serializable getFilterObject() {
@@ -341,14 +254,11 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     this.gatherStats = gatherStats;
   }
 
-  @Override
   @Explain(displayName = "GatherStats", explainLevels = { Level.EXTENDED })
-  @Signature
   public boolean isGatherStats() {
     return gatherStats;
   }
 
-  @Override
   public String getTmpStatsDir() {
     return tmpStatsDir;
   }
@@ -377,7 +287,6 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     statsAggKeyPrefix = k;
   }
 
-  @Override
   @Explain(displayName = "Statistics Aggregation Key Prefix", explainLevels = { Level.EXTENDED })
   public String getStatsAggPrefix() {
     return statsAggKeyPrefix;
@@ -395,7 +304,6 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     this.rowLimit = rowLimit;
   }
 
-  @Signature
   public int getRowLimit() {
     return rowLimit;
   }
@@ -419,11 +327,6 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
 
   public boolean getIsMetadataOnly() {
     return isMetadataOnly;
-  }
-
-  @Signature
-  public String getQualifiedTable() {
-    return dbName + "." + tableName;
   }
 
   public Table getTableMetadata() {
@@ -494,9 +397,7 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
 
   public boolean isNeedSkipHeaderFooters() {
     boolean rtn = false;
-    if (tableMetadata != null && tableMetadata.getTTable() != null
-        && TextInputFormat.class
-        .isAssignableFrom(tableMetadata.getInputFormatClass())) {
+    if (tableMetadata != null && tableMetadata.getTTable() != null) {
       Map<String, String> params = tableMetadata.getTTable().getParameters();
       if (params != null) {
         String skipHVal = params.get(serdeConstants.HEADER_COUNT);
@@ -509,16 +410,10 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     return rtn;
   }
 
-  @Override public Map<String, String> getOpProps() {
-    return opProps;
-  }
-
+  @Override
   @Explain(displayName = "properties", explainLevels = { Level.DEFAULT, Level.USER, Level.EXTENDED })
-  public Map<String, String> getOpPropsWithStorageHandlerProps() {
-    HiveStorageHandler storageHandler = tableMetadata.getStorageHandler();
-    return storageHandler == null
-            ? opProps
-            : storageHandler.getOperatorDescProperties(this, opProps);
+  public Map<String, String> getOpProps() {
+    return opProps;
   }
 
   public class TableScanOperatorExplainVectorization extends OperatorExplainVectorization {
@@ -526,72 +421,24 @@ public class TableScanDesc extends AbstractOperatorDesc implements IStatsGatherD
     private final TableScanDesc tableScanDesc;
     private final VectorTableScanDesc vectorTableScanDesc;
 
-    public TableScanOperatorExplainVectorization(TableScanDesc tableScanDesc,
-        VectorTableScanDesc vectorTableScanDesc) {
+    public TableScanOperatorExplainVectorization(TableScanDesc tableScanDesc, VectorDesc vectorDesc) {
       // Native vectorization supported.
-      super(vectorTableScanDesc, true);
+      super(vectorDesc, true);
       this.tableScanDesc = tableScanDesc;
-      this.vectorTableScanDesc = vectorTableScanDesc;
+      vectorTableScanDesc = (VectorTableScanDesc) vectorDesc;
     }
 
-    @Explain(vectorization = Vectorization.DETAIL, displayName = "vectorizationSchemaColumns", explainLevels = { Level.DEFAULT, Level.EXTENDED })
-    public String getSchemaColumns() {
-      String[] projectedColumnNames = vectorTableScanDesc.getProjectedColumnNames();
-      TypeInfo[] projectedColumnTypeInfos = vectorTableScanDesc.getProjectedColumnTypeInfos();
-
-      // We currently include all data, partition, and any vectorization available
-      // virtual columns in the VRB.
-      final int size = projectedColumnNames.length;
-      int[] projectionColumns = new int[size];
-      for (int i = 0; i < size; i++) {
-        projectionColumns[i] = i;
-      }
-
-      DataTypePhysicalVariation[] projectedColumnDataTypePhysicalVariations =
-          vectorTableScanDesc.getProjectedColumnDataTypePhysicalVariations();
-
-      return BaseExplainVectorization.getColumnAndTypes(
-          projectionColumns,
-          projectedColumnNames,
-          projectedColumnTypeInfos,
-          projectedColumnDataTypePhysicalVariations).toString();
+    @Explain(vectorization = Vectorization.EXPRESSION, displayName = "projectedOutputColumns", explainLevels = { Level.DEFAULT, Level.EXTENDED })
+    public String getProjectedOutputColumns() {
+      return Arrays.toString(vectorTableScanDesc.getProjectedOutputColumns());
     }
   }
 
   @Explain(vectorization = Vectorization.OPERATOR, displayName = "TableScan Vectorization", explainLevels = { Level.DEFAULT, Level.EXTENDED })
   public TableScanOperatorExplainVectorization getTableScanVectorization() {
-    VectorTableScanDesc vectorTableScanDesc = (VectorTableScanDesc) getVectorDesc();
-    if (vectorTableScanDesc == null) {
+    if (vectorDesc == null) {
       return null;
     }
-    return new TableScanOperatorExplainVectorization(this, vectorTableScanDesc);
-  }
-
-  /*
-   * This TableScanDesc flag is strictly set by the Vectorizer class for vectorized MapWork
-   * vertices.
-   */
-  public void setVectorized(boolean vectorized) {
-    this.vectorized = vectorized;
-  }
-
-  public boolean isVectorized() {
-    return vectorized;
-  }
-
-  @Override
-  public boolean isSame(OperatorDesc other) {
-    if (getClass().getName().equals(other.getClass().getName())) {
-      TableScanDesc otherDesc = (TableScanDesc) other;
-      return Objects.equals(getQualifiedTable(), otherDesc.getQualifiedTable()) &&
-          ExprNodeDescUtils.isSame(getFilterExpr(), otherDesc.getFilterExpr()) &&
-          getRowLimit() == otherDesc.getRowLimit() &&
-          isGatherStats() == otherDesc.isGatherStats();
-    }
-    return false;
-  }
-
-  public boolean isFullAcidTable() {
-    return isTranscationalTable() && !getAcidOperationalProperties().isInsertOnly();
+    return new TableScanOperatorExplainVectorization(this, vectorDesc);
   }
 }

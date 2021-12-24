@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -70,7 +70,7 @@ public class LazyHiveDecimal extends LazyPrimitive<LazyHiveDecimalObjectInspecto
 
     // Set the HiveDecimalWritable from bytes without converting to String first for
     // better performance.
-    data.setFromBytes(bytes.getData(), start, length, true);
+    data.setFromBytes(bytes.getData(), start, length);
     if (!data.isSet()) {
       isNull = true;
     } else {
@@ -126,7 +126,7 @@ public class LazyHiveDecimal extends LazyPrimitive<LazyHiveDecimalObjectInspecto
   /**
    * Writes HiveDecimalWritable object to output stream as string
    * @param outputStream
-   * @param hiveDecimalWritable
+   * @param hiveDecimal
    * @throws IOException
    */
   public static void writeUTF8(

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -50,11 +50,11 @@ import com.google.common.collect.Multimap;
 /**
  * This optimizer is used to reduce the input size for the query for queries which are
  * specifying a limit.
- * <br>
+ * <p/>
  * For eg. for a query of type:
- * <br>
- * select expr from T where &lt;filter&lt; limit 100;
- * <br>
+ * <p/>
+ * select expr from T where <filter> limit 100;
+ * <p/>
  * Most probably, the whole table T need not be scanned.
  * Chances are that even if we scan the first file of T, we would get the 100 rows
  * needed by this query.
@@ -75,7 +75,7 @@ public class GlobalLimitOptimizer extends Transform {
     // The query only qualifies when there are only one top operator
     // and there is no transformer or UDTF and no block sampling
     // is used.
-    if (topOps.size() == 1
+    if (ctx.getTryCount() == 0 && topOps.size() == 1
         && !globalLimitCtx.ifHasTransformOrUDTF() &&
         nameToSplitSample.isEmpty()) {
 
@@ -92,44 +92,41 @@ public class GlobalLimitOptimizer extends Transform {
       //    SELECT * FROM (SELECT col1 as col2 (SELECT * FROM ...) t1 LIMIT ...) t2);
       //
       TableScanOperator ts = topOps.values().iterator().next();
-      Table tab = ts.getConf().getTableMetadata();
-      // StorageHandlers will always have empty tablePath.
-      // GenMapRedUtils.setMapWork removes empty tablePath from input dir with select-Limit
-      // InputFormat.getSplits wont be called if no input path & TS Vertex will have 0 task parallelism
-      if (tab.getStorageHandler() == null) {
-        LimitOperator tempGlobalLimit = checkQbpForGlobalLimit(ts);
-        // query qualify for the optimization
-        if (tempGlobalLimit != null) {
-          LimitDesc tempGlobalLimitDesc = tempGlobalLimit.getConf();
-          Set<FilterOperator> filterOps = OperatorUtils.findOperators(ts, FilterOperator.class);
-          if (!tab.isPartitioned()) {
-            if (filterOps.size() == 0) {
+      LimitOperator tempGlobalLimit = checkQbpForGlobalLimit(ts);
+
+      // query qualify for the optimization
+      if (tempGlobalLimit != null) {
+        LimitDesc tempGlobalLimitDesc = tempGlobalLimit.getConf();
+        Table tab = ts.getConf().getTableMetadata();
+        Set<FilterOperator> filterOps = OperatorUtils.findOperators(ts, FilterOperator.class);
+
+        if (!tab.isPartitioned()) {
+          if (filterOps.size() == 0) {
+            Integer tempOffset = tempGlobalLimitDesc.getOffset();
+            globalLimitCtx.enableOpt(tempGlobalLimitDesc.getLimit(),
+                (tempOffset == null) ? 0 : tempOffset);
+          }
+        } else {
+          // check if the pruner only contains partition columns
+          if (onlyContainsPartnCols(tab, filterOps)) {
+
+            String alias = (String) topOps.keySet().toArray()[0];
+            PrunedPartitionList partsList = pctx.getPrunedPartitions(alias, ts);
+
+            // If there is any unknown partition, create a map-reduce job for
+            // the filter to prune correctly
+            if (!partsList.hasUnknownPartitions()) {
               Integer tempOffset = tempGlobalLimitDesc.getOffset();
               globalLimitCtx.enableOpt(tempGlobalLimitDesc.getLimit(),
                   (tempOffset == null) ? 0 : tempOffset);
             }
-          } else {
-            // check if the pruner only contains partition columns
-            if (onlyContainsPartnCols(tab, filterOps)) {
-
-              String alias = (String) topOps.keySet().toArray()[0];
-              PrunedPartitionList partsList = pctx.getPrunedPartitions(alias, ts);
-
-              // If there is any unknown partition, create a map-reduce job for
-              // the filter to prune correctly
-              if (!partsList.hasUnknownPartitions()) {
-                Integer tempOffset = tempGlobalLimitDesc.getOffset();
-                globalLimitCtx.enableOpt(tempGlobalLimitDesc.getLimit(),
-                        (tempOffset == null) ? 0 : tempOffset);
-              }
-            }
           }
-          if (globalLimitCtx.isEnable()) {
-            LOG.info("Qualify the optimize that reduces input size for 'offset' for offset "
-                + globalLimitCtx.getGlobalOffset());
-            LOG.info("Qualify the optimize that reduces input size for 'limit' for limit "
-                + globalLimitCtx.getGlobalLimit());
-          }
+        }
+        if (globalLimitCtx.isEnable()) {
+          LOG.info("Qualify the optimize that reduces input size for 'offset' for offset "
+              + globalLimitCtx.getGlobalOffset());
+          LOG.info("Qualify the optimize that reduces input size for 'limit' for limit "
+              + globalLimitCtx.getGlobalLimit());
         }
       }
     }

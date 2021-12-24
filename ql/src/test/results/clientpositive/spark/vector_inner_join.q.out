@@ -16,34 +16,24 @@ POSTHOOK: Output: database:default
 POSTHOOK: Output: default@orc_table_2a
 PREHOOK: query: insert into table orc_table_1a values(1),(1), (2),(3)
 PREHOOK: type: QUERY
-PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@orc_table_1a
 POSTHOOK: query: insert into table orc_table_1a values(1),(1), (2),(3)
 POSTHOOK: type: QUERY
-POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@orc_table_1a
-POSTHOOK: Lineage: orc_table_1a.a SCRIPT []
+POSTHOOK: Lineage: orc_table_1a.a EXPRESSION [(values__tmp__table__1)values__tmp__table__1.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
 PREHOOK: query: insert into table orc_table_2a values(0),(2), (3),(null),(4)
 PREHOOK: type: QUERY
-PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@orc_table_2a
 POSTHOOK: query: insert into table orc_table_2a values(0),(2), (3),(null),(4)
 POSTHOOK: type: QUERY
-POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@orc_table_2a
-POSTHOOK: Lineage: orc_table_2a.c SCRIPT []
+POSTHOOK: Lineage: orc_table_2a.c EXPRESSION [(values__tmp__table__2)values__tmp__table__2.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
 PREHOOK: query: explain vectorization detail
 select t1.a from orc_table_2a t2 join orc_table_1a t1 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1a
-PREHOOK: Input: default@orc_table_2a
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.a from orc_table_2a t2 join orc_table_1a t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1a
-POSTHOOK: Input: default@orc_table_2a
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -62,16 +52,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 16 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 3 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -80,7 +69,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0]
+                          projectedOutputColumns: [0]
                       Statistics: Num rows: 1 Data size: 3 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -93,8 +82,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -104,7 +92,6 @@ STAGE PLANS:
                     includeColumns: [0]
                     dataColumns: c:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -116,16 +103,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 16 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:a:int, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -134,7 +120,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0]
+                          projectedOutputColumns: [0]
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -143,15 +129,13 @@ STAGE PLANS:
                           0 _col0 (type: int)
                           1 _col0 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 0:int
-                            bigTableRetainColumnNums: [0]
-                            bigTableValueColumns: 0:int
+                            bigTableKeyColumns: [0]
+                            bigTableRetainedColumns: [0]
+                            bigTableValueColumns: [0]
                             className: VectorMapJoinInnerBigOnlyLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: []
-                            projectedOutput: 0:int
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [0]
                         outputColumnNames: _col1
                         input vertices:
                           0 Map 1
@@ -162,7 +146,7 @@ STAGE PLANS:
                           Select Vectorization:
                               className: VectorSelectOperator
                               native: true
-                              projectedOutputColumnNums: [0]
+                              projectedOutputColumns: [0]
                           Statistics: Num rows: 1 Data size: 3 Basic stats: COMPLETE Column stats: NONE
                           File Output Operator
                             compressed: false
@@ -178,8 +162,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -189,7 +172,6 @@ STAGE PLANS:
                     includeColumns: [0]
                     dataColumns: a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -203,25 +185,19 @@ PREHOOK: query: select t1.a from orc_table_2a t2 join orc_table_1a t1 on t1.a = 
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1a
 PREHOOK: Input: default@orc_table_2a
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.a from orc_table_2a t2 join orc_table_1a t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1a
 POSTHOOK: Input: default@orc_table_2a
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 3
 PREHOOK: query: explain vectorization detail
 select t2.c from orc_table_2a t2 left semi join orc_table_1a t1 on t1.a = t2.c where t2.c > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1a
-PREHOOK: Input: default@orc_table_2a
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t2.c from orc_table_2a t2 left semi join orc_table_1a t1 on t1.a = t2.c where t2.c > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1a
-POSTHOOK: Input: default@orc_table_2a
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -240,16 +216,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 16 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:a:int, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -258,18 +233,16 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0]
+                          projectedOutputColumns: [0]
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         Group By Vectorization:
                             className: VectorGroupByOperator
-                            groupByMode: HASH
-                            keyExpressions: col 0:int
+                            vectorOutput: true
+                            keyExpressions: col 0
                             native: false
-                            vectorProcessingMode: HASH
-                            projectedOutputColumnNums: []
+                            projectedOutputColumns: []
                         keys: _col0 (type: int)
-                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
@@ -284,8 +257,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -295,7 +267,6 @@ STAGE PLANS:
                     includeColumns: [0]
                     dataColumns: a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -307,16 +278,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 16 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 3 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -325,7 +295,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0]
+                          projectedOutputColumns: [0]
                       Statistics: Num rows: 1 Data size: 3 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -334,15 +304,13 @@ STAGE PLANS:
                           0 _col0 (type: int)
                           1 _col0 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 0:int
-                            bigTableRetainColumnNums: [0]
-                            bigTableValueColumns: 0:int
+                            bigTableKeyColumns: [0]
+                            bigTableRetainedColumns: [0]
+                            bigTableValueColumns: [0]
                             className: VectorMapJoinLeftSemiLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: []
-                            projectedOutput: 0:int
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [0]
                         outputColumnNames: _col0
                         input vertices:
                           1 Map 2
@@ -361,8 +329,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -372,7 +339,6 @@ STAGE PLANS:
                     includeColumns: [0]
                     dataColumns: c:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -386,12 +352,12 @@ PREHOOK: query: select t2.c from orc_table_2a t2 left semi join orc_table_1a t1 
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1a
 PREHOOK: Input: default@orc_table_2a
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t2.c from orc_table_2a t2 left semi join orc_table_1a t1 on t1.a = t2.c where t2.c > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1a
 POSTHOOK: Input: default@orc_table_2a
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 3
 PREHOOK: query: CREATE TABLE orc_table_1b(v1 STRING, a INT) STORED AS ORC
 PREHOOK: type: CREATETABLE
@@ -411,36 +377,26 @@ POSTHOOK: Output: database:default
 POSTHOOK: Output: default@orc_table_2b
 PREHOOK: query: insert into table orc_table_1b values("one", 1),("one", 1), ("two", 2),("three", 3)
 PREHOOK: type: QUERY
-PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@orc_table_1b
 POSTHOOK: query: insert into table orc_table_1b values("one", 1),("one", 1), ("two", 2),("three", 3)
 POSTHOOK: type: QUERY
-POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@orc_table_1b
-POSTHOOK: Lineage: orc_table_1b.a SCRIPT []
-POSTHOOK: Lineage: orc_table_1b.v1 SCRIPT []
+POSTHOOK: Lineage: orc_table_1b.a EXPRESSION [(values__tmp__table__3)values__tmp__table__3.FieldSchema(name:tmp_values_col2, type:string, comment:), ]
+POSTHOOK: Lineage: orc_table_1b.v1 SIMPLE [(values__tmp__table__3)values__tmp__table__3.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
 PREHOOK: query: insert into table orc_table_2b values(0, "ZERO"),(2, "TWO"), (3, "THREE"),(null, "<NULL>"),(4, "FOUR")
 PREHOOK: type: QUERY
-PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@orc_table_2b
 POSTHOOK: query: insert into table orc_table_2b values(0, "ZERO"),(2, "TWO"), (3, "THREE"),(null, "<NULL>"),(4, "FOUR")
 POSTHOOK: type: QUERY
-POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@orc_table_2b
-POSTHOOK: Lineage: orc_table_2b.c SCRIPT []
-POSTHOOK: Lineage: orc_table_2b.v2 SCRIPT []
+POSTHOOK: Lineage: orc_table_2b.c EXPRESSION [(values__tmp__table__4)values__tmp__table__4.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
+POSTHOOK: Lineage: orc_table_2b.v2 SIMPLE [(values__tmp__table__4)values__tmp__table__4.FieldSchema(name:tmp_values_col2, type:string, comment:), ]
 PREHOOK: query: explain vectorization detail
 select t1.v1, t1.a from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1b
-PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.v1, t1.a from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1b
-POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -459,16 +415,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 364 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:v1:string, 1:a:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 1:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 1, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -477,7 +432,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -490,8 +445,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -501,7 +455,6 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: v1:string, a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -513,16 +466,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 456 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:v2:string, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -531,7 +483,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0]
+                          projectedOutputColumns: [0]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -540,15 +492,13 @@ STAGE PLANS:
                           0 _col0 (type: int)
                           1 _col1 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 0:int
-                            bigTableRetainColumnNums: []
+                            bigTableKeyColumns: [0]
+                            bigTableRetainedColumns: [0]
                             className: VectorMapJoinInnerLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: [0]
-                            projectedOutput: 3:string, 0:int
-                            smallTableValueMapping: 3:string
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [2, 0]
+                            smallTableMapping: [2]
                         outputColumnNames: _col1, _col2
                         input vertices:
                           1 Map 2
@@ -559,7 +509,7 @@ STAGE PLANS:
                           Select Vectorization:
                               className: VectorSelectOperator
                               native: true
-                              projectedOutputColumnNums: [3, 0]
+                              projectedOutputColumns: [2, 0]
                           Statistics: Num rows: 1 Data size: 100 Basic stats: COMPLETE Column stats: NONE
                           File Output Operator
                             compressed: false
@@ -575,8 +525,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -586,7 +535,7 @@ STAGE PLANS:
                     includeColumns: [0]
                     dataColumns: c:int, v2:string
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [string]
+                    scratchColumnTypeNames: string
             Local Work:
               Map Reduce Local Work
 
@@ -600,25 +549,19 @@ PREHOOK: query: select t1.v1, t1.a from orc_table_2b t2 join orc_table_1b t1 on 
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1b
 PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.v1, t1.a from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1b
 POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 three	3
 PREHOOK: query: explain vectorization detail
 select t1.v1, t1.a, t2.c, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1b
-PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.v1, t1.a, t2.c, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1b
-POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -637,16 +580,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 456 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:v2:string, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -655,7 +597,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -668,8 +610,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -679,7 +620,6 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: c:int, v2:string
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -691,16 +631,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 364 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:v1:string, 1:a:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 1:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 1, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -709,7 +648,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -718,16 +657,14 @@ STAGE PLANS:
                           0 _col1 (type: int)
                           1 _col0 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 1:int
-                            bigTableRetainColumnNums: [0, 1]
-                            bigTableValueColumns: 0:string, 1:int
+                            bigTableKeyColumns: [1]
+                            bigTableRetainedColumns: [0, 1]
+                            bigTableValueColumns: [0, 1]
                             className: VectorMapJoinInnerLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: []
-                            projectedOutput: 0:string, 1:int, 1:int, 3:string
-                            smallTableValueMapping: 3:string
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [0, 1, 1, 2]
+                            smallTableMapping: [2]
                         outputColumnNames: _col0, _col1, _col2, _col3
                         input vertices:
                           1 Map 2
@@ -746,8 +683,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -757,7 +693,7 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: v1:string, a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [string]
+                    scratchColumnTypeNames: string
             Local Work:
               Map Reduce Local Work
 
@@ -771,25 +707,19 @@ PREHOOK: query: select t1.v1, t1.a, t2.c, t2.v2 from orc_table_2b t2 join orc_ta
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1b
 PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.v1, t1.a, t2.c, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1b
 POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 three	3	3	THREE
 PREHOOK: query: explain vectorization detail
 select t1.v1, t1.a*2, t2.c*5, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1b
-PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.v1, t1.a*2, t2.c*5, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1b
-POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -808,26 +738,24 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 364 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:v1:string, 1:a:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 1:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 1, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
-                      expressions: v1 (type: string), a (type: int), (a * 2) (type: int)
-                      outputColumnNames: _col0, _col1, _col2
+                      expressions: v1 (type: string), a (type: int)
+                      outputColumnNames: _col0, _col1
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1, 3]
-                          selectExpressions: LongColMultiplyLongScalar(col 1:int, val 2) -> 3:int
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -840,8 +768,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -851,7 +778,6 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: v1:string, a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [bigint]
             Local Work:
               Map Reduce Local Work
 
@@ -863,26 +789,24 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 456 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:v2:string, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
-                      expressions: c (type: int), v2 (type: string), (c * 5) (type: int)
-                      outputColumnNames: _col0, _col1, _col2
+                      expressions: c (type: int), v2 (type: string)
+                      outputColumnNames: _col0, _col1
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1, 3]
-                          selectExpressions: LongColMultiplyLongScalar(col 0:int, val 5) -> 3:int
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -891,27 +815,26 @@ STAGE PLANS:
                           0 _col0 (type: int)
                           1 _col1 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 0:int
-                            bigTableRetainColumnNums: [1, 3]
-                            bigTableValueColumns: 1:string, 3:int
+                            bigTableKeyColumns: [0]
+                            bigTableRetainedColumns: [0, 1]
+                            bigTableValueColumns: [0, 1]
                             className: VectorMapJoinInnerLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: []
-                            projectedOutput: 1:string, 3:int, 4:string, 5:int
-                            smallTableValueMapping: 4:string, 5:int
-                            hashTableImplementationType: OPTIMIZED
-                        outputColumnNames: _col1, _col2, _col3, _col5
+                            projectedOutputColumns: [0, 1, 2, 0]
+                            smallTableMapping: [2]
+                        outputColumnNames: _col0, _col1, _col2, _col3
                         input vertices:
                           1 Map 2
                         Statistics: Num rows: 1 Data size: 100 Basic stats: COMPLETE Column stats: NONE
                         Select Operator
-                          expressions: _col3 (type: string), _col5 (type: int), _col2 (type: int), _col1 (type: string)
+                          expressions: _col2 (type: string), (_col3 * 2) (type: int), (_col0 * 5) (type: int), _col1 (type: string)
                           outputColumnNames: _col0, _col1, _col2, _col3
                           Select Vectorization:
                               className: VectorSelectOperator
                               native: true
-                              projectedOutputColumnNums: [4, 5, 3, 1]
+                              projectedOutputColumns: [2, 3, 4, 1]
+                              selectExpressions: LongColMultiplyLongScalar(col 0, val 2) -> 3:long, LongColMultiplyLongScalar(col 0, val 5) -> 4:long
                           Statistics: Num rows: 1 Data size: 100 Basic stats: COMPLETE Column stats: NONE
                           File Output Operator
                             compressed: false
@@ -927,8 +850,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -938,7 +860,7 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: c:int, v2:string
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [bigint, string, bigint]
+                    scratchColumnTypeNames: string, bigint, bigint
             Local Work:
               Map Reduce Local Work
 
@@ -952,25 +874,19 @@ PREHOOK: query: select t1.v1, t1.a*2, t2.c*5, t2.v2 from orc_table_2b t2 join or
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1b
 PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.v1, t1.a*2, t2.c*5, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1b
 POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 three	6	15	THREE
 PREHOOK: query: explain vectorization detail
 select t1.v1, t2.v2, t2.c from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1b
-PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.v1, t2.v2, t2.c from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1b
-POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -989,16 +905,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 364 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:v1:string, 1:a:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 1:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 1, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1007,7 +922,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -1020,8 +935,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1031,7 +945,6 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: v1:string, a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -1043,16 +956,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 456 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:v2:string, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1061,7 +973,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -1070,16 +982,14 @@ STAGE PLANS:
                           0 _col0 (type: int)
                           1 _col1 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 0:int
-                            bigTableRetainColumnNums: [0, 1]
-                            bigTableValueColumns: 0:int, 1:string
+                            bigTableKeyColumns: [0]
+                            bigTableRetainedColumns: [0, 1]
+                            bigTableValueColumns: [0, 1]
                             className: VectorMapJoinInnerLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: []
-                            projectedOutput: 0:int, 1:string, 3:string
-                            smallTableValueMapping: 3:string
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [0, 1, 2]
+                            smallTableMapping: [2]
                         outputColumnNames: _col0, _col1, _col2
                         input vertices:
                           1 Map 2
@@ -1090,7 +1000,7 @@ STAGE PLANS:
                           Select Vectorization:
                               className: VectorSelectOperator
                               native: true
-                              projectedOutputColumnNums: [3, 1, 0]
+                              projectedOutputColumns: [2, 1, 0]
                           Statistics: Num rows: 1 Data size: 100 Basic stats: COMPLETE Column stats: NONE
                           File Output Operator
                             compressed: false
@@ -1106,8 +1016,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -1117,7 +1026,7 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: c:int, v2:string
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [string]
+                    scratchColumnTypeNames: string
             Local Work:
               Map Reduce Local Work
 
@@ -1131,25 +1040,19 @@ PREHOOK: query: select t1.v1, t2.v2, t2.c from orc_table_2b t2 join orc_table_1b
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1b
 PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.v1, t2.v2, t2.c from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1b
 POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 three	THREE	3
 PREHOOK: query: explain vectorization detail
 select t1.a, t1.v1, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1b
-PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.a, t1.v1, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1b
-POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1168,16 +1071,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 364 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:v1:string, 1:a:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 1:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 1, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1186,7 +1088,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -1199,8 +1101,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1210,7 +1111,6 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: v1:string, a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -1222,16 +1122,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 456 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:v2:string, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1240,7 +1139,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -1249,16 +1148,14 @@ STAGE PLANS:
                           0 _col0 (type: int)
                           1 _col1 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 0:int
-                            bigTableRetainColumnNums: [1]
-                            bigTableValueColumns: 1:string
+                            bigTableKeyColumns: [0]
+                            bigTableRetainedColumns: [0, 1]
+                            bigTableValueColumns: [1]
                             className: VectorMapJoinInnerLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: [0]
-                            projectedOutput: 1:string, 3:string, 0:int
-                            smallTableValueMapping: 3:string
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [1, 2, 0]
+                            smallTableMapping: [2]
                         outputColumnNames: _col1, _col2, _col3
                         input vertices:
                           1 Map 2
@@ -1269,7 +1166,7 @@ STAGE PLANS:
                           Select Vectorization:
                               className: VectorSelectOperator
                               native: true
-                              projectedOutputColumnNums: [0, 3, 1]
+                              projectedOutputColumns: [0, 2, 1]
                           Statistics: Num rows: 1 Data size: 100 Basic stats: COMPLETE Column stats: NONE
                           File Output Operator
                             compressed: false
@@ -1285,8 +1182,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -1296,7 +1192,7 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: c:int, v2:string
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [string]
+                    scratchColumnTypeNames: string
             Local Work:
               Map Reduce Local Work
 
@@ -1310,25 +1206,19 @@ PREHOOK: query: select t1.a, t1.v1, t2.v2 from orc_table_2b t2 join orc_table_1b
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1b
 PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.a, t1.v1, t2.v2 from orc_table_2b t2 join orc_table_1b t1 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1b
 POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 3	three	THREE
 PREHOOK: query: explain vectorization detail
 select t1.v1, t2.v2, t2.c from orc_table_1b t1 join orc_table_2b t2 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1b
-PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.v1, t2.v2, t2.c from orc_table_1b t1 join orc_table_2b t2 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1b
-POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1347,16 +1237,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 456 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:v2:string, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1365,7 +1254,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -1378,8 +1267,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1389,7 +1277,6 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: c:int, v2:string
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -1401,16 +1288,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 364 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:v1:string, 1:a:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 1:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 1, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1419,7 +1305,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -1428,16 +1314,14 @@ STAGE PLANS:
                           0 _col1 (type: int)
                           1 _col0 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 1:int
-                            bigTableRetainColumnNums: [0]
-                            bigTableValueColumns: 0:string
+                            bigTableKeyColumns: [1]
+                            bigTableRetainedColumns: [0, 1]
+                            bigTableValueColumns: [0]
                             className: VectorMapJoinInnerLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: [1]
-                            projectedOutput: 0:string, 1:int, 3:string
-                            smallTableValueMapping: 3:string
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [0, 1, 2]
+                            smallTableMapping: [2]
                         outputColumnNames: _col0, _col2, _col3
                         input vertices:
                           1 Map 2
@@ -1448,7 +1332,7 @@ STAGE PLANS:
                           Select Vectorization:
                               className: VectorSelectOperator
                               native: true
-                              projectedOutputColumnNums: [0, 3, 1]
+                              projectedOutputColumns: [0, 2, 1]
                           Statistics: Num rows: 1 Data size: 100 Basic stats: COMPLETE Column stats: NONE
                           File Output Operator
                             compressed: false
@@ -1464,8 +1348,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -1475,7 +1358,7 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: v1:string, a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [string]
+                    scratchColumnTypeNames: string
             Local Work:
               Map Reduce Local Work
 
@@ -1489,25 +1372,19 @@ PREHOOK: query: select t1.v1, t2.v2, t2.c from orc_table_1b t1 join orc_table_2b
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1b
 PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.v1, t2.v2, t2.c from orc_table_1b t1 join orc_table_2b t2 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1b
 POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 three	THREE	3
 PREHOOK: query: explain vectorization detail
 select t1.a, t1.v1, t2.v2 from orc_table_1b t1 join orc_table_2b t2 on t1.a = t2.c where t1.a > 2
 PREHOOK: type: QUERY
-PREHOOK: Input: default@orc_table_1b
-PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: explain vectorization detail
 select t1.a, t1.v1, t2.v2 from orc_table_1b t1 join orc_table_2b t2 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@orc_table_1b
-POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1526,16 +1403,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t2
-                  filterExpr: (c > 2) (type: boolean)
                   Statistics: Num rows: 5 Data size: 456 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:c:int, 1:v2:string, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 0:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 0, val 2) -> boolean
                     predicate: (c > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1544,7 +1420,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Spark HashTable Sink Operator
                         Spark Hash Table Sink Vectorization:
@@ -1557,8 +1433,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1568,7 +1443,6 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: c:int, v2:string
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: []
             Local Work:
               Map Reduce Local Work
 
@@ -1580,16 +1454,15 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: t1
-                  filterExpr: (a > 2) (type: boolean)
                   Statistics: Num rows: 4 Data size: 364 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:v1:string, 1:a:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      projectedOutputColumns: [0, 1]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColGreaterLongScalar(col 1:int, val 2)
+                        predicateExpression: FilterLongColGreaterLongScalar(col 1, val 2) -> boolean
                     predicate: (a > 2) (type: boolean)
                     Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
@@ -1598,7 +1471,7 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [0, 1]
+                          projectedOutputColumns: [0, 1]
                       Statistics: Num rows: 1 Data size: 91 Basic stats: COMPLETE Column stats: NONE
                       Map Join Operator
                         condition map:
@@ -1607,16 +1480,14 @@ STAGE PLANS:
                           0 _col1 (type: int)
                           1 _col0 (type: int)
                         Map Join Vectorization:
-                            bigTableKeyColumns: 1:int
-                            bigTableRetainColumnNums: [0, 1]
-                            bigTableValueColumns: 0:string, 1:int
+                            bigTableKeyColumns: [1]
+                            bigTableRetainedColumns: [0, 1]
+                            bigTableValueColumns: [0, 1]
                             className: VectorMapJoinInnerLongOperator
                             native: true
                             nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine spark IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                            nonOuterSmallTableKeyMapping: []
-                            projectedOutput: 0:string, 1:int, 3:string
-                            smallTableValueMapping: 3:string
-                            hashTableImplementationType: OPTIMIZED
+                            projectedOutputColumns: [0, 1, 2]
+                            smallTableMapping: [2]
                         outputColumnNames: _col0, _col1, _col3
                         input vertices:
                           1 Map 2
@@ -1627,7 +1498,7 @@ STAGE PLANS:
                           Select Vectorization:
                               className: VectorSelectOperator
                               native: true
-                              projectedOutputColumnNums: [1, 0, 3]
+                              projectedOutputColumns: [1, 0, 2]
                           Statistics: Num rows: 1 Data size: 100 Basic stats: COMPLETE Column stats: NONE
                           File Output Operator
                             compressed: false
@@ -1643,8 +1514,7 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: [DECIMAL_64]
-                featureSupportInUse: [DECIMAL_64]
+                groupByVectorOutput: true
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -1654,7 +1524,7 @@ STAGE PLANS:
                     includeColumns: [0, 1]
                     dataColumns: v1:string, a:int
                     partitionColumnCount: 0
-                    scratchColumnTypeNames: [string]
+                    scratchColumnTypeNames: string
             Local Work:
               Map Reduce Local Work
 
@@ -1668,10 +1538,10 @@ PREHOOK: query: select t1.a, t1.v1, t2.v2 from orc_table_1b t1 join orc_table_2b
 PREHOOK: type: QUERY
 PREHOOK: Input: default@orc_table_1b
 PREHOOK: Input: default@orc_table_2b
-PREHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 POSTHOOK: query: select t1.a, t1.v1, t2.v2 from orc_table_1b t1 join orc_table_2b t2 on t1.a = t2.c where t1.a > 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@orc_table_1b
 POSTHOOK: Input: default@orc_table_2b
-POSTHOOK: Output: hdfs://### HDFS PATH ###
+#### A masked pattern was here ####
 3	three	THREE

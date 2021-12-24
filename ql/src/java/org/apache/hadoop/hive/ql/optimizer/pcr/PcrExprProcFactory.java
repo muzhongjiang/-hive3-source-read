@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,14 +28,14 @@ import java.util.Map;
 import java.util.Stack;
 
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
+import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.ExpressionWalker;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
@@ -206,7 +206,7 @@ public final class PcrExprProcFactory {
   /**
    * Processor for column expressions.
    */
-  public static class ColumnExprProcessor implements SemanticNodeProcessor {
+  public static class ColumnExprProcessor implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -214,8 +214,7 @@ public final class PcrExprProcFactory {
       ExprNodeColumnDesc cd = (ExprNodeColumnDesc) nd;
       PcrExprProcCtx epc = (PcrExprProcCtx) procCtx;
       if (cd.getTabAlias().equalsIgnoreCase(epc.getTabAlias())
-          && cd.getIsPartitionColOrVirtualCol()
-          && !VirtualColumn.VIRTUAL_COLUMN_NAMES.contains(cd.getColumn().toUpperCase())) {
+          && cd.getIsPartitionColOrVirtualCol()) {
         return new NodeInfoWrapper(WalkState.PART_COL, null, cd);
       } else {
         return new NodeInfoWrapper(WalkState.UNKNOWN, null, cd);
@@ -250,7 +249,7 @@ public final class PcrExprProcFactory {
    * If it is deterministic, we evaluate result vector if any of the children
    * is partition column. Otherwise, we pass it as it is.
    */
-  public static class GenericFuncExprProcessor implements SemanticNodeProcessor {
+  public static class GenericFuncExprProcessor implements NodeProcessor {
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
         Object... nodeOutputs) throws SemanticException {
@@ -291,7 +290,7 @@ public final class PcrExprProcFactory {
           }
         }
         return new NodeInfoWrapper(WalkState.PART_COL_STRUCT, null, getOutExpr(fd, nodeOutputs));
-      } else if (!FunctionRegistry.isConsistentWithinQuery(fd.getGenericUDF())) {
+      } else if (!FunctionRegistry.isDeterministic(fd.getGenericUDF())) {
         // If it's a non-deterministic UDF, set unknown to true
         return new NodeInfoWrapper(WalkState.UNKNOWN, null, getOutExpr(fd, nodeOutputs));
       } else {
@@ -497,7 +496,7 @@ public final class PcrExprProcFactory {
    * FieldExprProcessor.
    *
    */
-  public static class FieldExprProcessor implements SemanticNodeProcessor {
+  public static class FieldExprProcessor implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -525,7 +524,7 @@ public final class PcrExprProcFactory {
    * Processor for constants and null expressions. For such expressions the
    * processor simply returns.
    */
-  public static class DefaultExprProcessor implements SemanticNodeProcessor {
+  public static class DefaultExprProcessor implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -538,19 +537,19 @@ public final class PcrExprProcFactory {
     }
   }
 
-  public static SemanticNodeProcessor getDefaultExprProcessor() {
+  public static NodeProcessor getDefaultExprProcessor() {
     return new DefaultExprProcessor();
   }
 
-  public static SemanticNodeProcessor getGenericFuncProcessor() {
+  public static NodeProcessor getGenericFuncProcessor() {
     return new GenericFuncExprProcessor();
   }
 
-  public static SemanticNodeProcessor getFieldProcessor() {
+  public static NodeProcessor getFieldProcessor() {
     return new FieldExprProcessor();
   }
 
-  public static SemanticNodeProcessor getColumnProcessor() {
+  public static NodeProcessor getColumnProcessor() {
     return new ColumnExprProcessor();
   }
 
@@ -574,7 +573,7 @@ public final class PcrExprProcFactory {
     // Create the walker, the rules dispatcher and the context.
     PcrExprProcCtx pprCtx = new PcrExprProcCtx(tabAlias, parts, vcs);
 
-    Map<SemanticRule, SemanticNodeProcessor> exprRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> exprRules = new LinkedHashMap<Rule, NodeProcessor>();
     exprRules.put(
         new RuleRegExp("R1", ExprNodeColumnDesc.class.getName() + "%"),
         getColumnProcessor());
@@ -586,9 +585,9 @@ public final class PcrExprProcFactory {
 
     // The dispatcher fires the processor corresponding to the closest matching
     // rule and passes the context along
-    SemanticDispatcher disp = new DefaultRuleDispatcher(getDefaultExprProcessor(),
+    Dispatcher disp = new DefaultRuleDispatcher(getDefaultExprProcessor(),
         exprRules, pprCtx);
-    SemanticGraphWalker egw = new ExpressionWalker(disp);
+    GraphWalker egw = new DefaultGraphWalker(disp);
 
     List<Node> startNodes = new ArrayList<Node>();
     startNodes.add(pred);

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,12 +30,9 @@ public final class AuthenticationProviderFactory {
     LDAP("LDAP"),
     PAM("PAM"),
     CUSTOM("CUSTOM"),
-    NONE("NONE"),
-    SAML("SAML");
+    NONE("NONE");
 
     private final String authMethod;
-
-    private final HiveConf conf = new HiveConf();
 
     AuthMethods(String authMethod) {
       this.authMethod = authMethod;
@@ -43,10 +40,6 @@ public final class AuthenticationProviderFactory {
 
     public String getAuthMethod() {
       return authMethod;
-    }
-
-    public HiveConf getConf() {
-      return conf;
     }
 
     public static AuthMethods getValidAuthMethod(String authMethodStr)
@@ -65,16 +58,16 @@ public final class AuthenticationProviderFactory {
 
   public static PasswdAuthenticationProvider getAuthenticationProvider(AuthMethods authMethod)
     throws AuthenticationException {
-    return getAuthenticationProvider(authMethod, null);
+    return getAuthenticationProvider(authMethod, new HiveConf());
   }
   public static PasswdAuthenticationProvider getAuthenticationProvider(AuthMethods authMethod, HiveConf conf)
     throws AuthenticationException {
     if (authMethod == AuthMethods.LDAP) {
-      return new LdapAuthenticationProviderImpl((conf == null) ? AuthMethods.LDAP.getConf() : conf);
+      return new LdapAuthenticationProviderImpl(conf);
     } else if (authMethod == AuthMethods.PAM) {
-      return new PamAuthenticationProviderImpl((conf == null) ? AuthMethods.PAM.getConf() : conf);
+      return new PamAuthenticationProviderImpl(conf);
     } else if (authMethod == AuthMethods.CUSTOM) {
-      return new CustomAuthenticationProviderImpl((conf == null) ? AuthMethods.CUSTOM.getConf() : conf);
+      return new CustomAuthenticationProviderImpl(conf);
     } else if (authMethod == AuthMethods.NONE) {
       return new AnonymousAuthenticationProviderImpl();
     } else {

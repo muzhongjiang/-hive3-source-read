@@ -1,4 +1,3 @@
---! qt:dataset:alltypesorc
 set hive.mapred.mode=nonstrict;
 set hive.optimize.ppd=true;
 set hive.optimize.index.filter=true;
@@ -20,9 +19,3 @@ INSERT INTO TABLE acidTblDefault VALUES (1);
 -- by the following selection query.
 EXPLAIN EXTENDED
 SELECT * FROM acidTblDefault WHERE a = 1;
-
-select count(*) from acidTblDefault WHERE a = 1;
-
-set hive.tez.bucket.pruning=false;
-
-select count(*) from acidTblDefault WHERE a = 1;

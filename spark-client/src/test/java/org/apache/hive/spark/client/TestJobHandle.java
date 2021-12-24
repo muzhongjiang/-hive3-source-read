@@ -25,14 +25,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.runners.MockitoJUnitRunner;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 @RunWith(MockitoJUnitRunner.class)
 public class TestJobHandle {
 
-  @Mock private SparkClient client;
+  @Mock private SparkClientImpl client;
   @Mock private Promise<Serializable> promise;
   @Mock private JobHandle.Listener<Serializable> listener;
   @Mock private JobHandle.Listener<Serializable> listener2;

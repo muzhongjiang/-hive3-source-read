@@ -1,5 +1,3 @@
---! qt:dataset:src1
---! qt:dataset:src
 set hive.mapjoin.smalltable.filesize = 1;
 
 set hive.auto.convert.join = true;

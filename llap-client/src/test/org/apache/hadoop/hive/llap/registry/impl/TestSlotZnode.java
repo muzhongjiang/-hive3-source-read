@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,7 +33,6 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.data.Stat;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +42,7 @@ import java.net.BindException;
 import java.util.Collection;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
@@ -158,13 +158,11 @@ public class TestSlotZnode {
     }
   }
 
-  @Ignore("HIVE-23564")
   @Test
   public void testConcurrencyAndFallback() throws Exception {
     concurrencyTest(100, true);
   }
 
-  @Ignore("HIVE-23564")
   @Test
   public void testConcurrencyNoFallback() throws Exception {
     concurrencyTest(100, false);

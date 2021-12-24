@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.hive.ql.plan;
 
-import org.apache.hadoop.hive.ql.exec.vector.VectorAggregationDesc;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggregateExpression;
 
@@ -35,17 +34,17 @@ public class VectorGroupByDesc extends AbstractVectorDesc  {
   private static final long serialVersionUID = 1L;
 
   /**
-   *     GLOBAL         No key.  All rows --&gt; 1 full aggregation on end of input
+   *     GLOBAL         No key.  All rows --> 1 full aggregation on end of input
    *
-   *     HASH           Rows aggregated in to hash table on group key --&gt;
+   *     HASH           Rows aggregated in to hash table on group key -->
    *                        1 partial aggregation per key (normally, unless there is spilling)
    *
    *     MERGE_PARTIAL  As first operator in a REDUCER, partial aggregations come grouped from
-   *                    reduce-shuffle --&gt;
+   *                    reduce-shuffle -->
    *                        aggregate the partial aggregations and emit full aggregation on
    *                        endGroup / closeOp
    *
-   *     STREAMING      Rows come from PARENT operator already grouped --&gt;
+   *     STREAMING      Rows come from PARENT operator already grouped -->
    *                        aggregate the rows and emit full aggregation on key change / closeOp
    *
    *     NOTE: Hash can spill partial result rows prematurely if it runs low on memory.
@@ -61,14 +60,15 @@ public class VectorGroupByDesc extends AbstractVectorDesc  {
 
   private ProcessingMode processingMode;
 
+  private boolean isVectorOutput;
+
   private VectorExpression[] keyExpressions;
-  private VectorAggregationDesc[] vecAggrDescs;
+  private VectorAggregateExpression[] aggregators;
   private int[] projectedOutputColumns;
-  private boolean isVectorizationComplexTypesEnabled;
-  private boolean isVectorizationGroupByComplexTypesEnabled;
 
   public VectorGroupByDesc() {
     this.processingMode = ProcessingMode.NONE;
+    this.isVectorOutput = false;
   }
 
   public void setProcessingMode(ProcessingMode processingMode) {
@@ -76,6 +76,14 @@ public class VectorGroupByDesc extends AbstractVectorDesc  {
   }
   public ProcessingMode getProcessingMode() {
     return processingMode;
+  }
+
+  public boolean isVectorOutput() {
+    return isVectorOutput;
+  }
+
+  public void setVectorOutput(boolean isVectorOutput) {
+    this.isVectorOutput = isVectorOutput;
   }
 
   public void setKeyExpressions(VectorExpression[] keyExpressions) {
@@ -86,12 +94,12 @@ public class VectorGroupByDesc extends AbstractVectorDesc  {
     return keyExpressions;
   }
 
-  public void setVecAggrDescs(VectorAggregationDesc[] vecAggrDescs) {
-    this.vecAggrDescs = vecAggrDescs;
+  public void setAggregators(VectorAggregateExpression[] aggregators) {
+    this.aggregators = aggregators;
   }
 
-  public VectorAggregationDesc[] getVecAggrDescs() {
-    return vecAggrDescs;
+  public VectorAggregateExpression[] getAggregators() {
+    return aggregators;
   }
 
   public void setProjectedOutputColumns(int[] projectedOutputColumns) {
@@ -102,37 +110,21 @@ public class VectorGroupByDesc extends AbstractVectorDesc  {
     return projectedOutputColumns;
   }
 
-  public void setIsVectorizationComplexTypesEnabled(boolean isVectorizationComplexTypesEnabled) {
-    this.isVectorizationComplexTypesEnabled = isVectorizationComplexTypesEnabled;
-  }
-
-  public boolean getIsVectorizationComplexTypesEnabled() {
-    return isVectorizationComplexTypesEnabled;
-  }
-
-  public void setIsVectorizationGroupByComplexTypesEnabled(boolean isVectorizationGroupByComplexTypesEnabled) {
-    this.isVectorizationGroupByComplexTypesEnabled = isVectorizationGroupByComplexTypesEnabled;
-  }
-
-  public boolean getIsVectorizationGroupByComplexTypesEnabled() {
-    return isVectorizationGroupByComplexTypesEnabled;
-  }
-
   /**
    * Which ProcessingMode for VectorGroupByOperator?
    *
    *     Decides using GroupByDesc.Mode and whether there are keys.
    *
-   *         Mode.COMPLETE      --&gt; (numKeys == 0 ? ProcessingMode.GLOBAL : ProcessingMode.STREAMING)
+   *         Mode.COMPLETE      --> (numKeys == 0 ? ProcessingMode.GLOBAL : ProcessingMode.STREAMING)
    *
-   *         Mode.HASH          --&gt; ProcessingMode.HASH
+   *         Mode.HASH          --> ProcessingMode.HASH
    *
-   *         Mode.MERGEPARTIAL  --&gt; (numKeys == 0 ? ProcessingMode.GLOBAL : ProcessingMode.MERGE_PARTIAL)
+   *         Mode.MERGEPARTIAL  --> (numKeys == 0 ? ProcessingMode.GLOBAL : ProcessingMode.MERGE_PARTIAL)
    *
    *         Mode.PARTIAL1,
    *         Mode.PARTIAL2,
    *         Mode.PARTIALS,
-   *         Mode.FINAL        --&gt; ProcessingMode.STREAMING
+   *         Mode.FINAL        --> ProcessingMode.STREAMING
    *
    */
   public static ProcessingMode groupByDescModeToVectorProcessingMode(GroupByDesc.Mode mode,

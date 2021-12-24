@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,17 +26,15 @@ public class MaskAndFilterInfo {
   String alias;
   ASTNode astNode;
   boolean isView;
-  boolean isNonNative;
 
   public MaskAndFilterInfo(List<String> colTypes, String additionalTabInfo, String alias,
-      ASTNode astNode, boolean isView, boolean isNonNative) {
+      ASTNode astNode, boolean isView) {
     super();
     this.colTypes = colTypes;
     this.additionalTabInfo = additionalTabInfo;
     this.alias = alias;
     this.astNode = astNode;
     this.isView = isView;
-    this.isNonNative = isNonNative;
   }
 
 }

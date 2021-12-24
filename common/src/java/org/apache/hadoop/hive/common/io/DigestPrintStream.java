@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,10 +18,10 @@
 
 package org.apache.hadoop.hive.common.io;
 
+import org.apache.commons.codec.binary.Base64;
+
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Base64;
 
 public class DigestPrintStream extends FetchConverter {
 
@@ -34,12 +34,12 @@ public class DigestPrintStream extends FetchConverter {
 
   @Override
   protected void process(String out) {
-    digest.update(out.getBytes(StandardCharsets.UTF_8));
+    digest.update(out.getBytes());
   }
 
   @Override
   public void processFinal() {
-    printDirect(Base64.getEncoder().encodeToString(digest.digest()));
+    printDirect(new String(Base64.encodeBase64(digest.digest())));
     digest.reset();
   }
 }

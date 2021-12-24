@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,13 +22,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Collections;
+
+import junit.framework.TestCase;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.cli.CliSessionState;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
-import org.apache.hadoop.hive.metastore.MetaStoreTestUtils;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.MetaException;
@@ -36,24 +37,17 @@ import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.ql.DriverFactory;
-import org.apache.hadoop.hive.ql.IDriver;
+import org.apache.hadoop.hive.ql.Driver;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
-import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
+import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.security.authorization.AuthorizationPreEventListener;
 import org.apache.hadoop.hive.ql.security.authorization.DefaultHiveMetastoreAuthorizationProvider;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.junit.Assert;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import org.junit.Before;
-import org.junit.After;
-import org.junit.Test;
 
 /**
  * TestHiveMetastoreAuthorizationProvider. Test case for
@@ -70,10 +64,10 @@ import org.junit.Test;
  * This test is also intended to be extended to provide tests for other
  * authorization providers like StorageBasedAuthorizationProvider
  */
-public class TestMetastoreAuthorizationProvider {
+public class TestMetastoreAuthorizationProvider extends TestCase {
   protected HiveConf clientHiveConf;
   protected HiveMetaStoreClient msc;
-  protected IDriver driver;
+  protected Driver driver;
   protected UserGroupInformation ugi;
 
 
@@ -85,14 +79,10 @@ public class TestMetastoreAuthorizationProvider {
     return new HiveConf(this.getClass());
   }
 
-  protected String getProxyUserName() {
-    return null;
-  }
+  @Override
+  protected void setUp() throws Exception {
 
-  @Before
-  public void setUp() throws Exception {
-
-
+    super.setUp();
 
     // Turn on metastore-side authorization
     System.setProperty(HiveConf.ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname,
@@ -106,7 +96,7 @@ public class TestMetastoreAuthorizationProvider {
         InjectableDummyAuthenticator.class.getName());
     System.setProperty(HiveConf.ConfVars.HIVE_AUTHORIZATION_TABLE_OWNER_GRANTS.varname, "");
 
-    int port = MetaStoreTestUtils.startMetaStoreWithRetry();
+    int port = MetaStoreUtils.startMetaStoreWithRetry();
 
     clientHiveConf = createHiveConf();
 
@@ -124,7 +114,7 @@ public class TestMetastoreAuthorizationProvider {
 
     SessionState.start(new CliSessionState(clientHiveConf));
     msc = new HiveMetaStoreClient(clientHiveConf);
-    driver = DriverFactory.newDriver(clientHiveConf);
+    driver = new Driver(clientHiveConf);
   }
 
   protected void setupMetaStoreReadAuthorization() {
@@ -134,9 +124,9 @@ public class TestMetastoreAuthorizationProvider {
     System.setProperty(HiveConf.ConfVars.HIVE_METASTORE_AUTHORIZATION_AUTH_READS.varname, "false");
   }
 
-  @After
-  public void tearDown() throws Exception {
-
+  @Override
+  protected void tearDown() throws Exception {
+    super.tearDown();
   }
 
   private void validateCreateDb(Database expectedDb, String dbName) {
@@ -165,50 +155,49 @@ public class TestMetastoreAuthorizationProvider {
     return ugi.getUserName();
   }
 
-  @Test
   public void testSimplePrivileges() throws Exception {
     if (!isTestEnabled()) {
       System.out.println("Skipping test " + this.getClass().getName());
       return;
     }
+
     String dbName = getTestDbName();
     String tblName = getTestTableName();
     String userName = setupUser();
-    String loc = clientHiveConf.get(HiveConf.ConfVars.HIVE_METASTORE_WAREHOUSE_EXTERNAL.varname) + "/" + dbName;
-    String mLoc = clientHiveConf.get(HiveConf.ConfVars.METASTOREWAREHOUSE.varname) + "/" + dbName;
+
     allowCreateDatabase(userName);
-    driver.run("create database " + dbName + " location '" + loc + "' managedlocation '" + mLoc + "'");
+
+    CommandProcessorResponse ret = driver.run("create database " + dbName);
+    assertEquals(0,ret.getResponseCode());
     Database db = msc.getDatabase(dbName);
-    String dbLocn = db.getManagedLocationUri();
-    validateCreateDb(db, dbName);
-    allowCreateInDb(dbName, userName, dbLocn);
+    String dbLocn = db.getLocationUri();
+
+    validateCreateDb(db,dbName);
     disallowCreateInDb(dbName, userName, dbLocn);
+
     disallowCreateDatabase(userName);
+
     driver.run("use " + dbName);
-    try {
-      driver.run(String.format("create table %s (a string) partitioned by (b string)", tblName));
-      assert false;
-    } catch (CommandProcessorException e) {
-      assertEquals(40000, e.getResponseCode());
-    }
+    ret = driver.run(
+        String.format("create table %s (a string) partitioned by (b string)", tblName));
+
+    assertEquals(1,ret.getResponseCode());
 
     // Even if table location is specified table creation should fail
     String tblNameLoc = tblName + "_loc";
     String tblLocation = new Path(dbLocn).getParent().toUri() + "/" + tblNameLoc;
 
-    if (mayTestLocation()) {
-      driver.run("use " + dbName);
-      try {
-        driver.run(String.format(
-            "create table %s (a string) partitioned by (b string) location '" +tblLocation + "'", tblNameLoc));
-      } catch (CommandProcessorException e) {
-        assertEquals(40000, e.getResponseCode());
-      }
-    }
+    driver.run("use " + dbName);
+    ret = driver.run(
+        String.format("create table %s (a string) partitioned by (b string) location '" +
+            tblLocation + "'", tblNameLoc));
+    assertEquals(1, ret.getResponseCode());
 
     // failure from not having permissions to create table
+
     ArrayList<FieldSchema> fields = new ArrayList<FieldSchema>(2);
     fields.add(new FieldSchema("a", serdeConstants.STRING_TYPE_NAME, ""));
+
     Table ttbl = new Table();
     ttbl.setDbName(dbName);
     ttbl.setTableName(tblName);
@@ -237,22 +226,24 @@ public class TestMetastoreAuthorizationProvider {
     assertNoPrivileges(me);
 
     allowCreateInDb(dbName, userName, dbLocn);
-    driver.run("use " + dbName);
-    driver.run(String.format("create table %s (a string) partitioned by (b string)", tblName));
 
+    driver.run("use " + dbName);
+    ret = driver.run(
+        String.format("create table %s (a string) partitioned by (b string)", tblName));
+
+    assertEquals(0,ret.getResponseCode()); // now it succeeds.
     Table tbl = msc.getTable(dbName, tblName);
-    Assert.assertTrue(tbl.isSetId());
-    tbl.unsetId();
-    validateCreateTable(tbl, tblName, dbName);
+
+    validateCreateTable(tbl,tblName, dbName);
 
     // Table creation should succeed even if location is specified
-    if (mayTestLocation()) {
-      driver.run("use " + dbName);
-      driver.run(String.format(
-          "create table %s (a string) partitioned by (b string) location '" + tblLocation + "'", tblNameLoc));
-      Table tblLoc = msc.getTable(dbName, tblNameLoc);
-      validateCreateTable(tblLoc, tblNameLoc, dbName);
-    }
+    driver.run("use " + dbName);
+    ret = driver.run(
+        String.format("create table %s (a string) partitioned by (b string) location '" +
+            tblLocation + "'", tblNameLoc));
+    assertEquals(0, ret.getResponseCode());
+    Table tblLoc = msc.getTable(dbName, tblNameLoc);
+    validateCreateTable(tblLoc, tblNameLoc, dbName);
 
     String fakeUser = "mal";
     List<String> fakeGroupNames = new ArrayList<String>();
@@ -262,11 +253,10 @@ public class TestMetastoreAuthorizationProvider {
     InjectableDummyAuthenticator.injectGroupNames(fakeGroupNames);
     InjectableDummyAuthenticator.injectMode(true);
 
-    try {
-      driver.run(String.format("create table %s (a string) partitioned by (b string)", tblName+"mal"));
-    } catch (CommandProcessorException e) {
-      assertEquals(40000, e.getResponseCode());
-    }
+    ret = driver.run(
+        String.format("create table %s (a string) partitioned by (b string)", tblName+"mal"));
+
+    assertEquals(1,ret.getResponseCode());
 
     ttbl.setTableName(tblName+"mal");
     me = null;
@@ -277,13 +267,9 @@ public class TestMetastoreAuthorizationProvider {
     }
     assertNoPrivileges(me);
 
-    allowCreateInTbl(tbl.getTableName(), userName, tbl.getSd().getLocation());
     disallowCreateInTbl(tbl.getTableName(), userName, tbl.getSd().getLocation());
-    try {
-      driver.run("alter table "+tblName+" add partition (b='2011')");
-    } catch (CommandProcessorException e) {
-      assertEquals(40000, e.getResponseCode());
-    }
+    ret = driver.run("alter table "+tblName+" add partition (b='2011')");
+    assertEquals(1,ret.getResponseCode());
 
     List<String> ptnVals = new ArrayList<String>();
     ptnVals.add("b=2011");
@@ -307,46 +293,26 @@ public class TestMetastoreAuthorizationProvider {
     InjectableDummyAuthenticator.injectMode(false);
     allowCreateInTbl(tbl.getTableName(), userName, tbl.getSd().getLocation());
 
-    driver.run("alter table "+tblName+" add partition (b='2011')");
-
-    String proxyUserName = getProxyUserName();
-    if (proxyUserName != null) {
-      // for storage based authorization, user having proxy privilege should be allowed to do operation
-      // even if the file permission is not there.
-      InjectableDummyAuthenticator.injectUserName(proxyUserName);
-      InjectableDummyAuthenticator.injectGroupNames(Collections.singletonList(proxyUserName));
-      InjectableDummyAuthenticator.injectMode(true);
-      disallowCreateInTbl(tbl.getTableName(), proxyUserName, tbl.getSd().getLocation());
-      driver.run("alter table "+tblName+" add partition (b='2012')");
-      InjectableDummyAuthenticator.injectMode(false);
-    }
+    ret = driver.run("alter table "+tblName+" add partition (b='2011')");
+    assertEquals(0,ret.getResponseCode());
 
     allowDropOnTable(tblName, userName, tbl.getSd().getLocation());
-    allowDropOnDb(dbName, userName, db.getLocationUri());
-    driver.run("drop database if exists "+getTestDbName()+" cascade");
+    allowDropOnDb(dbName,userName,db.getLocationUri());
+    ret = driver.run("drop database if exists "+getTestDbName()+" cascade");
+    assertEquals(0,ret.getResponseCode());
 
     InjectableDummyAuthenticator.injectUserName(userName);
     InjectableDummyAuthenticator.injectGroupNames(Arrays.asList(ugi.getGroupNames()));
     InjectableDummyAuthenticator.injectMode(true);
     allowCreateDatabase(userName);
     driver.run("create database " + dbName);
-    db = msc.getDatabase(dbName);
-    dbLocn = db.getLocationUri();
     allowCreateInDb(dbName, userName, dbLocn);
     tbl.setTableType("EXTERNAL_TABLE");
     msc.createTable(tbl);
-
-    allowDropOnTable(tblName, userName, tbl.getSd().getLocation());
     disallowDropOnTable(tblName, userName, tbl.getSd().getLocation());
-    try {
-      driver.run("drop table "+tbl.getTableName());
-    } catch (CommandProcessorException e) {
-      assertEquals(40000, e.getResponseCode());
-    }
-  }
+    ret = driver.run("drop table "+tbl.getTableName());
+    assertEquals(1,ret.getResponseCode());
 
-  protected boolean mayTestLocation() {
-    return true;
   }
 
   protected void allowCreateDatabase(String userName)

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +22,6 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hive.common.JavaUtils;
 import org.apache.hadoop.hive.ql.exec.Description;
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
@@ -34,8 +33,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.Pr
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.StringObjectInspector;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A simple generic udf to call java static functions via reflection.
@@ -45,7 +42,6 @@ import org.slf4j.LoggerFactory;
   extended = "Use this UDF to call Java methods by matching the argument signature\n")
 @UDFType(deterministic = false)
 public class GenericUDFReflect extends AbstractGenericUDFReflect {
-  private static final Logger LOG = LoggerFactory.getLogger(GenericUDFReflect.class);
 
   private transient StringObjectInspector inputClassNameOI;
   private transient StringObjectInspector inputMethodNameOI;
@@ -109,18 +105,13 @@ public class GenericUDFReflect extends AbstractGenericUDFReflect {
       try {
         c = JavaUtils.loadClass(classNameString);
       } catch (ClassNotFoundException ex) {
-        throw new HiveException(String.format("UDFReflect evaluate error while loading class %s", classNameString), ex);
+        throw new HiveException("UDFReflect evaluate ", ex);
       }
       try {
         o = null;
         o = ReflectionUtils.newInstance(c, null);
       } catch (Exception e) {
-        if (e.getCause() instanceof NoSuchMethodException){
-          // still could be okay while using a static method of a class that hasn't got a default/parameterless constructor
-          LOG.trace("ignoring NoSuchMethodException while instantiating class", e);
-        }else{
-          throw new HiveException(String.format("UDFReflect evaluate error while instantiating class %s", classNameString), e);
-        }
+        // ignored
       }
       classNameChanged = true;
     }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,14 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import java.util.Arrays;
-
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * Cast a string to a decimal.
@@ -36,19 +33,24 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  */
 public class CastStringToDecimal extends VectorExpression {
   private static final long serialVersionUID = 1L;
+  int inputColumn;
+  int outputColumn;
 
-  public CastStringToDecimal(int inputColumn, int outputColumnNum) {
-    super(inputColumn, outputColumnNum);
+  public CastStringToDecimal(int inputColumn, int outputColumn) {
+    this.inputColumn = inputColumn;
+    this.outputColumn = outputColumn;
+    this.outputType = "decimal";
   }
 
   public CastStringToDecimal() {
     super();
+    this.outputType = "decimal";
   }
 
   /**
    * Convert input string to a decimal, at position i in the respective vectors.
    */
-  protected void func(DecimalColumnVector outputColVector, BytesColumnVector inputColVector, int i) {
+  protected void func(DecimalColumnVector outV, BytesColumnVector inV, int i) {
     String s;
     try {
 
@@ -56,30 +58,27 @@ public class CastStringToDecimal extends VectorExpression {
        * e.g. by converting to decimal from the input bytes directly without
        * making a new string.
        */
-      s = new String(inputColVector.vector[i], inputColVector.start[i], inputColVector.length[i], "UTF-8");
-      outputColVector.set(i, HiveDecimal.create(s));
+      s = new String(inV.vector[i], inV.start[i], inV.length[i], "UTF-8");
+      outV.vector[i].set(HiveDecimal.create(s));
     } catch (Exception e) {
 
       // for any exception in conversion to decimal, produce NULL
-      outputColVector.noNulls = false;
-      outputColVector.isNull[i] = true;
+      outV.noNulls = false;
+      outV.isNull[i] = true;
     }
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    BytesColumnVector inputColVector = (BytesColumnVector) batch.cols[inputColumnNum[0]];
+    BytesColumnVector inV = (BytesColumnVector) batch.cols[inputColumn];
     int[] sel = batch.selected;
     int n = batch.size;
-    DecimalColumnVector outputColVector = (DecimalColumnVector) batch.cols[outputColumnNum];
-
-    boolean[] inputIsNull = inputColVector.isNull;
-    boolean[] outputIsNull = outputColVector.isNull;
+    DecimalColumnVector outV = (DecimalColumnVector) batch.cols[outputColumn];
 
     if (n == 0) {
 
@@ -87,89 +86,76 @@ public class CastStringToDecimal extends VectorExpression {
       return;
     }
 
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
-    if (inputColVector.isRepeating) {
-      if (inputColVector.noNulls || !inputIsNull[0]) {
-        // Set isNull before call in case it changes it mind.
-        outputIsNull[0] = false;
-        func(outputColVector, inputColVector, 0);
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-      }
-      outputColVector.isRepeating = true;
-      return;
-    }
-
-    if (inputColVector.noNulls) {
-      if (batch.selectedInUse) {
-
-        // CONSIDER: For large n, fill n or all of isNull array and use the tighter ELSE loop.
-
-        if (!outputColVector.noNulls) {
-          for(int j = 0; j != n; j++) {
-           final int i = sel[j];
-           // Set isNull before call in case it changes it mind.
-           outputIsNull[i] = false;
-           func(outputColVector, inputColVector, i);
-         }
-        } else {
-          for(int j = 0; j != n; j++) {
-            final int i = sel[j];
-            func(outputColVector, inputColVector, i);
-          }
-        }
-      } else {
-        if (!outputColVector.noNulls) {
-
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
-        }
-        for(int i = 0; i != n; i++) {
-          func(outputColVector, inputColVector, i);
-        }
-      }
-    } else /* there are NULLs in the inputColVector */ {
-
-      /*
-       * Do careful maintenance of the outputColVector.noNulls flag.
-       */
-
-      if (batch.selectedInUse) {
+    if (inV.noNulls) {
+      outV.noNulls = true;
+      if (inV.isRepeating) {
+        outV.isRepeating = true;
+        func(outV, inV, 0);
+      } else if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
-          if (!inputColVector.isNull[i]) {
-            // Set isNull before call in case it changes it mind.
-            outputColVector.isNull[i] = false;
-            func(outputColVector, inputColVector, i);
-          } else {
-            outputColVector.isNull[i] = true;
-            outputColVector.noNulls = false;
-          }
+          func(outV, inV, i);
         }
+        outV.isRepeating = false;
       } else {
-        System.arraycopy(inputColVector.isNull, 0, outputColVector.isNull, 0, n);
         for(int i = 0; i != n; i++) {
-          if (!inputColVector.isNull[i]) {
-            // Set isNull before call in case it changes it mind.
-            outputColVector.isNull[i] = false;
-            func(outputColVector, inputColVector, i);
-          } else {
-            outputColVector.isNull[i] = true;
-            outputColVector.noNulls = false;
+          func(outV, inV, i);
+        }
+        outV.isRepeating = false;
+      }
+    } else {
+
+      // Handle case with nulls. Don't do function if the value is null,
+      // because the data may be undefined for a null value.
+      outV.noNulls = false;
+      if (inV.isRepeating) {
+        outV.isRepeating = true;
+        outV.isNull[0] = inV.isNull[0];
+        if (!inV.isNull[0]) {
+          func(outV, inV, 0);
+        }
+      } else if (batch.selectedInUse) {
+        for(int j = 0; j != n; j++) {
+          int i = sel[j];
+          outV.isNull[i] = inV.isNull[i];
+          if (!inV.isNull[i]) {
+            func(outV, inV, i);
           }
         }
+        outV.isRepeating = false;
+      } else {
+        System.arraycopy(inV.isNull, 0, outV.isNull, 0, n);
+        for(int i = 0; i != n; i++) {
+          if (!inV.isNull[i]) {
+            func(outV, inV, i);
+          }
+        }
+        outV.isRepeating = false;
       }
     }
   }
 
+
+  @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  public void setOutputColumn(int outputColumn) {
+    this.outputColumn = outputColumn;
+  }
+
+  public int getInputColumn() {
+    return inputColumn;
+  }
+
+  public void setInputColumn(int inputColumn) {
+    this.inputColumn = inputColumn;
+  }
+
   @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]);
+    return "col " + inputColumn;
   }
 
   @Override

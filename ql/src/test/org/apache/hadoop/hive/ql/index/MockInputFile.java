@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -74,8 +74,7 @@ public final class MockInputFile {
       DefaultSplitLengthStep {
 
     private String path;
-    public static final long DEFAULT_SPLIT_SIZE = 1024 * 1024;
-    private long defaultSplitSize = DEFAULT_SPLIT_SIZE;
+    private long defaultSplitSize = SplitFilterTestCase.DEFAULT_SPLIT_SIZE;;
     private final List<HiveInputSplit> splits = new ArrayList<>();
     private final List<HiveInputSplit> selectedSplits = new ArrayList<>();
     private long position = 0;

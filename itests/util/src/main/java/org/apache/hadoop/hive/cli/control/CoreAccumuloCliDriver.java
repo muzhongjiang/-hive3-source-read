@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,25 +18,18 @@
 package org.apache.hadoop.hive.cli.control;
 
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.File;
-
 import org.apache.hadoop.hive.accumulo.AccumuloQTestUtil;
 import org.apache.hadoop.hive.accumulo.AccumuloTestSetup;
-import org.apache.hadoop.hive.ql.QTestProcessExecResult;
-import org.apache.hadoop.hive.ql.QTestUtil;
-import org.apache.hadoop.hive.ql.QTestMiniClusters.MiniClusterType;
-import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
+import org.apache.hadoop.hive.ql.QTestUtil.MiniClusterType;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.internal.AssumptionViolatedException;
 
 public class CoreAccumuloCliDriver extends CliAdapter {
 
   private AccumuloQTestUtil qt;
+  private static AccumuloTestSetup setup;
 
   public CoreAccumuloCliDriver(AbstractCliConfig cliConfig) {
     super(cliConfig);
@@ -45,38 +38,26 @@ public class CoreAccumuloCliDriver extends CliAdapter {
   @Override
   @BeforeClass
   public void beforeClass() {
+    setup = new AccumuloTestSetup();
+  }
+  @Override
+  @AfterClass
+  public void shutdown() throws Exception {
+    setup.tearDown();
+  }
+  @Override
+  @Before
+  public void setUp() {
+
     MiniClusterType miniMR = cliConfig.getClusterType();
     String initScript = cliConfig.getInitScript();
     String cleanupScript = cliConfig.getCleanupScript();
 
     try {
       qt = new AccumuloQTestUtil(cliConfig.getResultsDir(), cliConfig.getLogDir(), miniMR,
-          new AccumuloTestSetup(), initScript, cleanupScript);
+          setup, initScript, cleanupScript);
     } catch (Exception e) {
-      throw new RuntimeException("Unexpected exception in setUp", e);
-    }
-  }
-
-  @Override
-  @AfterClass
-  public void shutdown() {
-    try {
-      qt.shutdown();
-    } catch (Exception e) {
-      throw new RuntimeException("Unexpected exception in tearDown", e);
-    }
-  }
-
-  @Override
-  @Before
-  public void setUp() {
-    try {
-      qt.newSession();
-    } catch (Exception e) {
-      System.err.println("Exception: " + e.getMessage());
-      e.printStackTrace();
-      System.err.flush();
-      fail("Unexpected exception in setup");
+      throw new RuntimeException("Unexpected exception in setUp",e);
     }
   }
 
@@ -84,46 +65,41 @@ public class CoreAccumuloCliDriver extends CliAdapter {
   @After
   public void tearDown() {
     try {
-      qt.clearPostTestEffects();
-      qt.clearTestSideEffects();
-    } catch (Exception e) {
-      System.err.println("Exception: " + e.getMessage());
-      e.printStackTrace();
-      System.err.flush();
-      fail("Unexpected exception in tearDown");
+      qt.shutdown();
+    }
+    catch (Exception e) {
+      throw new RuntimeException("Unexpected exception in tearDown",e);
     }
   }
 
   @Override
-  protected QTestUtil getQt() {
-    return qt;
-  }
-
-  @Override
-  public void runTest(String tname, String fname, String fpath) {
+  public void runTest(String tname, String fname, String fpath) throws Exception {
     long startTime = System.currentTimeMillis();
     try {
       System.err.println("Begin query: " + fname);
 
       qt.addFile(fpath);
-      qt.cliInit(new File(fpath));
 
-      try {
-        qt.executeClient(fname);
-      } catch (CommandProcessorException e) {
-        qt.failedQuery(e.getCause(), e.getResponseCode(), fname, null);
+      if (qt.shouldBeSkipped(fname)) {
+        System.err.println("Test " + fname + " skipped");
+        return;
       }
 
-      QTestProcessExecResult result = qt.checkCliDriverResults(fname);
-      if (result.getReturnCode() != 0) {
-        qt.failedDiff(result.getReturnCode(), fname, result.getCapturedOutput());
+      qt.cliInit(fname);
+      qt.clearTestSideEffects();
+      int ecode = qt.executeClient(fname);
+      if (ecode != 0) {
+        qt.failed(ecode, fname, null);
+      }
+
+      ecode = qt.checkCliDriverResults(fname);
+      if (ecode != 0) {
+        qt.failedDiff(ecode, fname, null);
       }
       qt.clearPostTestEffects();
 
-    } catch (AssumptionViolatedException e) {
-      throw e;
-    } catch (Exception e) {
-      qt.failedWithException(e, fname, null);
+    } catch (Throwable e) {
+      qt.failed(e, fname, null);
     }
 
     long elapsedTime = System.currentTimeMillis() - startTime;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,11 +26,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 class Reflector {
   private final BeeLine beeLine;
@@ -109,32 +107,22 @@ class Reflector {
     }
     if (toType == String.class) {
       return new String(ob.toString());
-    } else if (toType == Map.class) {
-      String[] vars = ob.toString().split(",");
-      Map<String, String> keyValMap = new HashMap<>();
-      for (String keyValStr : vars) {
-        String[] keyVal = keyValStr.trim().split("=", 2);
-        if (keyVal.length == 2) {
-          keyValMap.put(keyVal[0], keyVal[1]);
-        }
-      }
-      return keyValMap;
     } else if (toType == Byte.class || toType == byte.class) {
-      return Byte.valueOf(ob.toString());
+      return new Byte(ob.toString());
     } else if (toType == Character.class || toType == char.class) {
-      return Character.valueOf(ob.toString().charAt(0));
+      return new Character(ob.toString().charAt(0));
     } else if (toType == Short.class || toType == short.class) {
-      return Short.valueOf(ob.toString());
+      return new Short(ob.toString());
     } else if (toType == Integer.class || toType == int.class) {
-      return Integer.valueOf(ob.toString());
+      return new Integer(ob.toString());
     } else if (toType == Long.class || toType == long.class) {
-      return Long.valueOf(ob.toString());
+      return new Long(ob.toString());
     } else if (toType == Double.class || toType == double.class) {
-      return Double.valueOf(ob.toString());
+      return new Double(ob.toString());
     } else if (toType == Float.class || toType == float.class) {
-      return Float.valueOf(ob.toString());
+      return new Float(ob.toString());
     } else if (toType == Boolean.class || toType == boolean.class) {
-      return Boolean.valueOf(ob.toString().equals("true")
+      return new Boolean(ob.toString().equals("true")
           || ob.toString().equals(true + "")
           || ob.toString().equals("1")
           || ob.toString().equals("on")

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,7 +28,6 @@ import java.util.concurrent.TimeoutException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.shims.HadoopShimsSecure;
@@ -179,9 +178,8 @@ public class LauncherDelegator extends TempletonDelegator {
                      List<String> args, TempletonControllerJob controllerJob)
     throws NotAuthorizedException, BusyException,
     IOException, QueueException {
-    UserGroupInformation ugi = null;
     try {
-      ugi = UgiFactory.getUgi(user);
+      UserGroupInformation ugi = UgiFactory.getUgi(user);
 
       final long startTime = System.nanoTime();
 
@@ -199,17 +197,15 @@ public class LauncherDelegator extends TempletonDelegator {
       return new EnqueueBean(id);
     } catch (InterruptedException e) {
       throw new QueueException("Unable to launch job " + e);
-    } finally {
-      if (ugi != null) {
-        FileSystem.closeAllForUGI(ugi);
-      }
     }
   }
 
   private String queueAsUser(UserGroupInformation ugi, final List<String> args,
                             final TempletonControllerJob controllerJob)
     throws IOException, InterruptedException {
-    LOG.debug("Launching job: {}", args);
+    if(LOG.isDebugEnabled()) {
+      LOG.debug("Launching job: " + args);
+    }
     return ugi.doAs(new PrivilegedExceptionAction<String>() {
       public String run() throws Exception {
         runTempletonControllerJob(controllerJob, args);
@@ -348,35 +344,24 @@ public class LauncherDelegator extends TempletonDelegator {
    */
   private String getShimLibjars() {
     WebHCatJTShim shim = null;
-    UserGroupInformation ugi = null;
     try {
-      ugi = UserGroupInformation.getCurrentUser();
-      shim = ShimLoader.getHadoopShims().getWebHCatShim(appConf, ugi);
-
-      // Besides the HiveShims jar which is Hadoop version dependent we also
-      // always need to include hive shims common jars.
-      Path shimCommonJar = new Path(
-          TempletonUtils.findContainingJar(ShimLoader.class, HIVE_SHIMS_FILENAME_PATTERN));
-      Path shimCommonSecureJar = new Path(
-          TempletonUtils.findContainingJar(HadoopShimsSecure.class, HIVE_SHIMS_FILENAME_PATTERN));
-      Path shimJar = new Path(
-          TempletonUtils.findContainingJar(shim.getClass(), HIVE_SHIMS_FILENAME_PATTERN));
-
-      return String.format(
-          "%s,%s,%s",
-          shimCommonJar.toString(), shimCommonSecureJar.toString(), shimJar.toString());
+      shim = ShimLoader.getHadoopShims().getWebHCatShim(appConf, UserGroupInformation.getCurrentUser());
     } catch (IOException e) {
-      throw new RuntimeException("Failed to get shimLibJars", e);
-    } finally {
-      try {
-        if (ugi != null) {
-          FileSystem.closeAllForUGI(ugi);
-        }
-      } catch (IOException e) {
-        throw new RuntimeException("Failed to closeAllForUGI", e);
-      }
+      throw new RuntimeException("Failed to get WebHCatShim", e);
     }
 
+    // Besides the HiveShims jar which is Hadoop version dependent we also
+    // always need to include hive shims common jars.
+    Path shimCommonJar = new Path(
+        TempletonUtils.findContainingJar(ShimLoader.class, HIVE_SHIMS_FILENAME_PATTERN));
+    Path shimCommonSecureJar = new Path(
+        TempletonUtils.findContainingJar(HadoopShimsSecure.class, HIVE_SHIMS_FILENAME_PATTERN));
+    Path shimJar = new Path(
+        TempletonUtils.findContainingJar(shim.getClass(), HIVE_SHIMS_FILENAME_PATTERN));
+
+    return String.format(
+        "%s,%s,%s",
+        shimCommonJar.toString(), shimCommonSecureJar.toString(), shimJar.toString());
   }
 
   // Storage vars

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.serde2.io;
 
 import org.apache.hadoop.hive.common.type.HiveBaseChar;
 import org.apache.hadoop.hive.common.type.HiveChar;
+import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hive.common.util.HiveStringUtils;
@@ -52,7 +53,6 @@ public class HiveCharWritable extends HiveBaseCharWritable
 
   public void set(HiveCharWritable val) {
     value.set(val.value);
-    charLength = -1;
   }
 
   public void set(HiveCharWritable val, int maxLength) {
@@ -78,10 +78,9 @@ public class HiveCharWritable extends HiveBaseCharWritable
   }
 
   public Text getStrippedValue() {
-    if (value.charAt(value.getLength() - 1) != ' ') {
-      return value;
-    }
-    return new Text(HiveCharWritable.stripTrailingWhitespace(value));
+    // A lot of these methods could be done more efficiently by operating on the Text value
+    // directly, rather than converting to HiveChar.
+    return new Text(getHiveChar().getStrippedValue());
   }
 
   public Text getPaddedValue() {
@@ -89,11 +88,7 @@ public class HiveCharWritable extends HiveBaseCharWritable
   }
 
   public int getCharacterLength() {
-    if (charLength != -1) {
-      return charLength;
-    }
-    charLength = HiveStringUtils.getTextUtfLength(getStrippedValue());
-    return charLength;
+    return HiveStringUtils.getTextUtfLength(getStrippedValue());
   }
 
   public int compareTo(HiveCharWritable rhs) {
@@ -117,16 +112,5 @@ public class HiveCharWritable extends HiveBaseCharWritable
   @Override
   public String toString() {
     return getPaddedValue().toString();
-  }
-
-  public static byte[] stripTrailingWhitespace(Text valueToStrip) {
-    byte[] input = valueToStrip.getBytes();
-    int i = input.length;
-    // iterate from end while we see space or 0x character
-    while (i-- > 0 && (input[i] == 32 || input[i] == 0)) {
-    }
-    byte[] output = new byte[i + 1];
-    System.arraycopy(input, 0, output, 0, i + 1);
-    return output;
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
-import org.apache.calcite.rel.RelDistributions;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveRelNode;
 
 public class TraitsUtil {
@@ -33,8 +32,7 @@ public class TraitsUtil {
   }
 
   public static RelTraitSet getDefaultTraitSet(RelOptCluster cluster) {
-    return cluster.traitSet()
-        .replace(HiveRelNode.CONVENTION).replace(RelCollations.EMPTY).replace(RelDistributions.ANY);
+    return cluster.traitSetOf(HiveRelNode.CONVENTION, RelCollations.EMPTY);
   }
 
   public static RelTraitSet getDefaultTraitSet(RelOptCluster cluster, RelTraitSet traitsFromInput) {

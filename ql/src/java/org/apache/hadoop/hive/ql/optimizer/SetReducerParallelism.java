@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,8 +29,9 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
+import org.apache.hadoop.hive.ql.optimizer.stats.annotation.StatsRulesProcFactory;
 import org.apache.hadoop.hive.ql.parse.OptimizeTezProcContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc.ExprNodeDescEqualityWrapper;
@@ -40,20 +41,19 @@ import org.apache.hadoop.hive.ql.stats.StatsUtils;
 
 import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.AUTOPARALLEL;
 import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.UNIFORM;
-import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.FIXED;
 
 /**
  * SetReducerParallelism determines how many reducers should
  * be run for a given reduce sink.
  */
-public class SetReducerParallelism implements SemanticNodeProcessor {
+public class SetReducerParallelism implements NodeProcessor {
 
   private static final Logger LOG = LoggerFactory.getLogger(SetReducerParallelism.class.getName());
 
   @SuppressWarnings("unchecked")
   @Override
   public Object process(Node nd, Stack<Node> stack,
-                        NodeProcessorCtx procContext, Object... nodeOutputs)
+      NodeProcessorCtx procContext, Object... nodeOutputs)
       throws SemanticException {
 
     OptimizeTezProcContext context = (OptimizeTezProcContext) procContext;
@@ -106,7 +106,6 @@ public class SetReducerParallelism implements SemanticNodeProcessor {
       }
     } else {
       LOG.info("Number of reducers determined to be: "+desc.getNumReducers());
-      desc.setReducerTraits(EnumSet.of(FIXED)); // usually controlled by bucketing
     }
 
     return false;

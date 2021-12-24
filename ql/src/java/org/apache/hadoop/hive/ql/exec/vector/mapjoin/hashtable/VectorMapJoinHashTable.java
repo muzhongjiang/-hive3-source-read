@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,8 +20,6 @@ package org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hive.common.MemoryEstimate;
-import org.apache.hadoop.hive.ql.exec.persistence.MatchTracker;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.io.BytesWritable;
@@ -30,7 +28,8 @@ import org.apache.hadoop.io.BytesWritable;
  * Root interface for a vector map join hash table (which could be a hash map, hash multi-set, or
  * hash set).
  */
-public interface VectorMapJoinHashTable extends MemoryEstimate {
+public interface VectorMapJoinHashTable {
+
 
   /*
    * @param currentKey
@@ -42,22 +41,7 @@ public interface VectorMapJoinHashTable extends MemoryEstimate {
       throws SerDeException, HiveException, IOException;
 
   /**
-   *
-   * @param currentKey
-   *          The key to check for existence.
-   * @return true
-   *          If HashTable contains the given key.
-   */
-  boolean containsLongKey(long currentKey);
-
-  /**
    * Get hash table size
    */
   int size();
-
-  MatchTracker createMatchTracker();
-
-  VectorMapJoinNonMatchedIterator createNonMatchedIterator(MatchTracker matchTracker);
-
-  int spillPartitionId();
 }

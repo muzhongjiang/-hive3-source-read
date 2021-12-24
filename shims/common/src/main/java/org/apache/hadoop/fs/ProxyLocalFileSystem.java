@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -58,6 +58,7 @@ public class ProxyLocalFileSystem extends FilterFileSystem {
     // the scheme/authority serving as the proxy is derived
     // from the supplied URI
     this.scheme = name.getScheme();
+    String nameUriString = name.toString();
 
     String authority = name.getAuthority() != null ? name.getAuthority() : "";
     String proxyUriString = scheme + "://" + authority + "/";

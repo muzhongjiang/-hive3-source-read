@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -58,7 +58,9 @@ final class ProxyUserSupport {
         Set<String> groups;
         if("*".equals(confEnt.getValue())) {
           groups = WILD_CARD;
-          LOG.debug("User [{}] is authorized to do doAs any user.", proxyUser);
+          if(LOG.isDebugEnabled()) {
+            LOG.debug("User [" + proxyUser + "] is authorized to do doAs any user.");
+          }
         }
         else if(confEnt.getValue() != null && confEnt.getValue().trim().length() > 0) {
           groups = new HashSet<String>(Arrays.asList(confEnt.getValue().trim().split(",")));
@@ -70,7 +72,10 @@ final class ProxyUserSupport {
         }
         else {
           groups = Collections.emptySet();
-          LOG.debug("User [{}] is authorized to do doAs for users in the following groups: []", proxyUser);
+          if(LOG.isDebugEnabled()) {
+            LOG.debug("User [" + proxyUser + 
+                "] is authorized to do doAs for users in the following groups: []");
+          }
         }
         proxyUserGroups.put(proxyUser, groups);
       }
@@ -82,7 +87,9 @@ final class ProxyUserSupport {
         Set<String> hosts;
         if("*".equals(confEnt.getValue())) {
           hosts = WILD_CARD;
-          LOG.debug("User [{}] is authorized to do doAs from any host.", proxyUser);
+          if(LOG.isDebugEnabled()) {
+            LOG.debug("User [" + proxyUser + "] is authorized to do doAs from any host.");
+          }
         }
         else if(confEnt.getValue() != null && confEnt.getValue().trim().length() > 0) {
           String[] hostValues = confEnt.getValue().trim().split(",");
@@ -101,7 +108,10 @@ final class ProxyUserSupport {
         }
         else {
           hosts = Collections.emptySet();
-          LOG.debug("User [{}] is authorized to do doAs from the following hosts: []", proxyUser);
+          if(LOG.isDebugEnabled()) {
+            LOG.debug("User [" + proxyUser
+                + "] is authorized to do doAs from the following hosts: []");
+          }
         }
         proxyUserHosts.put(proxyUser, hosts);
       }

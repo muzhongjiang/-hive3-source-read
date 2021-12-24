@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,19 +18,21 @@
 
 package org.apache.hive.service.auth;
 
+import java.security.AccessControlContext;
+import java.security.AccessController;
 import java.security.PrivilegedExceptionAction;
-import java.security.SecureRandom;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 
 import javax.security.auth.Subject;
 
-import org.apache.hadoop.hive.metastore.security.HadoopThriftAuthBridge;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.http.protocol.BasicHttpContext;
 import org.apache.http.protocol.HttpContext;
@@ -61,14 +63,23 @@ public final class HttpAuthUtils {
    * @return Stringified Base64 encoded kerberosAuthHeader on success
    * @throws Exception
    */
-  public static String getKerberosServiceTicket(String principal, String host, String serverHttpUrl,
-      Subject loggedInSubject) throws Exception {
-    String serverPrincipal = HadoopThriftAuthBridge.getBridge().getServerPrincipal(principal, host);
-    if (loggedInSubject != null) {
-      return Subject.doAs(loggedInSubject, new HttpKerberosClientAction(serverPrincipal, serverHttpUrl));
+  public static String getKerberosServiceTicket(String principal, String host,
+      String serverHttpUrl, boolean assumeSubject) throws Exception {
+    String serverPrincipal =
+        ShimLoader.getHadoopThriftAuthBridge().getServerPrincipal(principal, host);
+    if (assumeSubject) {
+      // With this option, we're assuming that the external application,
+      // using the JDBC driver has done a JAAS kerberos login already
+      AccessControlContext context = AccessController.getContext();
+      Subject subject = Subject.getSubject(context);
+      if (subject == null) {
+        throw new Exception("The Subject is not set");
+      }
+      return Subject.doAs(subject, new HttpKerberosClientAction(serverPrincipal, serverHttpUrl));
     } else {
       // JAAS login from ticket cache to setup the client UserGroupInformation
-      UserGroupInformation clientUGI = HadoopThriftAuthBridge.getBridge().getCurrentUGIWithConf("kerberos");
+      UserGroupInformation clientUGI =
+          ShimLoader.getHadoopThriftAuthBridge().getCurrentUGIWithConf("kerberos");
       return clientUGI.doAs(new HttpKerberosClientAction(serverPrincipal, serverHttpUrl));
     }
   }
@@ -78,14 +89,14 @@ public final class HttpAuthUtils {
    * @param clientUserName Client User name.
    * @return An unsigned cookie token generated from input parameters.
    * The final cookie generated is of the following format :
-   * cu=&lt;username&gt;&amp;rn=&lt;randomNumber&gt;&amp;s=&lt;cookieSignature&gt;
+   * cu=<username>&rn=<randomNumber>&s=<cookieSignature>
    */
   public static String createCookieToken(String clientUserName) {
     StringBuilder sb = new StringBuilder();
     sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName).
     append(COOKIE_ATTR_SEPARATOR);
     sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR).
-    append((new SecureRandom()).nextLong());
+    append((new Random(System.currentTimeMillis())).nextLong());
     return sb.toString();
   }
 
@@ -142,11 +153,13 @@ public final class HttpAuthUtils {
     public static final String SERVER_HTTP_URL = "SERVER_HTTP_URL";
     private final String serverPrincipal;
     private final String serverHttpUrl;
+    private final Base64 base64codec;
     private final HttpContext httpContext;
 
     public HttpKerberosClientAction(String serverPrincipal, String serverHttpUrl) {
       this.serverPrincipal = serverPrincipal;
       this.serverHttpUrl = serverHttpUrl;
+      base64codec = new Base64(0);
       httpContext = new BasicHttpContext();
       httpContext.setAttribute(SERVER_HTTP_URL, serverHttpUrl);
     }
@@ -170,7 +183,7 @@ public final class HttpAuthUtils {
       byte[] outToken = gssContext.initSecContext(inToken, 0, inToken.length);
       gssContext.dispose();
       // Base64 encoded and stringified token for server
-      return Base64.getEncoder().encodeToString(outToken);
+      return new String(base64codec.encode(outToken));
     }
   }
 }

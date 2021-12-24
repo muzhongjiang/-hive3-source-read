@@ -15,14 +15,13 @@
  */
 package org.apache.hive.beeline;
 
-import static org.mockito.ArgumentMatchers.anyInt;
-
 import java.io.PrintStream;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import static org.junit.Assert.assertEquals;
 import org.junit.Test;
+import org.mockito.Matchers;
 import static org.mockito.Mockito.when;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -97,16 +96,7 @@ public class TestTableOutputFormat {
       }
     });
 
-    when(mockResultSet.getObject(anyInt())).thenAnswer(new Answer<String>() {
-      @Override
-      public String answer(final InvocationOnMock invocation) {
-        Object[] args = invocation.getArguments();
-        int index = ((Integer) args[0]);
-        return mockRow.getColumn(index);
-      }
-    });
-
-    when(mockResultSet.getString(anyInt())).thenAnswer(new Answer<String>() {
+    when(mockResultSet.getString(Matchers.anyInt())).thenAnswer(new Answer<String>() {
       @Override
       public String answer(final InvocationOnMock invocation) {
         Object[] args = invocation.getArguments();

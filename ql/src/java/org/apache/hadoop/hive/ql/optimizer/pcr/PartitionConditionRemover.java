@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,15 +25,16 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.FilterOperator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.optimizer.Transform;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
@@ -64,7 +65,7 @@ public class PartitionConditionRemover extends Transform {
         new ArrayList<PcrOpWalkerCtx.OpToDeleteInfo>();
     PcrOpWalkerCtx opWalkerCtx = new PcrOpWalkerCtx(pctx, opToRemove);
 
-    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
     opRules.put(new RuleRegExp("R1",
       "(" + TableScanOperator.getOperatorName() + "%"
       + FilterOperator.getOperatorName() + "%)|("
@@ -75,9 +76,9 @@ public class PartitionConditionRemover extends Transform {
 
     // The dispatcher fires the processor corresponding to the closest matching
     // rule and passes the context along
-    SemanticDispatcher disp = new DefaultRuleDispatcher(PcrOpProcFactory.getDefaultProc(),
+    Dispatcher disp = new DefaultRuleDispatcher(PcrOpProcFactory.getDefaultProc(),
         opRules, opWalkerCtx);
-    SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+    GraphWalker ogw = new DefaultGraphWalker(disp);
 
     // Create a list of topop nodes
     ArrayList<Node> topNodes = new ArrayList<Node>();

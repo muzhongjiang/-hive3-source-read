@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,27 +18,25 @@
 
 package org.apache.hadoop.hive.ql.io.sarg;
 
+import java.sql.Timestamp;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.common.NoDynamicValuesException;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The implementation of SearchArguments. Visible for testing only.
  */
 public final class SearchArgumentImpl implements SearchArgument {
-
-  private static final Logger LOG = LoggerFactory.getLogger(SearchArgumentImpl.class);
 
   public static final class PredicateLeafImpl implements PredicateLeaf {
     private final Operator operator;
@@ -46,7 +44,6 @@ public final class SearchArgumentImpl implements SearchArgument {
     private String columnName;
     private final Object literal;
     private final List<Object> literalList;
-    private int id;
 
     // Used by kryo
     @SuppressWarnings("unused")
@@ -56,7 +53,6 @@ public final class SearchArgumentImpl implements SearchArgument {
       columnName = null;
       literal = null;
       literalList = null;
-      id = -1;
     }
 
     public PredicateLeafImpl(Operator operator,
@@ -76,10 +72,10 @@ public final class SearchArgumentImpl implements SearchArgument {
       this.type = type;
       this.columnName = columnName;
       this.literal = literal;
-      this.id = -1;
       checkLiteralType(literal, type, conf);
       this.literalList = literalList;
       if (literalList != null) {
+        Class valueCls = type.getValueClass();
         for(Object lit: literalList) {
           checkLiteralType(lit, type, conf);
         }
@@ -107,36 +103,25 @@ public final class SearchArgumentImpl implements SearchArgument {
         return ((LiteralDelegate) literal).getLiteral();
       }
 
+      // To get around a kryo 2.22 bug while deserialize a Timestamp into Date
+      // (https://github.com/EsotericSoftware/kryo/issues/88)
+      // When we see a Date, convert back into Timestamp
+      if (literal instanceof java.util.Date) {
+        return new Timestamp(((java.util.Date)literal).getTime());
+      }
       return literal;
     }
 
     @Override
     public List<Object> getLiteralList() {
       if (literalList != null && literalList.size() > 0 && literalList.get(0) instanceof LiteralDelegate) {
-        List<Object> newLiteraList = new ArrayList<>();
-        try {
-          for (Object litertalObj : literalList) {
-            Object literal = ((LiteralDelegate) litertalObj).getLiteral();
-            if (literal != null) {
-              newLiteraList.add(literal);
-            }
-          }
-        } catch (NoDynamicValuesException err) {
-          LOG.debug("Error while retrieving literalList, returning null", err);
-          return Collections.emptyList();
+        List<Object> newLiteraList = new ArrayList<Object>();
+        for (Object litertalObj : literalList) {
+          newLiteraList.add(((LiteralDelegate) litertalObj).getLiteral());
         }
         return newLiteraList;
       }
       return literalList;
-    }
-
-    @Override
-    public int getId() {
-      return id;
-    }
-
-    public void setId(int newId) {
-      id = newId;
     }
 
     @Override
@@ -215,14 +200,10 @@ public final class SearchArgumentImpl implements SearchArgument {
   }
 
   private final List<PredicateLeaf> leaves;
-  private final ExpressionTree normalizedExpression;
-  private final ExpressionTree compactExpression;
+  private final ExpressionTree expression;
 
-  SearchArgumentImpl(ExpressionTree normalizedExpression,
-                     ExpressionTree compactExpression,
-                     List<PredicateLeaf> leaves) {
-    this.normalizedExpression = normalizedExpression;
-    this.compactExpression = compactExpression;
+  SearchArgumentImpl(ExpressionTree expression, List<PredicateLeaf> leaves) {
+    this.expression = expression;
     this.leaves = leaves;
   }
 
@@ -230,8 +211,7 @@ public final class SearchArgumentImpl implements SearchArgument {
   @SuppressWarnings("unused")
   SearchArgumentImpl() {
         leaves = null;
-        normalizedExpression = null;
-        compactExpression = null;
+        expression = null;
   }
 
   @Override
@@ -241,32 +221,18 @@ public final class SearchArgumentImpl implements SearchArgument {
 
   @Override
   public TruthValue evaluate(TruthValue[] leaves) {
-    return normalizedExpression == null ? TruthValue.YES
-        : normalizedExpression.evaluate(leaves);
+    return expression == null ? TruthValue.YES : expression.evaluate(leaves);
   }
 
   @Override
   public ExpressionTree getExpression() {
-    return normalizedExpression;
-  }
-
-  @Override
-  public ExpressionTree getCompactExpression() {
-    return compactExpression;
+    return expression;
   }
 
   @Override
   public String toString() {
-    return normalizedExpression.toString();
-  }
-
-  /**
-   * Generate the backwards compatible string for test cases
-   * @return the sarg using the old string
-   */
-  public String toOldString() {
     StringBuilder buffer = new StringBuilder();
-    for(int i=0; leaves != null && i < leaves.size(); ++i) {
+    for(int i=0; i < leaves.size(); ++i) {
       buffer.append("leaf-");
       buffer.append(i);
       buffer.append(" = ");
@@ -274,7 +240,7 @@ public final class SearchArgumentImpl implements SearchArgument {
       buffer.append(", ");
     }
     buffer.append("expr = ");
-    buffer.append(normalizedExpression.toOldString());
+    buffer.append(expression);
     return buffer.toString();
   }
 
@@ -290,9 +256,9 @@ public final class SearchArgumentImpl implements SearchArgument {
     private static final int CNF_COMBINATIONS_THRESHOLD = 256;
 
     private final Deque<ExpressionTree> currentTree =
-        new ArrayDeque<>();
-    private final Map<PredicateLeaf, PredicateLeaf> leaves =
-        new HashMap<>();
+        new ArrayDeque<ExpressionTree>();
+    private final Map<PredicateLeaf, Integer> leaves =
+        new HashMap<PredicateLeaf, Integer>();
     private final ExpressionTree root =
         new ExpressionTree(ExpressionTree.Operator.AND);
     {
@@ -338,11 +304,12 @@ public final class SearchArgumentImpl implements SearchArgument {
       return this;
     }
 
-    private PredicateLeaf addLeaf(PredicateLeaf leaf) {
-      PredicateLeaf result = leaves.get(leaf);
+    private int addLeaf(PredicateLeaf leaf) {
+      Integer result = leaves.get(leaf);
       if (result == null) {
-        leaves.put(leaf, leaf);
-        return leaf;
+        int id = leaves.size();
+        leaves.put(leaf, id);
+        return id;
       } else {
         return result;
       }
@@ -355,7 +322,7 @@ public final class SearchArgumentImpl implements SearchArgument {
       if (column == null || literal == null) {
         parent.getChildren().add(new ExpressionTree(TruthValue.YES_NO_NULL));
       } else {
-        PredicateLeafImpl leaf =
+        PredicateLeaf leaf =
             new PredicateLeafImpl(PredicateLeaf.Operator.LESS_THAN,
                 type, column, literal, null, conf);
         parent.getChildren().add(new ExpressionTree(addLeaf(leaf)));
@@ -370,7 +337,7 @@ public final class SearchArgumentImpl implements SearchArgument {
       if (column == null || literal == null) {
         parent.getChildren().add(new ExpressionTree(TruthValue.YES_NO_NULL));
       } else {
-        PredicateLeafImpl leaf =
+        PredicateLeaf leaf =
             new PredicateLeafImpl(PredicateLeaf.Operator.LESS_THAN_EQUALS,
                 type, column, literal, null, conf);
         parent.getChildren().add(new ExpressionTree(addLeaf(leaf)));
@@ -385,7 +352,7 @@ public final class SearchArgumentImpl implements SearchArgument {
       if (column == null || literal == null) {
         parent.getChildren().add(new ExpressionTree(TruthValue.YES_NO_NULL));
       } else {
-        PredicateLeafImpl leaf =
+        PredicateLeaf leaf =
             new PredicateLeafImpl(PredicateLeaf.Operator.EQUALS,
                 type, column, literal, null, conf);
         parent.getChildren().add(new ExpressionTree(addLeaf(leaf)));
@@ -400,7 +367,7 @@ public final class SearchArgumentImpl implements SearchArgument {
       if (column == null || literal == null) {
         parent.getChildren().add(new ExpressionTree(TruthValue.YES_NO_NULL));
       } else {
-        PredicateLeafImpl leaf =
+        PredicateLeaf leaf =
             new PredicateLeafImpl(PredicateLeaf.Operator.NULL_SAFE_EQUALS,
                 type, column, literal, null, conf);
         parent.getChildren().add(new ExpressionTree(addLeaf(leaf)));
@@ -419,9 +386,10 @@ public final class SearchArgumentImpl implements SearchArgument {
           throw new IllegalArgumentException("Can't create in expression with "
               + "no arguments");
         }
-        List<Object> argList = new ArrayList<>(Arrays.asList(literal));
+        List<Object> argList = new ArrayList<Object>();
+        argList.addAll(Arrays.asList(literal));
 
-        PredicateLeafImpl leaf =
+        PredicateLeaf leaf =
             new PredicateLeafImpl(PredicateLeaf.Operator.IN,
                 type, column, null, argList, conf);
         parent.getChildren().add(new ExpressionTree(addLeaf(leaf)));
@@ -435,7 +403,7 @@ public final class SearchArgumentImpl implements SearchArgument {
       if (column == null) {
         parent.getChildren().add(new ExpressionTree(TruthValue.YES_NO_NULL));
       } else {
-        PredicateLeafImpl leaf =
+        PredicateLeaf leaf =
             new PredicateLeafImpl(PredicateLeaf.Operator.IS_NULL,
                 type, column, null, null, conf);
         parent.getChildren().add(new ExpressionTree(addLeaf(leaf)));
@@ -450,10 +418,10 @@ public final class SearchArgumentImpl implements SearchArgument {
       if (column == null || lower == null || upper == null) {
         parent.getChildren().add(new ExpressionTree(TruthValue.YES_NO_NULL));
       } else {
-        List<Object> argList = new ArrayList<>();
+        List<Object> argList = new ArrayList<Object>();
         argList.add(lower);
         argList.add(upper);
-        PredicateLeafImpl leaf =
+        PredicateLeaf leaf =
             new PredicateLeafImpl(PredicateLeaf.Operator.BETWEEN,
                 type, column, null, argList, conf);
         parent.getChildren().add(new ExpressionTree(addLeaf(leaf)));
@@ -472,21 +440,54 @@ public final class SearchArgumentImpl implements SearchArgument {
      * Recursively explore the tree to find the leaves that are still reachable
      * after optimizations.
      * @param tree the node to check next
-     * @param leaves the list of leaves that were found
+     * @param next the next available leaf id
+     * @param leafReorder
+     * @return the next available leaf id
      */
-    static void compactLeaves(ExpressionTree tree,
-                              List<PredicateLeaf> leaves) {
+    static int compactLeaves(ExpressionTree tree, int next, int[] leafReorder) {
       if (tree.getOperator() == ExpressionTree.Operator.LEAF) {
-        PredicateLeafImpl newLeaf = (PredicateLeafImpl) tree.getPredicateLeaf();
-        if (newLeaf.getId() == -1) {
-          newLeaf.setId(leaves.size());
-          leaves.add(newLeaf);
+        int oldLeaf = tree.getLeaf();
+        if (leafReorder[oldLeaf] == -1) {
+          leafReorder[oldLeaf] = next++;
         }
       } else if (tree.getChildren() != null){
         for(ExpressionTree child: tree.getChildren()) {
-          compactLeaves(child, leaves);
+          next = compactLeaves(child, next, leafReorder);
         }
       }
+      return next;
+    }
+
+    /**
+     * Rewrite expression tree to update the leaves.
+     * @param root the root of the tree to fix
+     * @param leafReorder a map from old leaf ids to new leaf ids
+     * @return the fixed root
+     */
+    static ExpressionTree rewriteLeaves(ExpressionTree root,
+                              int[] leafReorder) {
+      // The leaves could be shared in the tree. Use Set to remove the duplicates.
+      Set<ExpressionTree> leaves = new HashSet<ExpressionTree>();
+      Queue<ExpressionTree> nodes = new LinkedList<ExpressionTree>();
+      nodes.add(root);
+
+      while(!nodes.isEmpty()) {
+        ExpressionTree node = nodes.remove();
+        if (node.getOperator() == ExpressionTree.Operator.LEAF) {
+          leaves.add(node);
+        } else {
+          if (node.getChildren() != null){
+            nodes.addAll(node.getChildren());
+          }
+        }
+      }
+
+      // Update the leaf in place
+      for(ExpressionTree leaf : leaves) {
+        leaf.setLeaf(leafReorder[leaf.getLeaf()]);
+      }
+
+      return root;
     }
 
     @Override
@@ -495,18 +496,28 @@ public final class SearchArgumentImpl implements SearchArgument {
         throw new IllegalArgumentException("Failed to end " +
             currentTree.size() + " operations.");
       }
-      ExpressionTree optimized = optimize(root);
-      ExpressionTree expanded = convertToCNF(new ExpressionTree(optimized));
-      expanded = flatten(expanded);
-      List<PredicateLeaf> finalLeaves = new ArrayList<>(leaves.size());
-      compactLeaves(expanded, finalLeaves);
-      return new SearchArgumentImpl(expanded, optimized, finalLeaves);
-    }
-
-    static ExpressionTree optimize(ExpressionTree root) {
       ExpressionTree optimized = pushDownNot(root);
       optimized = foldMaybe(optimized);
-      return flatten(optimized);
+      optimized = flatten(optimized);
+      optimized = convertToCNF(optimized);
+      optimized = flatten(optimized);
+      int leafReorder[] = new int[leaves.size()];
+      Arrays.fill(leafReorder, -1);
+      int newLeafCount = compactLeaves(optimized, 0, leafReorder);
+      optimized = rewriteLeaves(optimized, leafReorder);
+      ArrayList<PredicateLeaf> leafList = new ArrayList<>(newLeafCount);
+      // expand list to correct size
+      for(int i=0; i < newLeafCount; ++i) {
+        leafList.add(null);
+      }
+      // build the new list
+      for(Map.Entry<PredicateLeaf, Integer> elem: leaves.entrySet()) {
+        int newLoc = leafReorder[elem.getValue()];
+        if (newLoc != -1) {
+          leafList.set(newLoc, elem.getKey());
+        }
+      }
+      return new SearchArgumentImpl(optimized, leafList);
     }
 
     /**
@@ -650,7 +661,7 @@ public final class SearchArgumentImpl implements SearchArgument {
           or.getChildren().add(kid);
         }
       } else {
-        List<ExpressionTree> work = new ArrayList<>(result);
+        List<ExpressionTree> work = new ArrayList<ExpressionTree>(result);
         result.clear();
         for(ExpressionTree kid: kids) {
           for(ExpressionTree or: work) {
@@ -682,15 +693,17 @@ public final class SearchArgumentImpl implements SearchArgument {
         }
         if (root.getOperator() == ExpressionTree.Operator.OR) {
           // a list of leaves that weren't under AND expressions
-          List<ExpressionTree> nonAndList = new ArrayList<>();
+          List<ExpressionTree> nonAndList = new ArrayList<ExpressionTree>();
           // a list of AND expressions that we need to distribute
-          List<ExpressionTree> andList = new ArrayList<>();
+          List<ExpressionTree> andList = new ArrayList<ExpressionTree>();
           for(ExpressionTree child: root.getChildren()) {
             if (child.getOperator() == ExpressionTree.Operator.AND) {
               andList.add(child);
             } else if (child.getOperator() == ExpressionTree.Operator.OR) {
               // pull apart the kids of the OR expression
-              nonAndList.addAll(child.getChildren());
+              for(ExpressionTree grandkid: child.getChildren()) {
+                nonAndList.add(grandkid);
+              }
             } else {
               nonAndList.add(child);
             }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -49,13 +49,6 @@ public class TestBytesBytesMultiHashMap {
   }
 
   @Test
-  public void testExpandAndRehashToTarget() {
-    BytesBytesMultiHashMap map = new BytesBytesMultiHashMap(CAPACITY, LOAD_FACTOR, WB_SIZE);
-    map.expandAndRehashToTarget(24);
-    assertEquals(32, map.getCapacity());
-  }
-
-  @Test
   public void testPutGetOne() throws Exception {
     BytesBytesMultiHashMap map = new BytesBytesMultiHashMap(CAPACITY, LOAD_FACTOR, WB_SIZE);
     RandomKvSource kv = new RandomKvSource(0, 0);
@@ -91,9 +84,9 @@ public class TestBytesBytesMultiHashMap {
     map.put(kv2, -1);
     key[0] = (byte)(key[0] + 1);
     BytesBytesMultiHashMap.Result hashMapResult = new BytesBytesMultiHashMap.Result();
-    map.getValueResult(key, 0, key.length, hashMapResult, null);
+    map.getValueResult(key, 0, key.length, hashMapResult);
     assertTrue(!hashMapResult.hasRows());
-    map.getValueResult(key, 0, 0, hashMapResult, null);
+    map.getValueResult(key, 0, 0, hashMapResult);
     assertTrue(!hashMapResult.hasRows());
   }
 
@@ -111,7 +104,7 @@ public class TestBytesBytesMultiHashMap {
     assertEquals(CAPACITY, map.getCapacity());
     // Get of non-existent key should terminate..
     BytesBytesMultiHashMap.Result hashMapResult = new BytesBytesMultiHashMap.Result();
-    map.getValueResult(new byte[0], 0, 0, hashMapResult, null);
+    map.getValueResult(new byte[0], 0, 0, hashMapResult);
   }
 
   @Test
@@ -130,7 +123,7 @@ public class TestBytesBytesMultiHashMap {
 
   private void verifyHashMapResult(BytesBytesMultiHashMap map, byte[] key, byte[]... values) {
     BytesBytesMultiHashMap.Result hashMapResult = new BytesBytesMultiHashMap.Result();
-    byte state = map.getValueResult(key, 0, key.length, hashMapResult, null);
+    byte state = map.getValueResult(key, 0, key.length, hashMapResult);
     HashSet<ByteBuffer> hs = new HashSet<ByteBuffer>();
     int count = 0;
     if (hashMapResult.hasRows()) {

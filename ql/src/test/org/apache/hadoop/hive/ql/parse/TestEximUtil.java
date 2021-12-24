@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,27 +18,22 @@
 
 package org.apache.hadoop.hive.ql.parse;
 
-
-import static org.junit.Assert.fail;
-import org.junit.Before;
-import org.junit.After;
-import org.junit.Test;
+import junit.framework.TestCase;
 
 /**
  * TestEximUtil.
  *
  */
-public class TestEximUtil {
+public class TestEximUtil extends TestCase {
 
-  @Before
-  public void setUp() {
+  @Override
+  protected void setUp() {
   }
 
-  @After
-  public void tearDown() {
+  @Override
+  protected void tearDown() {
   }
 
-  @Test
   public void testCheckCompatibility() throws SemanticException {
 
     // backward/forward compatible

@@ -1,6 +1,4 @@
-SET hive.vectorized.execution.enabled=false;
-
-create table map_txt_n0 (
+create table map_txt (
   id int,
   content map<int,string>
 )
@@ -9,8 +7,8 @@ null defined as '\\N'
 stored as textfile
 ;
 
-LOAD DATA LOCAL INPATH '../../data/files/mapNull.txt' INTO TABLE map_txt_n0;
+LOAD DATA LOCAL INPATH '../../data/files/mapNull.txt' INTO TABLE map_txt;
 
-select * from map_txt_n0;
+select * from map_txt;
 
-select id, map_keys(content) from map_txt_n0;
+select id, map_keys(content) from map_txt;

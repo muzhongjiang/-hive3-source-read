@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.processors;
 
 import java.sql.SQLException;
 
+
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.junit.Assert;
@@ -28,7 +29,7 @@ import org.junit.Test;
 
 public class TestCommandProcessorFactory {
 
-  private final String[] testOnlyCommands = new String[]{"crypto", "erasure"};
+  private final String[] testOnlyCommands = new String[]{"crypto"};
 
   private HiveConf conf;
 
@@ -45,8 +46,6 @@ public class TestCommandProcessorFactory {
       CommandProcessorFactory.getForHiveCommand(new String[]{" "}, conf));
     Assert.assertNull("Set role should have returned null",
       CommandProcessorFactory.getForHiveCommand(new String[]{"set role"}, conf));
-    Assert.assertNull("Set role should have returned null",
-      CommandProcessorFactory.getForHiveCommand(new String[]{"set", "role"}, conf));
     Assert.assertNull("SQL should have returned null",
       CommandProcessorFactory.getForHiveCommand(new String[]{"SELECT * FROM TABLE"}, conf));
     Assert.assertNull("Test only command should have returned null",
@@ -59,23 +58,24 @@ public class TestCommandProcessorFactory {
     SessionState.start(conf);
 
     for (HiveCommand command : HiveCommand.values()) {
-      String cmd[] = command.name().toLowerCase().split("_");
-      Assert.assertNotNull("Cmd " + cmd[0] + " not return null",
+      String cmd = command.name();
+      String cmdInLowerCase = cmd.toLowerCase();
+      Assert.assertNotNull("Cmd " + cmd + " not return null",
         CommandProcessorFactory
-          .getForHiveCommandInternal(cmd, conf, command.isOnlyForTesting()));
+          .getForHiveCommandInternal(new String[]{cmd}, conf, command.isOnlyForTesting()));
       Assert.assertNotNull("Cmd " + cmd + " not return null",
         CommandProcessorFactory.getForHiveCommandInternal(
-          cmd, conf, command.isOnlyForTesting()));
+          new String[]{cmdInLowerCase}, conf, command.isOnlyForTesting()));
     }
     conf.set(HiveConf.ConfVars.HIVE_SECURITY_COMMAND_WHITELIST.toString(), "");
     for (HiveCommand command : HiveCommand.values()) {
-      String cmd[] = command.name().toLowerCase().split("_");
+      String cmd = command.name();
       try {
         CommandProcessorFactory
-          .getForHiveCommandInternal(cmd, conf, command.isOnlyForTesting());
-        Assert.fail("Expected SQLException for " + cmd[0] + " as available commands is empty");
+          .getForHiveCommandInternal(new String[]{cmd}, conf, command.isOnlyForTesting());
+        Assert.fail("Expected SQLException for " + cmd + " as available commands is empty");
       } catch (SQLException e) {
-        Assert.assertEquals("Insufficient privileges to execute " + cmd[0], e.getMessage());
+        Assert.assertEquals("Insufficient privileges to execute " + cmd, e.getMessage());
         Assert.assertEquals("42000", e.getSQLState());
       }
     }

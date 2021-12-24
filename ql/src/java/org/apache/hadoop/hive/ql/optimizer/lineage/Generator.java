@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,6 @@ package org.apache.hadoop.hive.ql.optimizer.lineage;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.hadoop.hive.ql.exec.CommonJoinOperator;
 import org.apache.hadoop.hive.ql.exec.FilterOperator;
@@ -36,19 +35,18 @@ import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.UDTFOperator;
 import org.apache.hadoop.hive.ql.exec.UnionOperator;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.LevelOrderWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.optimizer.Transform;
 import org.apache.hadoop.hive.ql.optimizer.lineage.LineageCtx.Index;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.ql.session.SessionState;
 
 /**
  * This class generates the lineage information for the columns
@@ -57,43 +55,19 @@ import org.slf4j.LoggerFactory;
  */
 public class Generator extends Transform {
 
-  private static final Logger LOG = LoggerFactory.getLogger(Generator.class);
-
-  private final Set<String> hooks;
-  private static final String ATLAS_HOOK_CLASSNAME = "org.apache.atlas.hive.hook.HiveHook";
-
-  public Generator(Set<String> hooks) {
-    this.hooks = hooks;
-  }
-
   /* (non-Javadoc)
    * @see org.apache.hadoop.hive.ql.optimizer.Transform#transform(org.apache.hadoop.hive.ql.parse.ParseContext)
    */
   @Override
   public ParseContext transform(ParseContext pctx) throws SemanticException {
 
-    if (hooks != null && hooks.contains(ATLAS_HOOK_CLASSNAME)) {
-      // Atlas would be interested in lineage information for insert,load,create etc.
-      if (!pctx.getQueryProperties().isCTAS()
-          && !pctx.getQueryProperties().isMaterializedView()
-          && pctx.getQueryProperties().isQuery()
-          && pctx.getCreateTable() == null
-          && pctx.getCreateViewDesc() == null
-          && (pctx.getLoadTableWork() == null || pctx.getLoadTableWork().isEmpty())) {
-        LOG.debug("Not evaluating lineage");
-        return pctx;
-      }
-    }
-    Index index = pctx.getQueryState().getLineageState().getIndex();
-    if (index == null) {
-      index = new Index();
-    }
+    Index index = SessionState.get() != null ?
+      SessionState.get().getLineageState().getIndex() : new Index();
 
-    long sTime = System.currentTimeMillis();
     // Create the lineage context
     LineageCtx lCtx = new LineageCtx(pctx, index);
 
-    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
     opRules.put(new RuleRegExp("R1", TableScanOperator.getOperatorName() + "%"),
       OpProcFactory.getTSProc());
     opRules.put(new RuleRegExp("R2", ScriptOperator.getOperatorName() + "%"),
@@ -119,15 +93,14 @@ public class Generator extends Transform {
       OpProcFactory.getFilterProc());
 
     // The dispatcher fires the processor corresponding to the closest matching rule and passes the context along
-    SemanticDispatcher disp = new DefaultRuleDispatcher(OpProcFactory.getDefaultProc(), opRules, lCtx);
-    SemanticGraphWalker ogw = new LevelOrderWalker(disp, 2);
+    Dispatcher disp = new DefaultRuleDispatcher(OpProcFactory.getDefaultProc(), opRules, lCtx);
+    GraphWalker ogw = new LevelOrderWalker(disp, 2);
 
     // Create a list of topop nodes
     ArrayList<Node> topNodes = new ArrayList<Node>();
     topNodes.addAll(pctx.getTopOps().values());
     ogw.startWalking(topNodes, null);
 
-    LOG.debug("Time taken for lineage transform={}", (System.currentTimeMillis() - sTime));
     return pctx;
   }
 

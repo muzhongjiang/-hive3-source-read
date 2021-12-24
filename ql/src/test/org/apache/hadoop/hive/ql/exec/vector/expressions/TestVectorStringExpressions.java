@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,13 +20,13 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.StringTokenizer;
 
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.junit.Assert;
+import junit.framework.Assert;
 
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.hive.common.type.HiveChar;
@@ -99,33 +99,33 @@ public class TestVectorStringExpressions {
   private static byte[] ascii_sentence;
 
   static {
-    blue = "blue".getBytes(StandardCharsets.UTF_8);
-    red = "red".getBytes(StandardCharsets.UTF_8);
-    redred = "redred".getBytes(StandardCharsets.UTF_8);
-    green = "green".getBytes(StandardCharsets.UTF_8);
-    greenred = "greenred".getBytes(StandardCharsets.UTF_8);
-    redgreen = "redgreen".getBytes(StandardCharsets.UTF_8);
-    greengreen = "greengreen".getBytes(StandardCharsets.UTF_8);
-    emptyString = "".getBytes(StandardCharsets.UTF_8);
-    mixedUp = "mixedUp".getBytes(StandardCharsets.UTF_8);
-    mixedUpLower = "mixedup".getBytes(StandardCharsets.UTF_8);
-    mixedUpUpper = "MIXEDUP".getBytes(StandardCharsets.UTF_8);
+    try {
+      blue = "blue".getBytes("UTF-8");
+      red = "red".getBytes("UTF-8");
+      redred = "redred".getBytes("UTF-8");
+      green = "green".getBytes("UTF-8");
+      greenred = "greenred".getBytes("UTF-8");
+      redgreen = "redgreen".getBytes("UTF-8");
+      greengreen = "greengreen".getBytes("UTF-8");
+      emptyString = "".getBytes("UTF-8");
+      mixedUp = "mixedUp".getBytes("UTF-8");
+      mixedUpLower = "mixedup".getBytes("UTF-8");
+      mixedUpUpper = "MIXEDUP".getBytes("UTF-8");
+      mixPercentPattern = "mix%".getBytes("UTF-8"); // for use as wildcard pattern to test LIKE
+      multiByte = new byte[10];
+      addMultiByteChars(multiByte);
+      blanksLeft = "  foo".getBytes("UTF-8");
+      blanksRight = "foo  ".getBytes("UTF-8");
+      blanksBoth = "  foo  ".getBytes("UTF-8");
+      blankString = "  ".getBytes("UTF-8");
+      blankRanges = "   more  than a    bargain    ".getBytes("UTF-8");
+                   //012345678901234567890123456789
+      ascii_sentence = "The fox trotted over the fence.".getBytes("UTF-8");
+                      //0123456789012345678901234567890
 
-    // for use as wildcard pattern to test LIKE
-    mixPercentPattern = "mix%".getBytes(StandardCharsets.UTF_8); 
-
-    multiByte = new byte[10];
-    addMultiByteChars(multiByte);
-    blanksLeft = "  foo".getBytes(StandardCharsets.UTF_8);
-    blanksRight = "foo  ".getBytes(StandardCharsets.UTF_8);
-    blanksBoth = "  foo  ".getBytes(StandardCharsets.UTF_8);
-    blankString = "  ".getBytes(StandardCharsets.UTF_8);
-    blankRanges =
-        "   more  than a    bargain    ".getBytes(StandardCharsets.UTF_8);
-    // 012345678901234567890123456789
-    ascii_sentence =
-        "The fox trotted over the fence.".getBytes(StandardCharsets.UTF_8);
-    // 0123456789012345678901234567890
+    } catch (UnsupportedEncodingException e) {
+      e.printStackTrace();
+    }
     red2 = new byte[red.length];
     System.arraycopy(red, 0, red2, 0, red.length);
   }
@@ -322,8 +322,6 @@ public class TestVectorStringExpressions {
     }
     return i;
   }
-
-  private HiveConf hiveConf = new HiveConf();
 
   private boolean vectorEqual(BytesColumnVector vector, int i, byte[] bytes, int offset, int length) {
     byte[] bytesSlice = new byte[length];
@@ -1818,11 +1816,6 @@ public class TestVectorStringExpressions {
       resultLen = StringExpr.rightTrimAndTruncate(blanksLeft, 0, blanksLeft.length, 5);
       Assert.assertTrue(resultLen == blanksLeft.length);
 
-      // Truncate everything and nothing to trim
-      Assert.assertTrue(StringExpr.characterCount(blanksLeft, 0, blanksLeft.length) == 5);
-      resultLen = StringExpr.rightTrimAndTruncate(blanksLeft, 0, blanksLeft.length, 0);
-      Assert.assertTrue(resultLen == 0);
-
       // Simple trims.
       Assert.assertTrue(StringExpr.characterCount(blanksRight, 0, blanksRight.length) == 5);
       resultLen = StringExpr.rightTrimAndTruncate(blanksRight, 0, blanksRight.length, 5);
@@ -2216,6 +2209,7 @@ public class TestVectorStringExpressions {
       resultLen = StringExpr.rightTrimAndTruncate(sentenceBlankRanges, 7, 17, 11);
       Assert.assertTrue(resultLen == 12);
       Assert.assertTrue(StringExpr.characterCount(sentenceBlankRanges, 7, resultLen) == 8);
+
   }
 
   @Test
@@ -3190,8 +3184,12 @@ public class TestVectorStringExpressions {
     while (s.length() < 500) {
       s += s;
     }
-    byte[] b = s.getBytes(StandardCharsets.UTF_8);
-
+    byte[] b = null;
+    try {
+      b = s.getBytes("UTF-8");
+    } catch (UnsupportedEncodingException e) {
+      e.printStackTrace();
+    }
     for (int i = 0; i != VectorizedRowBatch.DEFAULT_SIZE; i++) {
       bcv.setVal(i, b, 0, b.length);
     }
@@ -3204,8 +3202,12 @@ public class TestVectorStringExpressions {
   public void testLoadBytesColumnVectorByRef() {
     BytesColumnVector bcv = new BytesColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
     String s = "red";
-    byte[] b = s.getBytes(StandardCharsets.UTF_8);
-
+    byte[] b = null;
+    try {
+      b = s.getBytes("UTF-8");
+    } catch (UnsupportedEncodingException e) {
+      e.printStackTrace();
+    }
     for (int i = 0; i != VectorizedRowBatch.DEFAULT_SIZE; i++) {
       bcv.setRef(i, b, 0, b.length);
     }
@@ -3220,7 +3222,7 @@ public class TestVectorStringExpressions {
 
   @Test
   // Test string column to string literal comparison
-  public void testStringColCompareStringScalarFilter() throws HiveException {
+  public void testStringColCompareStringScalarFilter() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
     expr = new FilterStringGroupColEqualStringScalar(0, red2);
@@ -3250,12 +3252,10 @@ public class TestVectorStringExpressions {
 
   @Test
   // Test string column to CHAR literal comparison
-  public void testStringColCompareCharScalarFilter() throws HiveException {
+  public void testStringColCompareCharScalarFilter() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
-    expr =
-        new FilterStringGroupColEqualCharScalar(
-            0, new HiveChar(new String(red2), 10).getStrippedValue().getBytes());
+    expr = new FilterStringGroupColEqualCharScalar(0, new HiveChar(new String(red2), 10));
     expr.evaluate(batch);
 
     // only red qualifies, and it's in entry 0
@@ -3263,9 +3263,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 0);
 
     batch = makeStringBatch();
-    expr =
-        new FilterStringGroupColLessCharScalar(
-            0, new HiveChar(new String(red2), 8).getStrippedValue().getBytes());
+    expr = new FilterStringGroupColLessCharScalar(0, new HiveChar(new String(red2), 8));
     expr.evaluate(batch);
 
     // only green qualifies, and it's in entry 1
@@ -3273,9 +3271,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 1);
 
     batch = makeStringBatch();
-    expr =
-        new FilterStringGroupColGreaterEqualCharScalar(
-            0, new HiveChar(new String(green), 12).getStrippedValue().getBytes());
+    expr = new FilterStringGroupColGreaterEqualCharScalar(0, new HiveChar(new String(green), 12));
     expr.evaluate(batch);
 
     // green and red qualify
@@ -3286,12 +3282,10 @@ public class TestVectorStringExpressions {
 
   @Test
   // Test string column to VARCHAR literal comparison
-  public void testStringColCompareVarCharScalarFilter() throws HiveException {
+  public void testStringColCompareVarCharScalarFilter() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
-    expr =
-        new FilterStringGroupColEqualVarCharScalar(
-            0, new HiveVarchar(new String(red2), 10).getValue().getBytes());
+    expr = new FilterStringGroupColEqualVarCharScalar(0, new HiveVarchar(new String(red2), 10));
     expr.evaluate(batch);
 
     // only red qualifies, and it's in entry 0
@@ -3299,9 +3293,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 0);
 
     batch = makeStringBatch();
-    expr =
-        new FilterStringGroupColLessVarCharScalar(
-            0, new HiveVarchar(new String(red2), 8).getValue().getBytes());
+    expr = new FilterStringGroupColLessVarCharScalar(0, new HiveVarchar(new String(red2), 8));
     expr.evaluate(batch);
 
     // only green qualifies, and it's in entry 1
@@ -3309,9 +3301,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 1);
 
     batch = makeStringBatch();
-    expr =
-        new FilterStringGroupColGreaterEqualVarCharScalar(
-            0, new HiveVarchar(new String(green), 12).getValue().getBytes());
+    expr = new FilterStringGroupColGreaterEqualVarCharScalar(0, new HiveVarchar(new String(green), 12));
     expr.evaluate(batch);
 
     // green and red qualify
@@ -3321,7 +3311,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringColCompareStringScalarProjection() throws HiveException {
+  public void testStringColCompareStringScalarProjection() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
 
@@ -3344,13 +3334,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringColCompareCharScalarProjection() throws HiveException {
+  public void testStringColCompareCharScalarProjection() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
 
-    expr =
-        new StringGroupColEqualCharScalar(
-            0, new HiveChar(new String(red2), 8).getStrippedValue().getBytes(), 2);
+    expr = new StringGroupColEqualCharScalar(0, new HiveChar(new String(red2), 8), 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     LongColumnVector outVector = (LongColumnVector) batch.cols[2];
@@ -3359,9 +3347,7 @@ public class TestVectorStringExpressions {
     Assert.assertEquals(0, outVector.vector[2]);
 
     batch = makeStringBatch();
-    expr =
-        new StringGroupColEqualCharScalar(
-            0, new HiveChar(new String(green), 10).getStrippedValue().getBytes(), 2);
+    expr = new StringGroupColEqualCharScalar(0, new HiveChar(new String(green), 10), 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     outVector = (LongColumnVector) batch.cols[2];
@@ -3371,13 +3357,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringColCompareVarCharScalarProjection() throws HiveException {
+  public void testStringColCompareVarCharScalarProjection() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
 
-    expr =
-        new StringGroupColEqualVarCharScalar(
-            0, new HiveVarchar(new String(red2), 8).getValue().getBytes(), 2);
+    expr = new StringGroupColEqualVarCharScalar(0, new HiveVarchar(new String(red2), 8), 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     LongColumnVector outVector = (LongColumnVector) batch.cols[2];
@@ -3386,9 +3370,7 @@ public class TestVectorStringExpressions {
     Assert.assertEquals(0, outVector.vector[2]);
 
     batch = makeStringBatch();
-    expr =
-        new StringGroupColEqualVarCharScalar(
-            0, new HiveVarchar(new String(green), 10).getValue().getBytes(), 2);
+    expr = new StringGroupColEqualVarCharScalar(0, new HiveVarchar(new String(green), 10), 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     outVector = (LongColumnVector) batch.cols[2];
@@ -3399,7 +3381,7 @@ public class TestVectorStringExpressions {
 
   @Test
   // Test string literal to string column comparison
-  public void testStringScalarCompareStringCol() throws HiveException {
+  public void testStringScalarCompareStringCol() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
     expr = new FilterStringScalarEqualStringGroupColumn(red2, 0);
@@ -3429,12 +3411,10 @@ public class TestVectorStringExpressions {
 
   @Test
   // Test CHAR literal to string column comparison
-  public void testCharScalarCompareStringCol() throws HiveException {
+  public void testCharScalarCompareStringCol() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
-    expr =
-        new FilterCharScalarEqualStringGroupColumn(
-            new HiveChar(new String(red2), 8).getStrippedValue().getBytes(), 0);
+    expr = new FilterCharScalarEqualStringGroupColumn(new HiveChar(new String(red2), 8), 0);
     expr.evaluate(batch);
 
     // only red qualifies, and it's in entry 0
@@ -3442,9 +3422,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 0);
 
     batch = makeStringBatch();
-    expr =
-        new FilterCharScalarGreaterStringGroupColumn(
-            new HiveChar(new String(red2), 8).getStrippedValue().getBytes(), 0);
+    expr = new FilterCharScalarGreaterStringGroupColumn(new HiveChar(new String(red2), 8), 0);
     expr.evaluate(batch);
 
     // only green qualifies, and it's in entry 1
@@ -3452,9 +3430,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 1);
 
     batch = makeStringBatch();
-    expr =
-        new FilterCharScalarLessEqualStringGroupColumn(
-            new HiveChar(new String(green), 10).getStrippedValue().getBytes(), 0);
+    expr = new FilterCharScalarLessEqualStringGroupColumn(new HiveChar(new String(green), 10), 0);
     expr.evaluate(batch);
 
     // green and red qualify
@@ -3465,12 +3441,10 @@ public class TestVectorStringExpressions {
 
   @Test
   // Test VARCHAR literal to string column comparison
-  public void testVarCharScalarCompareStringCol() throws HiveException {
+  public void testVarCharScalarCompareStringCol() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
-    expr =
-        new FilterVarCharScalarEqualStringGroupColumn(
-            new HiveVarchar(new String(red2), 8).getValue().getBytes(), 0);
+    expr = new FilterVarCharScalarEqualStringGroupColumn(new HiveVarchar(new String(red2), 8), 0);
     expr.evaluate(batch);
 
     // only red qualifies, and it's in entry 0
@@ -3478,9 +3452,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 0);
 
     batch = makeStringBatch();
-    expr =
-        new FilterVarCharScalarGreaterStringGroupColumn(
-            new HiveVarchar(new String(red2), 8).getValue().getBytes(), 0);
+    expr = new FilterVarCharScalarGreaterStringGroupColumn(new HiveVarchar(new String(red2), 8), 0);
     expr.evaluate(batch);
 
     // only green qualifies, and it's in entry 1
@@ -3488,9 +3460,7 @@ public class TestVectorStringExpressions {
     Assert.assertTrue(batch.selected[0] == 1);
 
     batch = makeStringBatch();
-    expr =
-        new FilterVarCharScalarLessEqualStringGroupColumn(
-            new HiveVarchar(new String(green), 10).getValue().getBytes(), 0);
+    expr = new FilterVarCharScalarLessEqualStringGroupColumn(new HiveVarchar(new String(green), 10), 0);
     expr.evaluate(batch);
 
     // green and red qualify
@@ -3500,7 +3470,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringScalarCompareStringColProjection() throws HiveException {
+  public void testStringScalarCompareStringColProjection() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
 
@@ -3523,13 +3493,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testCharScalarCompareStringColProjection() throws HiveException {
+  public void testCharScalarCompareStringColProjection() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
 
-    expr =
-        new CharScalarEqualStringGroupColumn(
-            new HiveChar(new String(red2), 8).getStrippedValue().getBytes(), 0, 2);
+    expr = new CharScalarEqualStringGroupColumn(new HiveChar(new String(red2), 8), 0, 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     LongColumnVector outVector = (LongColumnVector) batch.cols[2];
@@ -3538,9 +3506,7 @@ public class TestVectorStringExpressions {
     Assert.assertEquals(0, outVector.vector[2]);
 
     batch = makeStringBatch();
-    expr =
-        new CharScalarEqualStringGroupColumn(
-            new HiveChar(new String(green), 10).getStrippedValue().getBytes(), 0, 2);
+    expr = new CharScalarEqualStringGroupColumn(new HiveChar(new String(green), 10), 0, 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     outVector = (LongColumnVector) batch.cols[2];
@@ -3550,13 +3516,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testVarCharScalarCompareStringColProjection() throws HiveException {
+  public void testVarCharScalarCompareStringColProjection() {
     VectorizedRowBatch batch = makeStringBatch();
     VectorExpression expr;
 
-    expr =
-        new VarCharScalarEqualStringGroupColumn(
-            new HiveVarchar(new String(red2), 8).getValue().getBytes(), 0, 2);
+    expr = new VarCharScalarEqualStringGroupColumn(new HiveVarchar(new String(red2), 8), 0, 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     LongColumnVector outVector = (LongColumnVector) batch.cols[2];
@@ -3565,9 +3529,7 @@ public class TestVectorStringExpressions {
     Assert.assertEquals(0, outVector.vector[2]);
 
     batch = makeStringBatch();
-    expr =
-        new VarCharScalarEqualStringGroupColumn(
-            new HiveVarchar(new String(green), 10).getValue().getBytes(), 0, 2);
+    expr = new VarCharScalarEqualStringGroupColumn(new HiveVarchar(new String(green), 10), 0, 2);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
     outVector = (LongColumnVector) batch.cols[2];
@@ -3576,7 +3538,7 @@ public class TestVectorStringExpressions {
     Assert.assertEquals(0, outVector.vector[2]);
   }
   @Test
-  public void testStringColCompareStringColFilter() throws HiveException {
+  public void testStringColCompareStringColFilter() {
     VectorizedRowBatch batch;
     VectorExpression expr;
 
@@ -3728,7 +3690,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringColCompareStringColProjection() throws HiveException {
+  public void testStringColCompareStringColProjection() {
     VectorizedRowBatch batch;
     VectorExpression expr;
     long [] outVector;
@@ -3795,6 +3757,7 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     Assert.assertEquals(4, batch.size);
     outVector = ((LongColumnVector) batch.cols[3]).vector;
+    Assert.assertFalse(batch.cols[3].noNulls);
     Assert.assertFalse(batch.cols[3].isNull[0]);
     Assert.assertEquals(1, outVector[0]);
     Assert.assertFalse(batch.cols[3].isNull[1]);
@@ -3858,6 +3821,7 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     outVector = ((LongColumnVector) batch.cols[3]).vector;
     Assert.assertEquals(4, batch.size);
+    Assert.assertFalse(batch.cols[3].noNulls);
     Assert.assertFalse(batch.cols[3].isNull[0]);
     Assert.assertEquals(1, outVector[0]);
     Assert.assertFalse(batch.cols[3].isNull[1]);
@@ -4067,7 +4031,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testColLower() throws HiveException {
+  public void testColLower() {
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatchMixedCase();
     StringLower expr = new StringLower(0, 1);
@@ -4100,6 +4064,7 @@ public class TestVectorStringExpressions {
         outCol.start[0], outCol.length[0]);
     Assert.assertEquals(0, cmp);
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
 
     // no nulls, is repeating
     batch = makeStringBatchMixedCase();
@@ -4115,7 +4080,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testColUpper() throws HiveException {
+  public void testColUpper() {
 
     // no nulls, not repeating
 
@@ -4134,7 +4099,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringLength() throws HiveException {
+  public void testStringLength() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatchMixedCharSize();
@@ -4159,6 +4124,7 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     outCol = (LongColumnVector) batch.cols[1];
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
     Assert.assertEquals(7, outCol.vector[0]); // length of "mixedUp"
 
     // no nulls, is repeating
@@ -4243,7 +4209,6 @@ public class TestVectorStringExpressions {
     batch = makeStringBatchMixedCharSize();
     pattern = new Text(mixPercentPattern);
     FilterStringColLikeStringScalar expr = new FilterStringColLikeStringScalar(0, mixPercentPattern);
-    expr.transientInit(hiveConf);
     expr.evaluate(batch);
 
     // verify that the beginning entry is the only one that matches
@@ -4289,7 +4254,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringLikePatternType() throws HiveException {
+  public void testStringLikePatternType() throws UnsupportedEncodingException, HiveException {
     FilterStringColLikeStringScalar expr;
     VectorizedRowBatch vrb = VectorizedRowGroupGenUtil.getVectorizedRowBatch(1, 1, 1);
     vrb.cols[0] = new BytesColumnVector(1);
@@ -4298,63 +4263,55 @@ public class TestVectorStringExpressions {
 
     // BEGIN pattern
     expr = new FilterStringColLikeStringScalar(0, "abc%".getBytes());
-    expr.transientInit(hiveConf);
     expr.evaluate(vrb);
     Assert.assertEquals(FilterStringColLikeStringScalar.BeginChecker.class,
         expr.checker.getClass());
 
     // END pattern
-    expr = new FilterStringColLikeStringScalar(0, "%abc".getBytes(StandardCharsets.UTF_8));
-    expr.transientInit(hiveConf);
+    expr = new FilterStringColLikeStringScalar(0, "%abc".getBytes("UTF-8"));
     expr.evaluate(vrb);
     Assert.assertEquals(FilterStringColLikeStringScalar.EndChecker.class,
         expr.checker.getClass());
 
     // MIDDLE pattern
     expr = new FilterStringColLikeStringScalar(0, "%abc%".getBytes());
-    expr.transientInit(hiveConf);
     expr.evaluate(vrb);
     Assert.assertEquals(FilterStringColLikeStringScalar.MiddleChecker.class,
         expr.checker.getClass());
 
     // CHAIN pattern
     expr = new FilterStringColLikeStringScalar(0, "%abc%de".getBytes());
-    expr.transientInit(hiveConf);
     expr.evaluate(vrb);
     Assert.assertEquals(FilterStringColLikeStringScalar.ChainedChecker.class,
         expr.checker.getClass());
 
     // COMPLEX pattern
     expr = new FilterStringColLikeStringScalar(0, "%abc_%de".getBytes());
-    expr.transientInit(hiveConf);
     expr.evaluate(vrb);
     Assert.assertEquals(FilterStringColLikeStringScalar.ComplexChecker.class,
         expr.checker.getClass());
 
     // NONE pattern
     expr = new FilterStringColLikeStringScalar(0, "abc".getBytes());
-    expr.transientInit(hiveConf);
     expr.evaluate(vrb);
     Assert.assertEquals(FilterStringColLikeStringScalar.NoneChecker.class,
         expr.checker.getClass());
   }
 
   @Test
-  public void testStringLikeMultiByte() throws HiveException {
+  public void testStringLikeMultiByte() throws HiveException, UnsupportedEncodingException {
     FilterStringColLikeStringScalar expr;
     VectorizedRowBatch batch;
 
     // verify that a multi byte LIKE expression matches a matching string
     batch = makeStringBatchMixedCharSize();
     expr = new FilterStringColLikeStringScalar(0, ('%' + new String(multiByte) + '%').getBytes(StandardCharsets.UTF_8));
-    expr.transientInit(hiveConf);
     expr.evaluate(batch);
     Assert.assertEquals(1, batch.size);
 
     // verify that a multi byte LIKE expression doesn't match a non-matching string
     batch = makeStringBatchMixedCharSize();
     expr = new FilterStringColLikeStringScalar(0, ('%' + new String(multiByte) + 'x').getBytes(StandardCharsets.UTF_8));
-    expr.transientInit(hiveConf);
     expr.evaluate(batch);
     Assert.assertEquals(0, batch.size);
   }
@@ -4387,14 +4344,14 @@ public class TestVectorStringExpressions {
       return value.toLowerCase();
     }
     case 8: {
-      StringBuilder sb = new StringBuilder();
+      StringBuffer sb = new StringBuffer(8);
       for (int i = 0; i < control.nextInt(12); i++) {
         sb.append((char) ('a' + control.nextInt(26)));
       }
       return sb.toString();
     }
     case 9: {
-      StringBuilder sb = new StringBuilder();
+      StringBuffer sb = new StringBuffer(8);
       for (int i = 0; i < control.nextInt(12); i++) {
         sb.append((char) ('A' + control.nextInt(26)));
       }
@@ -4404,7 +4361,7 @@ public class TestVectorStringExpressions {
   }
 
   private String generateCandidate(Random control, String pattern) {
-    StringBuilder sb = new StringBuilder();
+    StringBuffer sb = new StringBuffer();
     final StringTokenizer tokens = new StringTokenizer(pattern, "%");
     final boolean leftAnchor = pattern.startsWith("%");
     final boolean rightAnchor = pattern.endsWith("%");
@@ -4425,7 +4382,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringLikeRandomized() throws HiveException {
+  public void testStringLikeRandomized() throws HiveException, UnsupportedEncodingException {
     final String [] patterns = new String[] {
         "ABC%",
         "%ABC",
@@ -4443,8 +4400,7 @@ public class TestVectorStringExpressions {
     Random control = new Random(1234);
     UDFLike udf = new UDFLike();
     for (String pattern : patterns) {
-      VectorExpression expr = new FilterStringColLikeStringScalar(0, pattern.getBytes(StandardCharsets.UTF_8));
-      expr.transientInit(hiveConf);
+      VectorExpression expr = new FilterStringColLikeStringScalar(0, pattern.getBytes("utf-8"));
       VectorizedRowBatch batch = VectorizedRowGroupGenUtil.getVectorizedRowBatch(1, 1, 1);
       batch.cols[0] = new BytesColumnVector(1);
       BytesColumnVector bcv = (BytesColumnVector) batch.cols[0];
@@ -4455,7 +4411,7 @@ public class TestVectorStringExpressions {
         BooleanWritable like = udf.evaluate(new Text(input), pText);
         batch.reset();
         bcv.initBuffer();
-        byte[] utf8 = input.getBytes(StandardCharsets.UTF_8);
+        byte[] utf8 = input.getBytes("utf-8");
         bcv.setVal(0, utf8, 0, utf8.length);
         bcv.noNulls = true;
         batch.size = 1;
@@ -4473,7 +4429,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testColConcatStringScalar() throws HiveException {
+  public void testColConcatStringScalar() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatch();
@@ -4520,6 +4476,7 @@ public class TestVectorStringExpressions {
         outCol.start[0], outCol.length[0]);
     Assert.assertEquals(0, cmp);
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
 
     // no nulls, is repeating
     batch = makeStringBatch();
@@ -4535,13 +4492,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testColConcatCharScalar() throws HiveException {
+  public void testColConcatCharScalar() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatch();
-    StringGroupColConcatStringScalar expr =
-        new StringGroupColConcatStringScalar(
-            0, new HiveChar(new String(red), 6).getStrippedValue().getBytes(), 1);
+    StringGroupColConcatCharScalar expr = new StringGroupColConcatCharScalar(0, new HiveChar(new String(red), 6), 1);
     expr.evaluate(batch);
     BytesColumnVector outCol = (BytesColumnVector) batch.cols[1];
 
@@ -4584,6 +4539,7 @@ public class TestVectorStringExpressions {
         outCol.start[0], outCol.length[0]);
     Assert.assertEquals(0, cmp);
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
 
     // no nulls, is repeating
     batch = makeStringBatch();
@@ -4599,13 +4555,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testColConcatVarCharScalar() throws HiveException {
+  public void testColConcatVarCharScalar() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatch();
-    StringGroupColConcatStringScalar expr =
-        new StringGroupColConcatStringScalar(
-            0, new HiveVarchar(new String(red), 14).getValue().getBytes(), 1);
+    StringGroupColConcatVarCharScalar expr = new StringGroupColConcatVarCharScalar(0, new HiveVarchar(new String(red), 14), 1);
     expr.evaluate(batch);
     BytesColumnVector outCol = (BytesColumnVector) batch.cols[1];
 
@@ -4648,6 +4602,7 @@ public class TestVectorStringExpressions {
         outCol.start[0], outCol.length[0]);
     Assert.assertEquals(0, cmp);
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
 
     // no nulls, is repeating
     batch = makeStringBatch();
@@ -4663,7 +4618,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testStringScalarConcatCol() throws HiveException {
+  public void testStringScalarConcatCol() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatch();
@@ -4710,6 +4665,7 @@ public class TestVectorStringExpressions {
         outCol.start[0], outCol.length[0]);
     Assert.assertEquals(0, cmp);
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
 
     // no nulls, is repeating
     batch = makeStringBatch();
@@ -4725,13 +4681,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testCharScalarConcatCol() throws HiveException {
+  public void testCharScalarConcatCol() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatch();
-    StringScalarConcatStringGroupCol expr =
-        new StringScalarConcatStringGroupCol(
-            new HiveChar(new String(red), 6).getStrippedValue().getBytes(), 0, 1);
+    CharScalarConcatStringGroupCol expr = new CharScalarConcatStringGroupCol(new HiveChar(new String(red), 6), 0, 1);
     expr.evaluate(batch);
     BytesColumnVector outCol = (BytesColumnVector) batch.cols[1];
 
@@ -4774,6 +4728,7 @@ public class TestVectorStringExpressions {
         outCol.start[0], outCol.length[0]);
     Assert.assertEquals(0, cmp);
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
 
     // no nulls, is repeating
     batch = makeStringBatch();
@@ -4789,13 +4744,11 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testVarCharScalarConcatCol() throws HiveException {
+  public void testVarCharScalarConcatCol() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatch();
-    StringScalarConcatStringGroupCol expr =
-        new StringScalarConcatStringGroupCol(
-            new HiveVarchar(new String(red), 14).getValue().getBytes(), 0, 1);
+    VarCharScalarConcatStringGroupCol expr = new VarCharScalarConcatStringGroupCol(new HiveVarchar(new String(red), 14), 0, 1);
     expr.evaluate(batch);
     BytesColumnVector outCol = (BytesColumnVector) batch.cols[1];
 
@@ -4838,6 +4791,7 @@ public class TestVectorStringExpressions {
         outCol.start[0], outCol.length[0]);
     Assert.assertEquals(0, cmp);
     Assert.assertTrue(outCol.isRepeating);
+    Assert.assertFalse(outCol.noNulls);
 
     // no nulls, is repeating
     batch = makeStringBatch();
@@ -4853,7 +4807,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testColConcatCol() throws HiveException {
+  public void testColConcatCol() {
 
     // has nulls, not repeating
     VectorizedRowBatch batch = makeStringBatch2In1Out();
@@ -4959,6 +4913,7 @@ public class TestVectorStringExpressions {
     batch.cols[0].noNulls = true;
     expr.evaluate(batch);
     Assert.assertEquals(false, outCol.isRepeating);
+    Assert.assertEquals(true,  outCol.noNulls);
     cmp = StringExpr.compare(red, 0, red.length, outCol.vector[2],
         outCol.start[2], outCol.length[2]);
     Assert.assertEquals(0, cmp);
@@ -4995,16 +4950,16 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testSubstrStart() throws HiveException {
+  public void testSubstrStart() throws UnsupportedEncodingException {
     // Testing no nulls and no repeating
     VectorizedRowBatch batch = new VectorizedRowBatch(2);
     BytesColumnVector v = new BytesColumnVector();
     batch.cols[0] = v;
     BytesColumnVector outV = new BytesColumnVector();
     batch.cols[1] = outV;
-    byte[] data1 = "abcd string".getBytes(StandardCharsets.UTF_8);
-    byte[] data2 = "efgh string".getBytes(StandardCharsets.UTF_8);
-    byte[] data3 = "efgh".getBytes(StandardCharsets.UTF_8);
+    byte[] data1 = "abcd string".getBytes("UTF-8");
+    byte[] data2 = "efgh string".getBytes("UTF-8");
+    byte[] data3 = "efgh".getBytes("UTF-8");
     batch.size = 3;
     v.noNulls = true;
     v.setRef(0, data1, 0, data1.length);
@@ -5020,7 +4975,7 @@ public class TestVectorStringExpressions {
     Assert.assertEquals(3, batch.size);
     Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
-    byte[] expected = "string".getBytes(StandardCharsets.UTF_8);
+    byte[] expected = "string".getBytes("UTF-8");
     Assert.assertEquals(0,
     StringExpr.compare(
             expected, 0, expected.length, outCol.vector[0], outCol.start[0], outCol.length[0]
@@ -5050,6 +5005,7 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     outCol = (BytesColumnVector) batch.cols[1];
     Assert.assertEquals(3, batch.size);
+    Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
     Assert.assertEquals(0,
     StringExpr.compare(
@@ -5077,6 +5033,7 @@ public class TestVectorStringExpressions {
     expr = new StringSubstrColStart(0, 1, 1);
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
+    Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
 
     Assert.assertEquals(0,
@@ -5137,7 +5094,7 @@ public class TestVectorStringExpressions {
     batch.cols[1] = outV;
     expr.evaluate(batch);
     outCol = (BytesColumnVector) batch.cols[1];
-    expected = "string".getBytes(StandardCharsets.UTF_8);
+    expected = "string".getBytes("UTF-8");
     Assert.assertTrue(outV.isRepeating);
     Assert.assertTrue(outV.noNulls);
     Assert.assertEquals(0,
@@ -5161,6 +5118,7 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     outCol = (BytesColumnVector) batch.cols[1];
     Assert.assertFalse(outV.isRepeating);
+    Assert.assertTrue(outV.noNulls);
     Assert.assertEquals(0,
     StringExpr.compare(
             // 3nd char starts from index 3 and total length should be 7 bytes as max is 10
@@ -5185,6 +5143,7 @@ public class TestVectorStringExpressions {
     expr = new StringSubstrColStart(0, 2, 1);
     expr.evaluate(batch);
     Assert.assertFalse(outV.isRepeating);
+    Assert.assertTrue(outV.noNulls);
     Assert.assertEquals(0,
     StringExpr.compare(
             // the result is the last 1 character, which occupies 4 bytes
@@ -5194,7 +5153,7 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testSubstrStartLen() throws HiveException {
+  public void testSubstrStartLen() throws UnsupportedEncodingException {
     // Testing no nulls and no repeating
 
     VectorizedRowBatch batch = new VectorizedRowBatch(2);
@@ -5202,9 +5161,9 @@ public class TestVectorStringExpressions {
     batch.cols[0] = v;
     BytesColumnVector outV = new BytesColumnVector();
     batch.cols[1] = outV;
-    byte[] data1 = "abcd string".getBytes(StandardCharsets.UTF_8);
-    byte[] data2 = "efgh string".getBytes(StandardCharsets.UTF_8);
-    byte[] data3 = "efgh".getBytes(StandardCharsets.UTF_8);
+    byte[] data1 = "abcd string".getBytes("UTF-8");
+    byte[] data2 = "efgh string".getBytes("UTF-8");
+    byte[] data3 = "efgh".getBytes("UTF-8");
     batch.size = 3;
     v.noNulls = true;
     v.setRef(0, data1, 0, data1.length);
@@ -5221,8 +5180,9 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     BytesColumnVector outCol = (BytesColumnVector) batch.cols[1];
     Assert.assertEquals(3, batch.size);
+    Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
-    byte[] expected = "string".getBytes(StandardCharsets.UTF_8);
+    byte[] expected = "string".getBytes("UTF-8");
     Assert.assertEquals(0,
     StringExpr.compare(
             expected, 0, expected.length, outCol.vector[0], outCol.start[0], outCol.length[0]
@@ -5248,6 +5208,7 @@ public class TestVectorStringExpressions {
     expr = new StringSubstrColStartLen(0, -6, 6, 1);
     expr.evaluate(batch);
     outCol = (BytesColumnVector) batch.cols[1];
+    Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
     Assert.assertEquals(3, batch.size);
 
@@ -5279,6 +5240,7 @@ public class TestVectorStringExpressions {
     outCol = (BytesColumnVector) batch.cols[1];
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
+    Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
     Assert.assertEquals(0,
         StringExpr.compare(
@@ -5308,6 +5270,7 @@ public class TestVectorStringExpressions {
     outCol = (BytesColumnVector) batch.cols[1];
     expr.evaluate(batch);
     Assert.assertEquals(3, batch.size);
+    Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
     Assert.assertEquals(0,
     StringExpr.compare(
@@ -5337,6 +5300,7 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     outCol = (BytesColumnVector) batch.cols[1];
     Assert.assertEquals(3, batch.size);
+    Assert.assertTrue(outCol.noNulls);
     Assert.assertFalse(outCol.isRepeating);
     Assert.assertEquals(0,
     StringExpr.compare(
@@ -5417,6 +5381,7 @@ public class TestVectorStringExpressions {
     expr.evaluate(batch);
     Assert.assertEquals(1, batch.size);
     Assert.assertFalse(outV.isRepeating);
+    Assert.assertTrue(outV.noNulls);
     Assert.assertEquals(0,
     StringExpr.compare(
             // 3rd char starts at index 3, and with length 2 it is covering the rest of the array.
@@ -5440,6 +5405,7 @@ public class TestVectorStringExpressions {
     outCol = (BytesColumnVector) batch.cols[1];
     Assert.assertEquals(1, batch.size);
     Assert.assertFalse(outV.isRepeating);
+    Assert.assertTrue(outV.noNulls);
     Assert.assertEquals(0,
     StringExpr.compare(
             // 2nd substring index refers to the 6th index (last char in the array)
@@ -5449,9 +5415,9 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testVectorLTrim() throws HiveException {
+  public void testVectorLTrim() {
     VectorizedRowBatch b = makeTrimBatch();
-    VectorExpression expr = new StringLTrimCol(0, 1);
+    VectorExpression expr = new StringLTrim(0, 1);
     expr.evaluate(b);
     BytesColumnVector outV = (BytesColumnVector) b.cols[1];
     Assert.assertEquals(0,
@@ -5469,9 +5435,9 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testVectorRTrim() throws HiveException {
+  public void testVectorRTrim() {
     VectorizedRowBatch b = makeTrimBatch();
-    VectorExpression expr = new StringRTrimCol(0, 1);
+    VectorExpression expr = new StringRTrim(0, 1);
     expr.evaluate(b);
     BytesColumnVector outV = (BytesColumnVector) b.cols[1];
     Assert.assertEquals(0,
@@ -5489,9 +5455,9 @@ public class TestVectorStringExpressions {
   }
 
   @Test
-  public void testVectorTrim() throws HiveException {
+  public void testVectorTrim() {
     VectorizedRowBatch b = makeTrimBatch();
-    VectorExpression expr = new StringTrimCol(0, 1);
+    VectorExpression expr = new StringTrim(0, 1);
     expr.evaluate(b);
     BytesColumnVector outV = (BytesColumnVector) b.cols[1];
     Assert.assertEquals(0,
@@ -5527,7 +5493,7 @@ public class TestVectorStringExpressions {
 
   // Test boolean-valued (non-filter) IN expression for strings
   @Test
-  public void testStringInExpr() throws HiveException {
+  public void testStringInExpr() {
 
     // test basic operation
     VectorizedRowBatch b = makeStringBatch();
@@ -5571,7 +5537,6 @@ public class TestVectorStringExpressions {
   public void testRegex() throws HiveException {
     VectorizedRowBatch b = makeStringBatch();
     FilterStringColRegExpStringScalar expr = new FilterStringColRegExpStringScalar(0, "a.*".getBytes());
-    expr.transientInit(hiveConf);
     b.size = 5;
     b.selectedInUse = false;
     BytesColumnVector v = (BytesColumnVector) b.cols[0];

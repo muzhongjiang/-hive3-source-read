@@ -1,29 +1,24 @@
---! qt:dataset:src
 set hive.mapred.mode=nonstrict;
-set hive.security.authorization.enabled=true;
 set hive.security.authorization.manager=org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactoryForTest;
 
-create table `masking_test_n5` as select cast(key as int) as key, value from src;
+create table `masking_test` as select cast(key as int) as key, value from src;
 
-create view `v0` as select * from `masking_test_n5`;
+create view `v0` as select * from `masking_test`;
 
 explain
 select * from `v0`;
 
 select * from `v0`;
 
-create table `masking_test_subq_n1` as select cast(key as int) as key, value from src;
+create table `masking_test_subq` as select cast(key as int) as key, value from src;
 
-create view `v1_n9` as select * from `masking_test_subq_n1`;
+create view `v1` as select * from `masking_test_subq`;
 
-explain cbo
-select * from `v1_n9`
-limit 20;
 explain
-select * from `v1_n9`
+select * from `v1`
 limit 20;
 
-select * from `v1_n9`
+select * from `v1`
 limit 20;
 
 create view `masking_test_view` as select key from `v0`;

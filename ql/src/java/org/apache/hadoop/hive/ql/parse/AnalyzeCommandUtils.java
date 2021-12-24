@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,14 +25,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
-/**
- * Utilities for semantic analyzers.
- */
-public final class AnalyzeCommandUtils {
-  private AnalyzeCommandUtils() {
-    throw new UnsupportedOperationException("AnalyzeCommandUtils should not be instantiated");
-  }
-
+public class AnalyzeCommandUtils {
   public static boolean isPartitionLevelStats(ASTNode tree) {
     boolean isPartitioned = false;
     ASTNode child = (ASTNode) tree.getChild(0);
@@ -57,7 +50,7 @@ public final class AnalyzeCommandUtils {
     ASTNode child = ((ASTNode) tree.getChild(0).getChild(1));
     Map<String,String> partSpec = new HashMap<String, String>();
     if (child != null) {
-      partSpec = BaseSemanticAnalyzer.getValidatedPartSpec(tbl, child, hiveConf, false);
+      partSpec = DDLSemanticAnalyzer.getValidatedPartSpec(tbl, child, hiveConf, false);
     } //otherwise, it is the case of analyze table T compute statistics for columns;
     return partSpec;
   }

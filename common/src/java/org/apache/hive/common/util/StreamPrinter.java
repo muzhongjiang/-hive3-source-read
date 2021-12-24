@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 
 import org.apache.hadoop.io.IOUtils;
 
@@ -46,7 +45,7 @@ public class StreamPrinter extends Thread {
   public void run() {
     BufferedReader br = null;
     try {
-      InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
+      InputStreamReader isr = new InputStreamReader(is);
       br = new BufferedReader(isr);
       String line = null;
       if (type != null) {

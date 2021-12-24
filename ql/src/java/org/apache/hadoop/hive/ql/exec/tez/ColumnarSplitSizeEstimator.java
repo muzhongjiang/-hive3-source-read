@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.split.SplitSizeEstimator;
  */
 public class ColumnarSplitSizeEstimator implements SplitSizeEstimator {
   private static final Logger LOG = LoggerFactory.getLogger(ColumnarSplitSizeEstimator.class);
+  private static final boolean isDebugEnabled = LOG.isDebugEnabled();
 
   @Override
   public long getEstimatedSize(InputSplit inputSplit) throws IOException {
@@ -38,13 +39,17 @@ public class ColumnarSplitSizeEstimator implements SplitSizeEstimator {
 
     if (inputSplit instanceof ColumnarSplit) {
       colProjSize = ((ColumnarSplit) inputSplit).getColumnarProjectionSize();
-      LOG.debug("Estimated column projection size: {}", colProjSize);
+      if (isDebugEnabled) {
+        LOG.debug("Estimated column projection size: " + colProjSize);
+      }
     } else if (inputSplit instanceof HiveInputFormat.HiveInputSplit) {
       InputSplit innerSplit = ((HiveInputFormat.HiveInputSplit) inputSplit).getInputSplit();
 
       if (innerSplit instanceof ColumnarSplit) {
         colProjSize = ((ColumnarSplit) innerSplit).getColumnarProjectionSize();
-        LOG.debug("Estimated column projection size: {}", colProjSize);
+        if (isDebugEnabled) {
+          LOG.debug("Estimated column projection size: " + colProjSize);
+        }
       }
     }
     if (colProjSize <= 0) {

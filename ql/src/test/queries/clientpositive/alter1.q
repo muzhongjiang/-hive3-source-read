@@ -28,7 +28,7 @@ describe alter1;
 
 -- Cleanup
 DROP TABLE alter1;
-SHOW TABLES LIKE "alter%";
+SHOW TABLES;
 
 -- With non-default Database
 

@@ -1,7 +1,5 @@
-set hive.mapred.mode=nonstrict;
 -- start query 1 in stream 0 using template query83.tpl and seed 1930872976
-explain
-with sr_items as
+explain with sr_items as
  (select i_item_id item_id,
         sum(sr_return_quantity) sr_item_qty
  from store_returns,
@@ -65,5 +63,3 @@ with sr_items as
  order by sr_items.item_id
          ,sr_item_qty
  limit 100;
-
--- end query 1 in stream 0 using template query83.tpl

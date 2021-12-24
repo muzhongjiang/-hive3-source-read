@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,9 +26,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.ColOrCol;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.FilterColOrScalar;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.FilterExprOrExpr;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.FilterScalarOrColumn;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.ScalarNullOrCol;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.udf.UDFType;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.BooleanObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
@@ -38,10 +36,9 @@ import org.apache.hadoop.io.BooleanWritable;
  * GenericUDF Class for computing or.
  */
 @Description(name = "or", value = "a1 _FUNC_ a2 _FUNC_ ... _FUNC_ an - Logical or")
-@VectorizedExpressions({ ColOrCol.class, ScalarNullOrCol.class, FilterExprOrExpr.class,
-    FilterColOrScalar.class, FilterScalarOrColumn.class })
+@VectorizedExpressions({ColOrCol.class, FilterExprOrExpr.class, FilterColOrScalar.class,
+    FilterScalarOrColumn.class})
 @NDV(maxNdv = 2)
-@UDFType(deterministic = true, commutative = true)
 public class GenericUDFOPOr extends GenericUDF {
   private final BooleanWritable result = new BooleanWritable();
   private transient BooleanObjectInspector[] boi;
@@ -55,11 +52,7 @@ public class GenericUDFOPOr extends GenericUDF {
     }
     boi = new BooleanObjectInspector[arguments.length];
     for (int i = 0; i < arguments.length; i++) {
-      if (!(arguments[i] instanceof BooleanObjectInspector)) {
-        boi[i] = PrimitiveObjectInspectorFactory.writableBooleanObjectInspector;
-      } else {
-        boi[i] = (BooleanObjectInspector) arguments[i];
-      }
+      boi[i] = (BooleanObjectInspector) arguments[i];
     }
     return PrimitiveObjectInspectorFactory.writableBooleanObjectInspector;
   }

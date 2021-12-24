@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,23 +17,22 @@
  */
 package org.apache.hadoop.hive.serde2.objectinspector;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.io.ByteWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
 import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.io.TimestampWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 import org.apache.hadoop.hive.serde2.objectinspector.StandardUnionObjectInspector.StandardUnion;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
@@ -48,18 +47,12 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import org.junit.Test;
 
 /**
  * TestStandardObjectInspectors.
  *
  */
-public class TestStandardObjectInspectors {
+public class TestStandardObjectInspectors extends TestCase {
 
   void doTestStandardPrimitiveObjectInspector(Class<?> writableClass,
       Class<?> javaClass) throws Throwable {
@@ -89,7 +82,6 @@ public class TestStandardObjectInspectors {
     }
   }
 
-  @Test
   public void testStandardPrimitiveObjectInspector() throws Throwable {
     try {
       doTestStandardPrimitiveObjectInspector(NullWritable.class, Void.class);
@@ -103,7 +95,7 @@ public class TestStandardObjectInspectors {
       doTestStandardPrimitiveObjectInspector(DoubleWritable.class, Double.class);
       doTestStandardPrimitiveObjectInspector(Text.class, String.class);
       doTestStandardPrimitiveObjectInspector(BytesWritable.class, byte[].class);
-      doTestStandardPrimitiveObjectInspector(TimestampWritableV2.class, Timestamp.class);
+      doTestStandardPrimitiveObjectInspector(TimestampWritable.class, Timestamp.class);
     } catch (Throwable e) {
       e.printStackTrace();
       throw e;
@@ -144,7 +136,6 @@ public class TestStandardObjectInspectors {
     }
   }
 
-  @Test
   public void testJavaPrimitiveObjectInspector() throws Throwable {
     try {
       doTestJavaPrimitiveObjectInspector(NullWritable.class, Void.class, null);
@@ -172,7 +163,6 @@ public class TestStandardObjectInspectors {
     }
   }
 
-  @Test
   public void testStandardListObjectInspector() throws Throwable {
     try {
       StandardListObjectInspector loi1 = ObjectInspectorFactory
@@ -228,7 +218,6 @@ public class TestStandardObjectInspectors {
 
   }
 
-  @Test
   public void testStandardMapObjectInspector() throws Throwable {
     try {
       StandardMapObjectInspector moi1 = ObjectInspectorFactory
@@ -290,7 +279,6 @@ public class TestStandardObjectInspectors {
   }
 
   @SuppressWarnings("unchecked")
-  @Test
   public void testStandardStructObjectInspector() throws Throwable {
     try {
       // Test StandardObjectInspector both with field comments and without
@@ -395,7 +383,6 @@ public class TestStandardObjectInspectors {
   }
 
   @SuppressWarnings("unchecked")
-  @Test
   public void testStandardUnionObjectInspector() throws Throwable {
     try {
       ArrayList<ObjectInspector> objectInspectors = new ArrayList<ObjectInspector>();
@@ -498,7 +485,7 @@ public class TestStandardObjectInspectors {
       assertEquals(0, ObjectInspectorUtils.compare(union, uoi1,
           new StandardUnion((byte) 0, 1), uoi2));
       assertTrue(ObjectInspectorUtils.copyToStandardObject(
-          union, uoi1).equals(union));
+          union, uoi1).equals(1));
 
       union = new StandardUnion((byte) 1, "two");
       assertEquals(1, uoi1.getTag(union));
@@ -507,7 +494,7 @@ public class TestStandardObjectInspectors {
       assertEquals(0, ObjectInspectorUtils.compare(union, uoi1,
           new StandardUnion((byte) 1, "two"), uoi2));
       assertTrue(ObjectInspectorUtils.copyToStandardObject(
-          union, uoi1).equals(union));
+          union, uoi1).equals("two"));
 
       union = new StandardUnion((byte) 2, true);
       assertEquals(2, uoi1.getTag(union));
@@ -516,7 +503,7 @@ public class TestStandardObjectInspectors {
       assertEquals(0, ObjectInspectorUtils.compare(union, uoi1,
           new StandardUnion((byte) 2, true), uoi2));
       assertTrue(ObjectInspectorUtils.copyToStandardObject(
-          union, uoi1).equals(union));
+          union, uoi1).equals(true));
 
       ArrayList<Integer> iList = new ArrayList<Integer>();
       iList.add(4);
@@ -528,9 +515,9 @@ public class TestStandardObjectInspectors {
       assertEquals(0, ObjectInspectorUtils.compare(union, uoi1,
           new StandardUnion((byte) 3, iList.clone()), uoi2));
       assertTrue(ObjectInspectorUtils.copyToStandardObject(
-          union, uoi1).equals(union));
+          union, uoi1).equals(iList));
 
-      HashMap<Integer, String> map = new LinkedHashMap<Integer, String>();
+      HashMap<Integer, String> map = new HashMap<Integer, String>();
       map.put(6, "six");
       map.put(7, "seven");
       map.put(8, "eight");
@@ -549,7 +536,7 @@ public class TestStandardObjectInspectors {
       assertNotNull(th);
       assertEquals("Compare on map type not supported!", th.getMessage());
       assertTrue(ObjectInspectorUtils.copyToStandardObject(
-          union, uoi1).equals(union));
+          union, uoi1).equals(map));
 
 
       ArrayList<Object> struct = new ArrayList<Object>(2);
@@ -563,7 +550,7 @@ public class TestStandardObjectInspectors {
       assertEquals(0, ObjectInspectorUtils.compare(union, uoi1,
           new StandardUnion((byte) 5, struct.clone()), uoi2));
       assertTrue(ObjectInspectorUtils.copyToStandardObject(
-          union, uoi1).equals(union));
+          union, uoi1).equals(struct));
 
     } catch (Throwable e) {
       e.printStackTrace();

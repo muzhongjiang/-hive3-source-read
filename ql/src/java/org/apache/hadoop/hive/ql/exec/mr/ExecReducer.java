@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.MapredContext;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -30,7 +32,6 @@ import org.apache.hadoop.hive.ql.exec.mr.ExecMapper.ReportStats;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
-import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
@@ -44,8 +45,6 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * ExecReducer is the generic Reducer class for Hive. Together with ExecMapper it is
@@ -61,6 +60,8 @@ import org.slf4j.LoggerFactory;
 public class ExecReducer extends MapReduceBase implements Reducer {
 
   private static final Logger LOG = LoggerFactory.getLogger("ExecReducer");
+  private static final boolean isInfoEnabled = LOG.isInfoEnabled();
+  private static final boolean isTraceEnabled = LOG.isTraceEnabled();
   private static final String PLAN_KEY = "__REDUCE_PLAN__";
 
   // Input value serde needs to be an array to support different SerDe
@@ -69,7 +70,8 @@ public class ExecReducer extends MapReduceBase implements Reducer {
   private final Object[] valueObject = new Object[Byte.MAX_VALUE];
   private final List<Object> row = new ArrayList<Object>(Utilities.reduceFieldNameList.size());
 
-  private AbstractSerDe inputKeySerDe;
+  // TODO: move to DynamicSerDe when it's ready
+  private Deserializer inputKeyDeserializer;
   private JobConf jc;
   private OutputCollector<?, ?> oc;
   private Operator<?> reducer;
@@ -101,18 +103,20 @@ public class ExecReducer extends MapReduceBase implements Reducer {
     isTagged = gWork.getNeedsTagging();
     try {
       keyTableDesc = gWork.getKeyDesc();
-      inputKeySerDe = ReflectionUtils.newInstance(keyTableDesc
-          .getSerDeClass(), null);
-      inputKeySerDe.initialize(null, keyTableDesc.getProperties(), null);
-      keyObjectInspector = inputKeySerDe.getObjectInspector();
+      inputKeyDeserializer = ReflectionUtils.newInstance(keyTableDesc
+          .getDeserializerClass(), null);
+      SerDeUtils.initializeSerDe(inputKeyDeserializer, null, keyTableDesc.getProperties(), null);
+      keyObjectInspector = inputKeyDeserializer.getObjectInspector();
       valueTableDesc = new TableDesc[gWork.getTagToValueDesc().size()];
       for (int tag = 0; tag < gWork.getTagToValueDesc().size(); tag++) {
         // We should initialize the SerDe with the TypeInfo when available.
         valueTableDesc[tag] = gWork.getTagToValueDesc().get(tag);
-        AbstractSerDe valueObjectSerDe = ReflectionUtils.newInstance(valueTableDesc[tag].getSerDeClass(), null);
-        valueObjectSerDe.initialize(null, valueTableDesc[tag].getProperties(), null);
-        inputValueDeserializer[tag] = valueObjectSerDe;
-        valueObjectInspector[tag] = inputValueDeserializer[tag].getObjectInspector();
+        inputValueDeserializer[tag] = ReflectionUtils.newInstance(
+            valueTableDesc[tag].getDeserializerClass(), null);
+        SerDeUtils.initializeSerDe(inputValueDeserializer[tag], null,
+                                   valueTableDesc[tag].getProperties(), null);
+        valueObjectInspector[tag] = inputValueDeserializer[tag]
+            .getObjectInspector();
 
         ArrayList<ObjectInspector> ois = new ArrayList<ObjectInspector>();
         ois.add(keyObjectInspector);
@@ -172,12 +176,14 @@ public class ExecReducer extends MapReduceBase implements Reducer {
           groupKey = new BytesWritable();
         } else {
           // If a operator wants to do some work at the end of a group
-          LOG.trace("End Group");
+          if (isTraceEnabled) {
+            LOG.trace("End Group");
+          }
           reducer.endGroup();
         }
 
         try {
-          keyObject = inputKeySerDe.deserialize(keyWritable);
+          keyObject = inputKeyDeserializer.deserialize(keyWritable);
         } catch (Exception e) {
           throw new HiveException(
               "Hive Runtime Error: Unable to deserialize reduce input key from "
@@ -187,7 +193,9 @@ public class ExecReducer extends MapReduceBase implements Reducer {
         }
 
         groupKey.set(keyWritable.get(), 0, keyWritable.getSize());
-        LOG.trace("Start Group");
+        if (isTraceEnabled) {
+          LOG.trace("Start Group");
+        }
         reducer.startGroup();
         reducer.setGroupKeyObject(keyObject);
       }
@@ -220,13 +228,8 @@ public class ExecReducer extends MapReduceBase implements Reducer {
             rowString = "[Error getting row data with exception " +
                   StringUtils.stringifyException(e2) + " ]";
           }
-
-          // Log the contents of the row that caused exception so that it's available for debugging. But
-          // when exposed through an error message it can leak sensitive information, even to the
-          // client application.
-          LOG.trace("Hive Runtime Error while processing row (tag="
-              + tag + ") " + rowString);
-          throw new HiveException("Hive Runtime Error while processing row", e);
+          throw new HiveException("Hive Runtime Error while processing row (tag="
+              + tag + ") " + rowString, e);
         }
       }
 
@@ -236,7 +239,7 @@ public class ExecReducer extends MapReduceBase implements Reducer {
         // Don't create a new object if we are already out of memory
         throw (OutOfMemoryError) e;
       } else {
-        LOG.error("Reduce failed", e);
+        LOG.error(StringUtils.stringifyException(e));
         throw new RuntimeException(e);
       }
     }
@@ -246,14 +249,16 @@ public class ExecReducer extends MapReduceBase implements Reducer {
   public void close() {
 
     // No row was processed
-    if (oc == null) {
+    if (oc == null && isTraceEnabled) {
       LOG.trace("Close called without any rows processed");
     }
 
     try {
       if (groupKey != null) {
         // If a operator wants to do some work at the end of a group
-        LOG.trace("End Group");
+        if (isTraceEnabled) {
+          LOG.trace("End Group");
+        }
         reducer.endGroup();
       }
 

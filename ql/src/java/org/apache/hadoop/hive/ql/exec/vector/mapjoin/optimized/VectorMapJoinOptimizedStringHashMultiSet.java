@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer.ReusableGetAdaptor;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinBytesHashMultiSet;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashMultiSetResult;
-import org.apache.hadoop.hive.ql.plan.TableDesc;
 
 /*
  * An multi-key hash map based on the BytesBytesMultiHashMultiSet.
@@ -57,9 +56,9 @@ public class VectorMapJoinOptimizedStringHashMultiSet
 
   }
 
-  public VectorMapJoinOptimizedStringHashMultiSet(boolean isOuterJoin, MapJoinTableContainer originalTableContainer,
-                                                  ReusableGetAdaptor hashMapRowGetter, TableDesc tableDesc) {
+  public VectorMapJoinOptimizedStringHashMultiSet(boolean isOuterJoin,
+      MapJoinTableContainer originalTableContainer, ReusableGetAdaptor hashMapRowGetter) {
     super(originalTableContainer, hashMapRowGetter);
-    stringCommon =  new VectorMapJoinOptimizedStringCommon(isOuterJoin, tableDesc);
+    stringCommon =  new VectorMapJoinOptimizedStringCommon(isOuterJoin);
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,16 +20,11 @@ package org.apache.hadoop.hive.serde2.objectinspector;
 import java.util.Map;
 import java.util.TreeMap;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions;
-import static org.junit.Assert.assertTrue;
-import org.junit.Test;
 
-/**
- * FullMapEqualComparer Test.
- */
-public class TestFullMapEqualComparer {
+public class TestFullMapEqualComparer extends TestCase {
 
   public static class IntegerIntegerMapHolder {
     Map<Integer, Integer> mMap;
@@ -39,7 +34,6 @@ public class TestFullMapEqualComparer {
     }
   }
 
-  @Test
   public void testAntiSymmetry() {
     IntegerIntegerMapHolder o1 = new IntegerIntegerMapHolder();
     IntegerIntegerMapHolder o2 = new IntegerIntegerMapHolder();
@@ -72,7 +66,6 @@ public class TestFullMapEqualComparer {
 
   }
 
-  @Test
   public void testTransitivity() {
     IntegerIntegerMapHolder o1 = new IntegerIntegerMapHolder();
     IntegerIntegerMapHolder o2 = new IntegerIntegerMapHolder();

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,7 +24,6 @@ import java.util.Map;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.api.Database;
-import org.apache.hadoop.hive.metastore.api.DataConnector;
 import org.apache.hadoop.hive.ql.metadata.DummyPartition;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
@@ -42,18 +41,13 @@ public class Entity implements Serializable {
    * The type of the entity.
    */
   public static enum Type {
-    DATABASE, TABLE, PARTITION, DUMMYPARTITION, DFS_DIR, LOCAL_DIR, FUNCTION, SERVICE_NAME, DATACONNECTOR
+    DATABASE, TABLE, PARTITION, DUMMYPARTITION, DFS_DIR, LOCAL_DIR, FUNCTION
   }
 
   /**
    * The database if this is a database.
    */
   private Database database;
-
-  /**
-   * The dataconnector if this is a dataconnector.
-   */
-  private DataConnector connector;
 
   /**
    * The type.
@@ -77,14 +71,9 @@ public class Entity implements Serializable {
 
   /**
    * An object that is represented as a String
-   * Currently used for functions and service name
+   * Currently used for functions
    */
   private String stringObject;
-
-  /**
-   * The class name for a function
-   */
-  private String className;
 
   /**
    * This is derived from t and p, but we need to serialize this field to make
@@ -116,14 +105,6 @@ public class Entity implements Serializable {
 
   public void setDatabase(Database database) {
     this.database = database;
-  }
-
-  public DataConnector getDataConnector() {
-    return connector;
-  }
-
-  public void setDataConnector(DataConnector connector) {
-    this.connector = connector;
   }
 
   public Type getTyp() {
@@ -158,14 +139,6 @@ public class Entity implements Serializable {
     this.d = d;
   }
 
-  public String getClassName() {
-    return this.className;
-  }
-
-  public void setClassName(String className) {
-    this.className = className;
-  }
-
   public String getFunctionName() {
     if (typ == Type.FUNCTION) {
       return stringObject;
@@ -179,13 +152,6 @@ public class Entity implements Serializable {
           "Set function can't be called on entity if the entity type is not " + Type.FUNCTION);
     }
     this.stringObject = funcName;
-  }
-
-  public String getServiceName() {
-    if (typ == Type.SERVICE_NAME) {
-      return stringObject;
-    }
-    return null;
   }
 
   /**
@@ -208,36 +174,6 @@ public class Entity implements Serializable {
     this.typ = Type.DATABASE;
     this.name = computeName();
     this.complete = complete;
-  }
-
-  /**
-   * Constructor for a dataconnector.
-   *
-   * @param dataconnector
-   *          Database that is read or written to.
-   * @param complete
-   *          Means the dataconnector is target
-   */
-  public Entity(DataConnector dataconnector, boolean complete) {
-    this.connector = dataconnector;
-    this.typ = Type.DATACONNECTOR;
-    this.name = computeName();
-    this.complete = complete;
-  }
-
-  /**
-   * Constructor for a entity with string object representation (eg SERVICE_NAME)
-   *
-   * @param name
-   *          Used for service that action is being authorized on.
-   *          Currently hostname is used for service name.
-   * @param t
-   *         Type of entity
-   */
-  public Entity(String name, Type t) {
-    this.stringObject = name;
-    this.typ = t;
-    this.name = computeName();
   }
 
   /**
@@ -296,17 +232,15 @@ public class Entity implements Serializable {
    * Create an entity representing a object with given name, database namespace and type
    * @param database - database namespace
    * @param strObj - object name as string
-   * @param className - function class name
    * @param type - the entity type. this constructor only supports FUNCTION type currently
    */
-  public Entity(Database database, String strObj, String className, Type type) {
+  public Entity(Database database, String strObj, Type type) {
     if (type != Type.FUNCTION) {
       throw new IllegalArgumentException("This constructor is supported only for type:"
           + Type.FUNCTION);
     }
     this.database = database;
     this.stringObject = strObj;
-    this.className = className;
     this.typ = type;
     this.complete = true;
     name = computeName();
@@ -411,10 +345,6 @@ public class Entity implements Serializable {
         return database.getName() + "." + stringObject;
       }
       return stringObject;
-    case SERVICE_NAME:
-      return stringObject;
-    case DATACONNECTOR:
-      return "connector:" + connector.getName();
     default:
       return d.toString();
     }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,15 +21,15 @@ package org.apache.hadoop.hive.ql.metadata;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.ql.parse.Quotation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.JavaUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.TezContext;
+import org.apache.hadoop.hive.ql.index.HiveIndexHandler;
 import org.apache.hadoop.hive.ql.security.HadoopDefaultAuthenticator;
 import org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider;
 import org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider;
@@ -275,12 +275,19 @@ public final class HiveUtils {
   /**
    * Regenerate an identifier as part of unparsing it back to SQL text.
    */
+  public static String unparseIdentifier(String identifier) {
+    return unparseIdentifier(identifier, null);
+  }
+
   public static String unparseIdentifier(String identifier, Configuration conf) {
-    // We support arbitrary characters in
-    // identifiers, then we need to escape any backticks
+    // In the future, if we support arbitrary characters in
+    // identifiers, then we'll need to escape any backticks
     // in identifier by doubling them up.
-    Quotation quotation = Quotation.from(conf);
-    if (quotation != Quotation.NONE) {
+
+    // the time has come
+    String qIdSupport = conf == null ? null :
+      HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUOTEDID_SUPPORT);
+    if ( qIdSupport != null && !"none".equals(qIdSupport) ) {
       identifier = identifier.replaceAll("`", "``");
     }
     return "`" + identifier + "`";
@@ -306,6 +313,24 @@ public final class HiveUtils {
 
   private HiveUtils() {
     // prevent instantiation
+  }
+
+  public static HiveIndexHandler getIndexHandler(HiveConf conf,
+      String indexHandlerClass) throws HiveException {
+
+    if (indexHandlerClass == null) {
+      return null;
+    }
+    try {
+      Class<? extends HiveIndexHandler> handlerClass =
+        (Class<? extends HiveIndexHandler>)
+        Class.forName(indexHandlerClass, true, Utilities.getSessionSpecifiedClassLoader());
+      HiveIndexHandler indexHandler = ReflectionUtils.newInstance(handlerClass, conf);
+      return indexHandler;
+    } catch (ClassNotFoundException e) {
+      throw new HiveException("Error in loading index handler."
+          + e.getMessage(), e);
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -413,6 +438,22 @@ public final class HiveUtils {
     return ret;
   }
 
+
+  /**
+   * Convert FieldSchemas to columnNames with backticks around them.
+   */
+  public static String getUnparsedColumnNamesFromFieldSchema(
+      List<FieldSchema> fieldSchemas) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < fieldSchemas.size(); i++) {
+      if (i > 0) {
+        sb.append(",");
+      }
+      sb.append(HiveUtils.unparseIdentifier(fieldSchemas.get(i).getName()));
+    }
+    return sb.toString();
+  }
+
   public static String getLocalDirList(Configuration conf) {
     if (HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
       TezContext tezContext = (TezContext) TezContext.get();
@@ -422,21 +463,5 @@ public final class HiveUtils {
     }
 
     return null;
-  }
-
-  public static String getReplPolicy(String dbName) {
-    if ((dbName == null) || (dbName.isEmpty())) {
-      return "*.*";
-    } else {
-      return dbName.toLowerCase() + ".*";
-    }
-  }
-
-  public static Path getDumpPath(Path root, String dbName, String tableName) {
-    assert (dbName != null);
-    if ((tableName != null) && (!tableName.isEmpty())) {
-      return new Path(root, dbName + "." + tableName);
-    }
-    return new Path(root, dbName);
   }
 }

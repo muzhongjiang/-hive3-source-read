@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,8 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import org.apache.commons.text.WordUtils;
-import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.commons.lang.WordUtils;
 import org.apache.hadoop.io.Text;
 
 /**
@@ -31,8 +30,8 @@ import org.apache.hadoop.io.Text;
 public class StringInitCap extends StringUnaryUDF {
   private static final long serialVersionUID = 1L;
 
-  public StringInitCap(int colNum, int outputColumnNum) {
-    super(colNum, outputColumnNum, new IUDFUnaryString() {
+  public StringInitCap(int colNum, int outputColumn) {
+    super(colNum, outputColumn, new IUDFUnaryString() {
 
       Text t = new Text();
 
@@ -41,7 +40,7 @@ public class StringInitCap extends StringUnaryUDF {
         if (s == null) {
           return null;
         }
-        t.set(WordUtils.capitalizeFully(s.toString(), Utilities.COMMON_WHITESPACE_CHARS));
+        t.set(WordUtils.capitalizeFully(s.toString()));
         return t;
       }
     });

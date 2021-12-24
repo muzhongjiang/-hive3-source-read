@@ -36,7 +36,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.avro.Schema;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.HiveDecimalUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
@@ -137,8 +136,14 @@ class SchemaToTypeInfo {
       int precision = 0;
       int scale = 0;
       try {
-        precision = getIntValue(schema.getObjectProp(AvroSerDe.AVRO_PROP_PRECISION));
-        scale = getIntValue(schema.getObjectProp(AvroSerDe.AVRO_PROP_SCALE));
+        Object o = schema.getObjectProp(AvroSerDe.AVRO_PROP_PRECISION);
+        if (o instanceof Integer) {
+          precision = (int) o;
+        }
+        o = schema.getObjectProp(AvroSerDe.AVRO_PROP_SCALE);
+        if (o instanceof Integer) {
+          scale = (int) o;
+        }
       } catch (Exception ex) {
         throw new AvroSerdeException("Failed to obtain scale value from file schema: " + schema, ex);
       }
@@ -185,16 +190,6 @@ class SchemaToTypeInfo {
     }
 
     return typeInfoCache.retrieve(schema, seenSchemas);
-  }
-
-  private static int getIntValue(Object obj) {
-    int value = 0;
-    if (obj instanceof Integer) {
-      value = (int) obj;
-    } else if (obj instanceof String && StringUtils.isNumeric((String)obj)) {
-      value = Integer.parseInt((String)obj);
-    }
-    return value;
   }
 
   private static TypeInfo generateTypeInfoWorker(Schema schema,

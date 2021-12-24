@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,6 +23,9 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hive.common.io.NonSyncByteArrayInputStream;
 import org.apache.hadoop.hive.common.io.NonSyncByteArrayOutputStream;
+import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
+import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
+import org.apache.hadoop.hive.serde2.ByteStream.Output;
 
 /**
  * Extensions to bytearrayinput/output streams.
@@ -33,15 +36,6 @@ public class ByteStream {
    *
    */
   public static class Input extends NonSyncByteArrayInputStream {
-
-    public Input() {
-      super();
-    }
-
-    public Input(byte[] buf) {
-      super(buf);
-    }
-
     public byte[] getData() {
       return buf;
     }
@@ -50,10 +44,18 @@ public class ByteStream {
       return count;
     }
 
-    public void reset(byte[] buf, int count) {
-      super.buf = buf;
-      super.count = count;
-      super.mark = super.pos = 0;
+    public void reset(byte[] argBuf, int argCount) {
+      buf = argBuf;
+      mark = pos = 0;
+      count = argCount;
+    }
+
+    public Input() {
+      super(new byte[1]);
+    }
+
+    public Input(byte[] buf) {
+      super(buf);
     }
 
     public Input(byte[] buf, int offset, int length) {
@@ -67,8 +69,10 @@ public class ByteStream {
    */
   public static final class Output
     extends NonSyncByteArrayOutputStream implements RandomAccessOutput {
-    
-    private static final byte[] RESERVE_INT = { 0x00, 0x00, 0x00, 0x00 };
+    @Override
+    public byte[] getData() {
+      return buf;
+    }
 
     public Output() {
       super();
@@ -79,67 +83,46 @@ public class ByteStream {
     }
 
     @Override
-    public byte[] getData() {
-      return buf;
-    }
-
-    @Override
     public void writeInt(long offset, int value) {
-      int i = (int) offset;
-      buf[i + 0] = (byte) (value >> 24);
-      buf[i + 1] = (byte) (value >> 16);
-      buf[i + 2] = (byte) (value >> 8);
-      buf[i + 3] = (byte) (value);
+      int offset2 = (int)offset;
+      getData()[offset2++] = (byte) (value >> 24);
+      getData()[offset2++] = (byte) (value >> 16);
+      getData()[offset2++] = (byte) (value >> 8);
+      getData()[offset2] = (byte) (value);
     }
 
     @Override
     public void writeByte(long offset, byte value) {
-      buf[(int) offset] = value;
+      getData()[(int) offset] = value;
     }
 
-    /**
-     * Optimize for the common cases:
-     * <ul>
-     *   <li>Reserve 1 byte</li>
-     *   <li>Reserve 1 int (4 bytes)</li>
-     * </ul>
-     */
     @Override
     public void reserve(int byteCount) {
-      switch (byteCount) {
-      case 0:
-        break;
-      case 1:
+      for (int i = 0; i < byteCount; ++i) {
         write(0);
-        break;
-      case 4:
-        write(RESERVE_INT, 0, 4);
-        break;
-      default:
-        for (int i = 0; i < byteCount; ++i) {
-          write(0);
-        }
       }
     }
 
     public boolean arraysEquals(Output output) {
-      return Arrays.equals(super.buf, output.buf);
+      if (count != output.count) {
+        return false;
+      }
+      for (int i = 0; i < count; i++) {
+        if (buf[i] != output.buf[i]) {
+          return false;
+        }
+      }
+      return true;
     }
   }
 
   public static interface RandomAccessOutput {
     public void writeByte(long offset, byte value);
-
     public void writeInt(long offset, int value);
-
     public void reserve(int byteCount);
-
     public void write(int b);
-
     public void write(byte b[]) throws IOException;
-
     public void write(byte b[], int off, int len);
-
     public int getLength();
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,7 +38,7 @@ import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.parse.GenTezProcContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -58,13 +58,12 @@ import org.apache.hadoop.hive.ql.plan.TezEdgeProperty.EdgeType;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.TezWork.VertexType;
 import org.apache.hadoop.hive.ql.stats.StatsUtils;
-import org.apache.hadoop.hive.ql.util.NullOrdering;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Sets;
 
-public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
+public class ReduceSinkMapJoinProc implements NodeProcessor {
 
   private final static Logger LOG = LoggerFactory.getLogger(ReduceSinkMapJoinProc.class.getName());
 
@@ -178,7 +177,7 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
         keyCount = rowCount = Long.MAX_VALUE;
       }
       tableSize = stats.getDataSize();
-      List<String> keyCols = parentRS.getConf().getOutputKeyColumnNames();
+      ArrayList<String> keyCols = parentRS.getConf().getOutputKeyColumnNames();
       if (keyCols != null && !keyCols.isEmpty()) {
         // See if we can arrive at a smaller number using distinct stats from key columns.
         long maxKeyCount = 1;
@@ -220,8 +219,8 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
     if (tableSize == 0) {
       tableSize = 1;
     }
-    LOG.info("Mapjoin " + mapJoinOp + "(bucket map join = " + joinConf.isBucketMapJoin()
-    + "), pos: " + pos + " --> " + parentWork.getName() + " (" + keyCount
+    LOG.info("Mapjoin " + mapJoinOp + "(bucket map join = )" + joinConf.isBucketMapJoin()
+    + ", pos: " + pos + " --> " + parentWork.getName() + " (" + keyCount
     + " keys estimated from " + rowCount + " rows, " + bucketCount + " buckets)");
     joinConf.getParentToInput().put(pos, parentWork.getName());
     if (keyCount != Long.MAX_VALUE) {
@@ -271,11 +270,7 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
         }
       }
     } else if (mapJoinOp.getConf().isDynamicPartitionHashJoin()) {
-      if (parentRS.getConf().isForwarding()) {
-        edgeType = EdgeType.ONE_TO_ONE_EDGE;
-      } else {
-        edgeType = EdgeType.CUSTOM_SIMPLE_EDGE;
-      }
+      edgeType = EdgeType.CUSTOM_SIMPLE_EDGE;
     }
     if (edgeType == EdgeType.CUSTOM_EDGE) {
       // disable auto parallelism for bucket map joins
@@ -295,7 +290,7 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
 
         ReduceSinkOperator r = null;
         if (context.connectedReduceSinks.contains(parentRS)) {
-          LOG.debug("Cloning reduce sink " + parentRS + " for multi-child broadcast edge");
+          LOG.debug("Cloning reduce sink for multi-child broadcast edge");
           // we've already set this one up. Need to clone for the next work.
           r = (ReduceSinkOperator) OperatorFactory.getAndMakeChild(
               parentRS.getCompilationOpContext(),
@@ -335,6 +330,7 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
 
     // create an new operator: HashTableDummyOperator, which share the table desc
     HashTableDummyDesc desc = new HashTableDummyDesc();
+    @SuppressWarnings("unchecked")
     HashTableDummyOperator dummyOp = (HashTableDummyOperator) OperatorFactory.get(
         parentRS.getCompilationOpContext(), desc);
     TableDesc tbl;
@@ -350,7 +346,7 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
     StringBuilder keyNullOrder = new StringBuilder();
     for (ExprNodeDesc k: keyCols) {
       keyOrder.append("+");
-      keyNullOrder.append(NullOrdering.defaultNullOrder(context.conf).getSign());
+      keyNullOrder.append("a");
     }
     TableDesc keyTableDesc = PlanUtils.getReduceKeyTableDesc(PlanUtils
         .getFieldSchemasFromColumnList(keyCols, "mapjoinkey"), keyOrder.toString(),

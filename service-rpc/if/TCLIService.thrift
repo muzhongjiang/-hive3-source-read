@@ -66,9 +66,6 @@ enum TProtocolVersion {
 
   // V10 adds support for in place updates via GetOperationStatus
   HIVE_CLI_SERVICE_PROTOCOL_V10
-
-  // V11 adds timestamp with local time zone type
-  HIVE_CLI_SERVICE_PROTOCOL_V11
 }
 
 enum TTypeId {
@@ -93,8 +90,7 @@ enum TTypeId {
   VARCHAR_TYPE,
   CHAR_TYPE,
   INTERVAL_YEAR_MONTH_TYPE,
-  INTERVAL_DAY_TIME_TYPE,
-  TIMESTAMPLOCALTZ_TYPE
+  INTERVAL_DAY_TIME_TYPE
 }
 
 const set<TTypeId> PRIMITIVE_TYPES = [
@@ -114,8 +110,7 @@ const set<TTypeId> PRIMITIVE_TYPES = [
   TTypeId.VARCHAR_TYPE,
   TTypeId.CHAR_TYPE,
   TTypeId.INTERVAL_YEAR_MONTH_TYPE,
-  TTypeId.INTERVAL_DAY_TIME_TYPE,
-  TTypeId.TIMESTAMPLOCALTZ_TYPE
+  TTypeId.INTERVAL_DAY_TIME_TYPE
 ]
 
 const set<TTypeId> COMPLEX_TYPES = [
@@ -153,7 +148,6 @@ const map<TTypeId,string> TYPE_NAMES = {
   TTypeId.CHAR_TYPE: "CHAR"
   TTypeId.INTERVAL_YEAR_MONTH_TYPE: "INTERVAL_YEAR_MONTH"
   TTypeId.INTERVAL_DAY_TIME_TYPE: "INTERVAL_DAY_TIME"
-  TTypeId.TIMESTAMPLOCALTZ_TYPE: "TIMESTAMP WITH LOCAL TIME ZONE"
 }
 
 // Thrift does not support recursively defined types or forward declarations,
@@ -523,7 +517,6 @@ enum TOperationType {
   GET_COLUMNS,
   GET_FUNCTIONS,
   UNKNOWN,
-  PROCEDURAL_SQL
 }
 
 // Client-side reference to a task running
@@ -597,15 +590,6 @@ struct TOpenSessionResp {
   4: optional map<string, string> configuration
 }
 
-struct TSetClientInfoReq {
-  1: required TSessionHandle sessionHandle,
-  2: optional map<string, string> configuration
-}
-
-struct TSetClientInfoResp {
-  1: required TStatus status
-}
-
 
 // CloseSession()
 //
@@ -671,7 +655,6 @@ enum TGetInfoType {
   CLI_CATALOG_NAME =                     10003,
   CLI_COLLATION_SEQ =                    10004,
   CLI_MAX_IDENTIFIER_LEN =               10005,
-  CLI_ODBC_KEYWORDS =                    10006
 }
 
 union TGetInfoValue {
@@ -1071,7 +1054,6 @@ struct TGetOperationStatusResp {
 
   10: optional TProgressUpdateResp progressUpdateResponse
 
-  11: optional i64 numModifiedRows
 }
 
 
@@ -1242,14 +1224,6 @@ struct TProgressUpdateResp {
   6: required i64 startTime
 }
 
-struct TGetQueryIdReq {
-  1: required TOperationHandle operationHandle
-}
-
-struct TGetQueryIdResp {
-  1: required string queryId
-}
-
 service TCLIService {
 
   TOpenSessionResp OpenSession(1:TOpenSessionReq req);
@@ -1293,8 +1267,4 @@ service TCLIService {
   TCancelDelegationTokenResp CancelDelegationToken(1:TCancelDelegationTokenReq req);
 
   TRenewDelegationTokenResp RenewDelegationToken(1:TRenewDelegationTokenReq req);
-
-  TGetQueryIdResp GetQueryId(1:TGetQueryIdReq req);
-
-  TSetClientInfoResp SetClientInfo(1:TSetClientInfoReq req);
 }

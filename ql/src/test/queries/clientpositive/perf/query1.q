@@ -1,7 +1,6 @@
 set hive.mapred.mode=nonstrict;
--- start query 1 in stream 0 using template query1.tpl and seed 2031708268
-explain
-with customer_total_return as
+
+explain with customer_total_return as
 (select sr_customer_sk as ctr_customer_sk
 ,sr_store_sk as ctr_store_sk
 ,sum(SR_FEE) as ctr_total_return
@@ -23,5 +22,3 @@ and s_state = 'NM'
 and ctr1.ctr_customer_sk = c_customer_sk
 order by c_customer_id
 limit 100;
-
--- end query 1 in stream 0 using template query1.tpl

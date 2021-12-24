@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,16 +18,13 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions.gen;
 
-import java.util.Arrays;
 import java.sql.Timestamp;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.NullUtil;
 import org.apache.hadoop.hive.ql.exec.vector.*;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * Generated from template TimestampColumnCompareTimestampScalar.txt, which covers binary comparison
@@ -38,115 +35,87 @@ public class <ClassName> extends VectorExpression {
 
   private static final long serialVersionUID = 1L;
 
-  private final <HiveOperandType> value;
+  private int colNum;
+  private <HiveOperandType> value;
+  private int outputColumn;
 
-  public <ClassName>(int colNum, <HiveOperandType> value, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  public <ClassName>(int colNum, <HiveOperandType> value, int outputColumn) {
+    this.colNum = colNum;
     this.value = value;
+    this.outputColumn = outputColumn;
   }
 
   public <ClassName>() {
-    super();
-
-    // Dummy final assignments.
-    value = null;
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
-
-    // return immediately if batch is empty
-    final int n = batch.size;
-    if (n == 0) {
-      return;
-    }
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
      // Input #1 is type <OperandType>.
-    <InputColumnVectorType> inputColVector1 = (<InputColumnVectorType>) batch.cols[inputColumnNum[0]];
+    <InputColumnVectorType> inputColVector1 = (<InputColumnVectorType>) batch.cols[colNum];
 
-    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumnNum];
+    LongColumnVector outputColVector = (LongColumnVector) batch.cols[outputColumn];
 
     int[] sel = batch.selected;
-    boolean[] inputIsNull = inputColVector1.isNull;
-    boolean[] outputIsNull = outputColVector.isNull;
+    boolean[] nullPos = inputColVector1.isNull;
+    boolean[] outNulls = outputColVector.isNull;
+    int n = batch.size;
     long[] outputVector = outputColVector.vector;
 
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
-    if (inputColVector1.isRepeating) {
-      if (inputColVector1.noNulls || !inputIsNull[0]) {
-        outputIsNull[0] = false;
-        outputVector[0] = inputColVector1.compareTo(0, value) <OperatorSymbol> 0 ? 1 : 0;
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-      }
-      outputColVector.isRepeating = true;
-      NullUtil.setNullOutputEntriesColScalar(outputColVector, batch.selectedInUse, sel, n);
+    // return immediately if batch is empty
+    if (n == 0) {
       return;
     }
 
+    outputColVector.isRepeating = false;
+    outputColVector.noNulls = inputColVector1.noNulls;
     if (inputColVector1.noNulls) {
-      if (batch.selectedInUse) {
-
-         // CONSIDER: For large n, fill n or all of isNull array and use the tighter ELSE loop.
-
-         if (!outputColVector.noNulls) {
-           for(int j = 0; j != n; j++) {
-             final int i = sel[j];
-             outputIsNull[i] = false;
-             outputVector[i] = inputColVector1.compareTo(i, value) <OperatorSymbol> 0 ? 1 : 0;
-          }
-         } else {
-           for(int j = 0; j != n; j++) {
-             final int i = sel[j];
-             outputVector[i] = inputColVector1.compareTo(i, value) <OperatorSymbol> 0 ? 1 : 0;
-           }
-         }
-      } else {
-        if (!outputColVector.noNulls) {
-
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
+      if (inputColVector1.isRepeating) {
+        //All must be selected otherwise size would be zero
+        //Repeating property will not change.
+        outputVector[0] = inputColVector1.compareTo(0, value) <OperatorSymbol> 0 ? 1 : 0;
+        outputColVector.isRepeating = true;
+      } else if (batch.selectedInUse) {
+        for(int j=0; j != n; j++) {
+          int i = sel[j];
+          outputVector[i] = inputColVector1.compareTo(i, value) <OperatorSymbol> 0 ? 1 : 0;
         }
+      } else {
         for(int i = 0; i != n; i++) {
           outputVector[i] = inputColVector1.compareTo(i, value) <OperatorSymbol> 0 ? 1 : 0;
         }
       }
-    } else /* there are NULLs in the inputColVector */ {
-
-      /*
-       * Do careful maintenance of the outputColVector.noNulls flag.
-       */
-
-      if (batch.selectedInUse) {
+    } else {
+      if (inputColVector1.isRepeating) {
+        //All must be selected otherwise size would be zero
+        //Repeating property will not change.
+        if (!nullPos[0]) {
+          outputVector[0] = inputColVector1.compareTo(0, value) <OperatorSymbol> 0 ? 1 : 0;
+          outNulls[0] = false;
+        } else {
+          outNulls[0] = true;
+        }
+        outputColVector.isRepeating = true;
+      } else if (batch.selectedInUse) {
         for(int j=0; j != n; j++) {
           int i = sel[j];
-          if (!inputIsNull[i]) {
-            outputIsNull[i] = false;
+          if (!nullPos[i]) {
             outputVector[i] = inputColVector1.compareTo(i, value) <OperatorSymbol> 0 ? 1 : 0;
+            outNulls[i] = false;
           } else {
-            // Comparison with NULL is NULL.
-            outputIsNull[i] = true;
-            outputColVector.noNulls = false;
+            //comparison with null is null
+            outNulls[i] = true;
           }
         }
       } else {
+        System.arraycopy(nullPos, 0, outNulls, 0, n);
         for(int i = 0; i != n; i++) {
-         if (!inputIsNull[i]) {
-            outputIsNull[i] = false;
+          if (!nullPos[i]) {
             outputVector[i] = inputColVector1.compareTo(i, value) <OperatorSymbol> 0 ? 1 : 0;
-          } else {
-            // Comparison with NULL is NULL.
-            outputIsNull[i] = true;
-            outputColVector.noNulls = false;
           }
         }
       }
@@ -154,8 +123,18 @@ public class <ClassName> extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "long";
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", val " + TimestampUtils.timestampScalarTypeToString(value);
+    return "col " + colNum + ", val " + value.toString();
   }
 
   @Override

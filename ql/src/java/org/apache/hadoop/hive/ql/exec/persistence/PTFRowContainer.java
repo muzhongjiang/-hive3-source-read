@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,7 +29,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator.RecordWriter;
-import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -238,7 +237,6 @@ public class PTFRowContainer<Row extends List<Object>> extends RowContainer<Row>
         serdeConstants.SERIALIZATION_FORMAT, ""+ Utilities.ctrlaCode,
         serdeConstants.LIST_COLUMNS, colNames.toString(),
         serdeConstants.LIST_COLUMN_TYPES,colTypes.toString(),
-        hive_metastoreConstants.TABLE_BUCKETING_VERSION, "-1",
         serdeConstants.SERIALIZATION_LIB,LazyBinarySerDe.class.getName()));
     return tblDesc;
   }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 
 /**
  *    FastHiveDecimal is a mutable fast decimal object.  It is the base class for both the
@@ -189,7 +188,7 @@ public class FastHiveDecimal {
   }
 
   protected boolean fastSetFromString(String string, boolean trimBlanks) {
-    byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
+    byte[] bytes = string.getBytes();
     return
         fastSetFromBytes(
             bytes, 0, bytes.length, trimBlanks);
@@ -272,24 +271,6 @@ public class FastHiveDecimal {
             outputStream,
             fastSignum, fast0, fast1, fast2, fastIntegerDigitCount, fastScale,
             scratchLongs);
-  }
-
-  /*
-   * Deserializes 64-bit decimals up to the maximum 64-bit precision (18 decimal digits).
-   */
-  protected void fastDeserialize64(long decimalLong, int scale) {
-    FastHiveDecimalImpl.fastDeserialize64(
-        decimalLong, scale, this);
-  }
-
-  /*
-   * Serializes decimal64 up to the maximum 64-bit precision (18 decimal digits).
-   */
-  protected long fastSerialize64(int scale) {
-    return
-        FastHiveDecimalImpl.fastSerialize64(
-            scale,
-            fastSignum, fast1, fast0, fastScale);
   }
 
   // The fastBigIntegerBytes method returns 3 56 bit (7 byte) words and a possible sign byte.
@@ -429,9 +410,6 @@ public class FastHiveDecimal {
   }
 
   protected void fastAbs() {
-    if (fastSignum == 0) {
-      return;
-    }
     fastSignum = 1;
   }
 

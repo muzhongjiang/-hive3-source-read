@@ -20,6 +20,7 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -28,14 +29,9 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
+import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.regex.Pattern;
 
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -45,24 +41,24 @@ import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.LlapOutpu
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.SignableVertexSpec;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.SubmitWorkRequestProto;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.VertexOrBinary;
-import org.apache.hadoop.hive.llap.ext.LlapDaemonInfo;
 import org.apache.hadoop.hive.llap.ext.LlapTaskUmbilicalExternalClient;
 import org.apache.hadoop.hive.llap.ext.LlapTaskUmbilicalExternalClient.LlapTaskUmbilicalExternalResponder;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
+import org.apache.hadoop.hive.llap.registry.ServiceInstance;
+import org.apache.hadoop.hive.llap.registry.ServiceInstanceSet;
+import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
 import org.apache.hadoop.hive.llap.security.LlapTokenIdentifier;
 import org.apache.hadoop.hive.llap.tez.Converters;
-import org.apache.hadoop.hive.ql.io.arrow.ArrowWrapperWritable;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
+import org.apache.hadoop.mapred.InputSplitWithLocationInfo;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.arrow.memory.BufferAllocator;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.security.Credentials;
@@ -72,7 +68,6 @@ import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hive.common.util.ShutdownHookManager;
 import org.apache.tez.common.security.JobTokenIdentifier;
 import org.apache.tez.common.security.TokenCache;
 import org.apache.tez.dag.records.TezTaskAttemptID;
@@ -95,29 +90,17 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
   private static final Logger LOG = LoggerFactory.getLogger(LlapBaseInputFormat.class);
 
   private static String driverName = "org.apache.hive.jdbc.HiveDriver";
-  private static final Object lock = new Object();
-  private static final Map<String, List<Connection>> connectionMap = new HashMap<String, List<Connection>>();
-
   private String url;  // "jdbc:hive2://localhost:10000/default"
   private String user; // "hive",
   private String pwd;  // ""
   private String query;
-  private boolean useArrow;
-  private long arrowAllocatorLimit;
-  private BufferAllocator allocator;
-  private final Random rand = new Random();
 
   public static final String URL_KEY = "llap.if.hs2.connection";
   public static final String QUERY_KEY = "llap.if.query";
   public static final String USER_KEY = "llap.if.user";
   public static final String PWD_KEY = "llap.if.pwd";
-  public static final String HANDLE_ID = "llap.if.handleid";
-  public static final String DB_KEY = "llap.if.database";
-  public static final String USE_NEW_SPLIT_FORMAT = "llap.if.use.new.split.format";
-  public static final String SESSION_QUERIES_FOR_GET_NUM_SPLITS = "llap.session.queries.for.get.num.splits";
-  public static final Pattern SET_QUERY_PATTERN = Pattern.compile("^\\s*set\\s+.*=.+$", Pattern.CASE_INSENSITIVE);
 
-  public static final String SPLIT_QUERY = "select get_llap_splits(\"%s\",%d)";
+  public final String SPLIT_QUERY = "select get_splits(\"%s\",%d)";
 
   public LlapBaseInputFormat(String url, String user, String pwd, String query) {
     this.url = url;
@@ -126,20 +109,7 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     this.query = query;
   }
 
-  //Exposed only for testing, clients should use LlapBaseInputFormat(boolean, BufferAllocator instead)
-  public LlapBaseInputFormat(boolean useArrow, long arrowAllocatorLimit) {
-    this.useArrow = useArrow;
-    this.arrowAllocatorLimit = arrowAllocatorLimit;
-  }
-
-  public LlapBaseInputFormat(boolean useArrow, BufferAllocator allocator) {
-    this.useArrow = useArrow;
-    this.allocator = allocator;
-  }
-
-  public LlapBaseInputFormat() {
-    this.useArrow = false;
-  }
+  public LlapBaseInputFormat() {}
 
 
   @SuppressWarnings("unchecked")
@@ -152,13 +122,12 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     HiveConf.setVar(job, HiveConf.ConfVars.LLAP_ZK_REGISTRY_USER, llapSplit.getLlapUser());
     SubmitWorkInfo submitWorkInfo = SubmitWorkInfo.fromBytes(llapSplit.getPlanBytes());
 
-    // llapSplit.getLlapDaemonInfos() will never be empty as of now, also validated this in GenericUDTFGetSplits while populating.
-    final LlapDaemonInfo llapDaemonInfo = llapSplit.getLlapDaemonInfos()[0];
-    final String host = llapDaemonInfo.getHost();
-    final int outputPort = llapDaemonInfo.getOutputFormatPort();
-    final int llapSubmitPort = llapDaemonInfo.getRpcPort();
+    ServiceInstance serviceInstance = getServiceInstance(job, llapSplit);
+    String host = serviceInstance.getHost();
+    int llapSubmitPort = serviceInstance.getRpcPort();
 
-    LOG.info("Will try to submit request to first Llap Daemon in the split - {}", llapDaemonInfo);
+    LOG.info("Found service instance for host " + host + " with rpc port " + llapSubmitPort
+        + " and outputformat port " + serviceInstance.getOutputFormatPort());
 
     byte[] llapTokenBytes = llapSplit.getTokenBytes();
     Token<LlapTokenIdentifier> llapToken = null;
@@ -174,79 +143,52 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     LlapTaskUmbilicalExternalClient llapClient =
       new LlapTaskUmbilicalExternalClient(job, submitWorkInfo.getTokenIdentifier(),
           submitWorkInfo.getToken(), umbilicalResponder, llapToken);
+    llapClient.init(job);
+    llapClient.start();
 
     int attemptNum = 0;
-    final int taskNum;
-    // Use task attempt number, task number from conf if provided
+    // Use task attempt number from conf if provided
     TaskAttemptID taskAttemptId = TaskAttemptID.forName(job.get(MRJobConfig.TASK_ATTEMPT_ID));
     if (taskAttemptId != null) {
       attemptNum = taskAttemptId.getId();
-      taskNum = taskAttemptId.getTaskID().getId();
       if (LOG.isDebugEnabled()) {
-        LOG.debug("Setting attempt number to: {}, task number to: {} from given taskAttemptId: {} in conf",
-            attemptNum, taskNum, taskAttemptId);
+        LOG.debug("Setting attempt number to " + attemptNum + " from task attempt ID in conf: " +
+            job.get(MRJobConfig.TASK_ATTEMPT_ID));
       }
-    } else {
-      taskNum = llapSplit.getSplitNum();
     }
 
     SubmitWorkRequestProto request = constructSubmitWorkRequestProto(
-        submitWorkInfo, taskNum, attemptNum, llapClient.getAddress(),
-        submitWorkInfo.getToken(), llapSplit, job);
+        submitWorkInfo, llapSplit.getSplitNum(), attemptNum, llapClient.getAddress(),
+        submitWorkInfo.getToken(), llapSplit.getFragmentBytes(),
+        llapSplit.getFragmentBytesSignature(), job);
+    llapClient.submitWork(request, host, llapSubmitPort);
 
+    Socket socket = new Socket(host, serviceInstance.getOutputFormatPort());
+
+    LOG.debug("Socket connected");
     SignableVertexSpec vertex = SignableVertexSpec.parseFrom(submitWorkInfo.getVertexBinary());
+
     String fragmentId =
         Converters.createTaskAttemptId(vertex.getQueryIdentifier(), vertex.getVertexIndex(),
             request.getFragmentNumber(), request.getAttemptNumber()).toString();
-
-    LOG.info("Submitting fragment:{} to llap [host = {}, port = {}] ", fragmentId, host, llapSubmitPort);
-
-    llapClient.submitWork(request, host, llapSubmitPort);
-
-    Socket socket = new Socket(host, outputPort);
-
     OutputStream socketStream = socket.getOutputStream();
     LlapOutputSocketInitMessage.Builder builder =
         LlapOutputSocketInitMessage.newBuilder().setFragmentId(fragmentId);
     if (llapSplit.getTokenBytes() != null) {
       builder.setToken(ByteString.copyFrom(llapSplit.getTokenBytes()));
     }
-
-    LOG.info("Registering fragment:{} to llap [host = {}, output port = {}] to read output",
-        fragmentId, host, outputPort);
     builder.build().writeDelimitedTo(socketStream);
     socketStream.flush();
 
     LOG.info("Registered id: " + fragmentId);
 
     @SuppressWarnings("rawtypes")
-    LlapBaseRecordReader recordReader;
-    if(useArrow) {
-      if(allocator != null) {
-        //Client provided their own allocator
-        recordReader = new LlapArrowBatchRecordReader(
-            socket.getInputStream(), llapSplit.getSchema(),
-            ArrowWrapperWritable.class, job, llapClient, socket,
-            allocator);
-      } else {
-        //Client did not provide their own allocator, use constructor for global allocator
-        recordReader = new LlapArrowBatchRecordReader(
-            socket.getInputStream(), llapSplit.getSchema(),
-            ArrowWrapperWritable.class, job, llapClient, socket,
-            arrowAllocatorLimit);
-      }
-    } else {
-      recordReader = new LlapBaseRecordReader(socket.getInputStream(),
-          llapSplit.getSchema(), BytesWritable.class, job, llapClient, (java.io.Closeable)socket);
-    }
+    LlapBaseRecordReader recordReader = new LlapBaseRecordReader(socket.getInputStream(),
+        llapSplit.getSchema(), Text.class, job, llapClient, (java.io.Closeable)socket);
     umbilicalResponder.setRecordReader(recordReader);
     return recordReader;
   }
 
-  /**
-   * Calling getSplits() will open a HiveServer2 connection which should be closed by the calling application
-   * using LlapBaseInputFormat.close() when the application is done with the splits.
-   */
   @Override
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
     List<InputSplit> ins = new ArrayList<InputSplit>();
@@ -255,16 +197,9 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     if (query == null) query = job.get(QUERY_KEY);
     if (user == null) user = job.get(USER_KEY);
     if (pwd == null) pwd = job.get(PWD_KEY);
-    String database = job.get(DB_KEY);
 
     if (url == null || query == null) {
       throw new IllegalStateException();
-    }
-
-    String handleId = job.get(HANDLE_ID);
-    if (handleId == null) {
-      handleId = UUID.randomUUID().toString();
-      LOG.info("Handle ID not specified - generated handle ID {}", handleId);
     }
 
     try {
@@ -273,157 +208,87 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
       throw new IOException(e);
     }
 
-    LOG.info("Handle ID {}: query={}", handleId, query);
     String escapedQuery = StringUtils.escapeString(query, ESCAPE_CHAR, escapedChars);
     String sql = String.format(SPLIT_QUERY, escapedQuery, numSplits);
-    try {
-      Connection conn = DriverManager.getConnection(url,user,pwd);
-      try (
-        Statement stmt = conn.createStatement();
-      ) {
-        if (database != null && !database.isEmpty()) {
-          stmt.execute("USE " + database);
-        }
-        String sessionQueries = job.get(SESSION_QUERIES_FOR_GET_NUM_SPLITS);
-        if (sessionQueries != null && !sessionQueries.trim().isEmpty()) {
-          String[] queries = sessionQueries.trim().split(",");
-          for (String q : queries) {
-            //allow only set queries
-            if (SET_QUERY_PATTERN.matcher(q).matches()) {
-              LOG.debug("Executing session query: {}", q);
-              stmt.execute(q);
-            } else {
-              LOG.warn("Only SET queries are allowed, not executing this query: {}", q);
-            }
-          }
-        }
-
-        // In case of USE_NEW_SPLIT_FORMAT=true, following format is used
-        //       type                  split
-        // schema-split             LlapInputSplit -- contains only schema
-        // plan-split               LlapInputSplit -- contains only planBytes[]
-        // 0                        LlapInputSplit -- actual split 1
-        // 1                        LlapInputSplit -- actual split 2
-        // ...                         ...
-        boolean useNewSplitFormat = job.getBoolean(USE_NEW_SPLIT_FORMAT, false);
-
-        ResultSet res = stmt.executeQuery(sql);
-        int count = 0;
-        LlapInputSplit schemaSplit = null;
-        LlapInputSplit planSplit = null;
-        while (res.next()) {
-          // deserialize split
-          DataInput in = new DataInputStream(res.getBinaryStream(2));
-          LlapInputSplit is = new LlapInputSplit();
-          is.readFields(in);
-          if (useNewSplitFormat) {
-            ins.add(is);
-          } else {
-            // to keep the old format, populate schema and planBytes[] in actual splits
-            if (count == 0) {
-              schemaSplit = is;
-              if (numSplits == 0) {
-                ins.add(schemaSplit);
-              }
-            } else if (count == 1) {
-              planSplit = is;
-            } else {
-              is.setSchema(schemaSplit.getSchema());
-              assert planSplit != null;
-              is.setPlanBytes(planSplit.getPlanBytes());
-              ins.add(is);
-            }
-            count++;
-          }
-        }
-        res.close();
-      } catch (Exception e) {
-        LOG.error("Closing connection due to error", e);
-        conn.close();
-        throw e;
+    try (
+      Connection con = DriverManager.getConnection(url,user,pwd);
+      Statement stmt = con.createStatement();
+      ResultSet res = stmt.executeQuery(sql);
+    ) {
+      while (res.next()) {
+        // deserialize split
+        DataInput in = new DataInputStream(res.getBinaryStream(1));
+        InputSplitWithLocationInfo is = new LlapInputSplit();
+        is.readFields(in);
+        ins.add(is);
       }
-
-      // Keep connection open to hang on to associated resources (temp tables, locks).
-      // Save to connectionMap so it can be closed at user's convenience.
-      addConnection(handleId, conn);
     } catch (Exception e) {
       throw new IOException(e);
     }
     return ins.toArray(new InputSplit[ins.size()]);
   }
 
-  private void addConnection(String handleId, Connection connection) {
-    synchronized (lock) {
-      List<Connection> handleConnections = connectionMap.get(handleId);
-      if (handleConnections == null) {
-        handleConnections = new ArrayList<Connection>();
-        connectionMap.put(handleId, handleConnections);
-      }
-      handleConnections.add(connection);
+  private ServiceInstance getServiceInstance(JobConf job, LlapInputSplit llapSplit) throws IOException {
+    LlapRegistryService registryService = LlapRegistryService.getClient(job);
+    String host = llapSplit.getLocations()[0];
+
+    ServiceInstance serviceInstance = getServiceInstanceForHost(registryService, host);
+    if (serviceInstance == null) {
+      throw new IOException("No service instances found for " + host + " in registry");
     }
+
+    return serviceInstance;
   }
 
-  /**
-   * Close the connection associated with the handle ID, if getSplits() was configured with a handle ID.
-   * Call when the application is done using the splits generated by getSplits().
-   * @param handleId Handle ID used in configuration for getSplits()
-   * @throws IOException
-   */
-  public static void close(String handleId) throws IOException {
-    List<Connection> handleConnections;
-    synchronized (lock) {
-      handleConnections = connectionMap.remove(handleId);
+  private ServiceInstance getServiceInstanceForHost(LlapRegistryService registryService, String host) throws IOException {
+    InetAddress address = InetAddress.getByName(host);
+    ServiceInstanceSet instanceSet = registryService.getInstances();
+    ServiceInstance serviceInstance = null;
+
+    // The name used in the service registry may not match the host name we're using.
+    // Try hostname/canonical hostname/host address
+
+    String name = address.getHostName();
+    LOG.info("Searching service instance by hostname " + name);
+    serviceInstance = selectServiceInstance(instanceSet.getByHost(name));
+    if (serviceInstance != null) {
+      return serviceInstance;
     }
-    closeConnections(handleId, handleConnections);
+
+    name = address.getCanonicalHostName();
+    LOG.info("Searching service instance by canonical hostname " + name);
+    serviceInstance = selectServiceInstance(instanceSet.getByHost(name));
+    if (serviceInstance != null) {
+      return serviceInstance;
+    }
+
+    name = address.getHostAddress();
+    LOG.info("Searching service instance by address " + name);
+    serviceInstance = selectServiceInstance(instanceSet.getByHost(name));
+    if (serviceInstance != null) {
+      return serviceInstance;
+    }
+
+    return serviceInstance;
   }
 
-  private static void closeConnections(String handleId, List<Connection> handleConnections) {
-    if (handleConnections != null) {
-      LOG.debug("Closing {} connections for handle ID {}", handleConnections.size(), handleId);
-      for (Connection conn : handleConnections) {
-        try {
-          conn.close();
-        } catch (Exception err) {
-          LOG.error("Error while closing connection for " + handleId, err);
-        }
-      }
-    } else {
-      LOG.debug("No connection found for handle ID {}", handleId);
+  private ServiceInstance selectServiceInstance(Set<ServiceInstance> serviceInstances) {
+    if (serviceInstances == null || serviceInstances.isEmpty()) {
+      return null;
     }
-  }
 
-  /**
-   * Close all outstanding connections created by getSplits() calls
-   */
-  public static void closeAll() {
-    LOG.debug("Closing all handles");
-    synchronized (lock) {
-      Iterator<Map.Entry<String, List<Connection>>> itr = connectionMap.entrySet().iterator();
-      Map.Entry<String, List<Connection>> connHandle = null;
-      while (itr.hasNext()) {
-        connHandle = itr.next();
-        closeConnections(connHandle.getKey(), connHandle.getValue());
-        itr.remove();
-      }
+    // Get the first live service instance
+    for (ServiceInstance serviceInstance : serviceInstances) {
+      return serviceInstance;
     }
-  }
 
-  static {
-    // Shutdown hook to clean up resources at process end.
-    ShutdownHookManager.addShutdownHook(new Runnable() {
-      @Override
-      public void run() {
-        closeAll();
-      }
-    });
+    LOG.info("No live service instances were found");
+    return null;
   }
 
   private SubmitWorkRequestProto constructSubmitWorkRequestProto(SubmitWorkInfo submitWorkInfo,
       int taskNum, int attemptNum, InetSocketAddress address, Token<JobTokenIdentifier> token,
-      LlapInputSplit llapInputSplit, JobConf job) throws IOException {
-    byte[] fragmentBytes = llapInputSplit.getFragmentBytes();
-    byte[] fragmentBytesSignature = llapInputSplit.getFragmentBytesSignature();
-
+      byte[] fragmentBytes, byte[] fragmentBytesSignature, JobConf job) throws IOException {
     ApplicationId appId = submitWorkInfo.getFakeAppId();
 
     // This works, assuming the executor is running within YARN.
@@ -466,8 +331,6 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     if (fragmentBytesSignature != null) {
       builder.setInitialEventSignature(ByteString.copyFrom(fragmentBytesSignature));
     }
-    builder.setJwt(llapInputSplit.getJwt());
-    builder.setIsExternalClientRequest(true);
     return builder.build();
   }
 
@@ -496,7 +359,7 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     public void submissionFailed(String fragmentId, Throwable throwable) {
       try {
         sendOrQueueEvent(ReaderEvent.errorEvent(
-            "Received submission failed event for fragment ID " + fragmentId + ": " + throwable.toString()));
+            "Received submission failed event for fragment ID " + fragmentId));
       } catch (Exception err) {
         LOG.error("Error during heartbeat responder:", err);
       }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,11 +20,10 @@ package org.apache.hadoop.hive.ql.lockmgr;
 
 import java.util.Map;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.hadoop.hive.common.StringInternUtils;
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.metadata.DummyPartition;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -49,23 +48,16 @@ public class HiveLockObject {
      * Note: The parameters are used to uniquely identify a HiveLockObject. 
      * The parameters will be stripped off any ':' characters in order not 
      * to interfere with the way the data is serialized (':' delimited string).
-     * The query string might be truncated depending on HIVE_LOCK_QUERY_STRING_MAX_LENGTH
-     * @param queryId The query identifier will be added to the object without change
-     * @param lockTime The lock time  will be added to the object without change
-     * @param lockMode The lock mode  will be added to the object without change
-     * @param queryStr The query string might be truncated based on
-     *     HIVE_LOCK_QUERY_STRING_MAX_LENGTH conf variable
-     * @param conf The hive configuration based on which we decide if we should truncate the query
-     *     string or not
      */
-    public HiveLockObjectData(String queryId, String lockTime, String lockMode, String queryStr,
-        HiveConf conf) {
+    public HiveLockObjectData(String queryId,
+        String lockTime,
+        String lockMode,
+        String queryStr) {
       this.queryId = removeDelimiter(queryId);
       this.lockTime = StringInternUtils.internIfNotNull(removeDelimiter(lockTime));
       this.lockMode = removeDelimiter(lockMode);
       this.queryStr = StringInternUtils.internIfNotNull(
-          queryStr == null ? null : StringUtils.abbreviate(removeDelimiter(queryStr.trim()),
-              conf.getIntVar(HiveConf.ConfVars.HIVE_LOCK_QUERY_STRING_MAX_LENGTH)));
+          removeDelimiter(queryStr == null ? null : queryStr.trim()));
     }
 
     /**
@@ -198,12 +190,12 @@ public class HiveLockObject {
   }
 
   public HiveLockObject(Table tbl, HiveLockObjectData lockData) {
-    this(new String[] {tbl.getDbName(), FileUtils.escapePathName(tbl.getTableName()).toLowerCase()}, lockData);
+    this(new String[] {tbl.getDbName(), MetaStoreUtils.encodeTableName(tbl.getTableName())}, lockData);
   }
 
   public HiveLockObject(Partition par, HiveLockObjectData lockData) {
     this(new String[] {par.getTable().getDbName(),
-        FileUtils.escapePathName(par.getTable().getTableName()).toLowerCase(), par.getName()}, lockData);
+        MetaStoreUtils.encodeTableName(par.getTable().getTableName()), par.getName()}, lockData);
   }
 
   public HiveLockObject(DummyPartition par, HiveLockObjectData lockData) {

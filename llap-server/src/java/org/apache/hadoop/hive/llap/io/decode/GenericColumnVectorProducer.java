@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -37,9 +36,9 @@ import org.apache.hadoop.hive.llap.io.metadata.ConsumerFileMetadata;
 import org.apache.hadoop.hive.llap.io.metadata.ConsumerStripeMetadata;
 import org.apache.hadoop.hive.llap.metrics.LlapDaemonCacheMetrics;
 import org.apache.hadoop.hive.llap.metrics.LlapDaemonIOMetrics;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat;
 import org.apache.hadoop.hive.ql.io.orc.encoded.Consumer;
-import org.apache.hadoop.hive.ql.io.orc.encoded.IoTrace;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.hive.ql.plan.PartitionDesc;
 import org.apache.hadoop.hive.serde2.Deserializer;
@@ -49,11 +48,9 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hive.common.util.FixedSizedObjectPool;
 import org.apache.orc.CompressionKind;
-import org.apache.orc.OrcFile;
 import org.apache.orc.OrcProto;
-import org.apache.orc.OrcProto.CalendarKind;
+import org.apache.orc.OrcUtils;
 import org.apache.orc.OrcProto.ColumnEncoding;
 import org.apache.orc.OrcProto.RowIndex;
 import org.apache.orc.OrcProto.RowIndexEntry;
@@ -66,29 +63,27 @@ public class GenericColumnVectorProducer implements ColumnVectorProducer {
   private final Configuration conf;
   private final LlapDaemonCacheMetrics cacheMetrics;
   private final LlapDaemonIOMetrics ioMetrics;
-  private final FixedSizedObjectPool<IoTrace> tracePool;
-  private final ExecutorService encodeExecutor;
 
   public GenericColumnVectorProducer(SerDeLowLevelCacheImpl serdeCache,
       BufferUsageManager bufferManager, Configuration conf, LlapDaemonCacheMetrics cacheMetrics,
-      LlapDaemonIOMetrics ioMetrics, FixedSizedObjectPool<IoTrace> tracePool, ExecutorService encodeExecutor) {
+      LlapDaemonIOMetrics ioMetrics) {
     LlapIoImpl.LOG.info("Initializing ORC column vector producer");
     this.cache = serdeCache;
     this.bufferManager = bufferManager;
     this.conf = conf;
     this.cacheMetrics = cacheMetrics;
     this.ioMetrics = ioMetrics;
-    this.tracePool = tracePool;
-    this.encodeExecutor = encodeExecutor;
   }
 
   @Override
   public ReadPipeline createReadPipeline(Consumer<ColumnVectorBatch> consumer, FileSplit split,
-      Includes includes, SearchArgument sarg, QueryFragmentCounters counters,
-      SchemaEvolutionFactory sef, InputFormat<?, ?> sourceInputFormat, Deserializer sourceSerDe,
-      Reporter reporter, JobConf job, Map<Path, PartitionDesc> parts) throws IOException {
+      List<Integer> columnIds, SearchArgument sarg, String[] columnNames,
+      QueryFragmentCounters counters, TypeDescription schema, InputFormat<?, ?> sourceInputFormat,
+      Deserializer sourceSerDe, Reporter reporter, JobConf job, Map<Path, PartitionDesc> parts)
+          throws IOException {
     cacheMetrics.incrCacheReadRequests();
-    OrcEncodedDataConsumer edc = new OrcEncodedDataConsumer(consumer, includes, counters, ioMetrics);
+    OrcEncodedDataConsumer edc = new OrcEncodedDataConsumer(
+        consumer, columnIds.size(), false, counters, ioMetrics);
     SerDeFileMetadata fm;
     try {
       fm = new SerDeFileMetadata(sourceSerDe);
@@ -97,18 +92,20 @@ public class GenericColumnVectorProducer implements ColumnVectorProducer {
     }
     edc.setFileMetadata(fm);
     // Note that we pass job config to the record reader, but use global config for LLAP IO.
-    // TODO: add tracing to serde reader
-    SerDeEncodedDataReader reader = new SerDeEncodedDataReader(cache, bufferManager, conf,
-        split, includes.getPhysicalColumnIds(), edc, job, reporter, sourceInputFormat,
-        sourceSerDe, counters, fm.getSchema(), parts, encodeExecutor);
-    edc.init(reader, reader, new IoTrace(0, false));
+    SerDeEncodedDataReader reader = new SerDeEncodedDataReader(cache,
+        bufferManager, conf, split, columnIds, edc, job, reporter, sourceInputFormat,
+        sourceSerDe, counters, fm.getSchema(), parts);
+    edc.init(reader, reader);
+    if (LlapIoImpl.LOG.isDebugEnabled()) {
+      LlapIoImpl.LOG.debug("Ignoring schema: " + schema);
+    }
     return edc;
   }
 
 
   public static final class SerDeStripeMetadata implements ConsumerStripeMetadata {
     // The writer is local to the process.
-    private final String writerTimezone = "UTC";
+    private final String writerTimezone = TimeZone.getDefault().getID();
     private List<ColumnEncoding> encodings;
     private final int stripeIx;
     private long rowCount = -1;
@@ -289,16 +286,6 @@ public class GenericColumnVectorProducer implements ColumnVectorProducer {
     @Override
     public TypeDescription getSchema() {
       return schema;
-    }
-
-    @Override
-    public OrcFile.Version getFileVersion() {
-      return null;
-    }
-
-    @Override
-    public CalendarKind getCalendar() {
-      return CalendarKind.JULIAN_GREGORIAN;
     }
   }
 }

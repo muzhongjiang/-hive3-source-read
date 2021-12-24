@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,9 +18,10 @@
 
 package org.apache.hadoop.hive.ql.processors;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
+import org.apache.hadoop.hive.ql.CommandNeedRetryException;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
 import java.util.Arrays;
@@ -43,14 +44,18 @@ public class ListResourceProcessor implements CommandProcessor {
   }
 
   @Override
-  public CommandProcessorResponse run(String command) throws CommandProcessorException {
+  public void init() {
+  }
+
+  @Override
+  public CommandProcessorResponse run(String command) throws CommandNeedRetryException {
     SessionState ss = SessionState.get();
     String[] tokens = command.split("\\s+");
     SessionState.ResourceType t;
     if (tokens.length < 1 || (t = SessionState.find_resource_type(tokens[0])) == null) {
       String message = "Usage: list ["
           + StringUtils.join(SessionState.ResourceType.values(), "|") + "] [<value> [<value>]*]";
-      throw new CommandProcessorException(message);
+      return new CommandProcessorResponse(1, message, null);
     }
     List<String> filter = null;
     if (tokens.length > 1) {
@@ -60,10 +65,6 @@ public class ListResourceProcessor implements CommandProcessor {
     if (s != null && !s.isEmpty()) {
       ss.out.println(StringUtils.join(s, "\n"));
     }
-    return new CommandProcessorResponse(SCHEMA, null);
-  }
-
-  @Override
-  public void close() throws Exception {
+    return new CommandProcessorResponse(0, null, null, SCHEMA);
   }
 }

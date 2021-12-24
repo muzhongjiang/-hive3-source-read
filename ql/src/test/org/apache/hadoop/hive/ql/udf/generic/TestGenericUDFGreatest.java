@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,14 +17,13 @@
  */
 package org.apache.hadoop.hive.ql.udf.generic;
 
-
-import org.apache.hadoop.hive.common.type.Date;
+import junit.framework.TestCase;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredJavaObject;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject;
 import org.apache.hadoop.hive.serde2.io.ByteWritable;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -32,16 +31,11 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
-/**
- * TestGenericUDFGreatest.
- */
-public class TestGenericUDFGreatest {
+import java.sql.Date;
 
-  @Test
+public class TestGenericUDFGreatest extends TestCase {
+
   public void testOneArg() throws HiveException {
     @SuppressWarnings("resource")
     GenericUDFGreatest udf = new GenericUDFGreatest();
@@ -57,7 +51,6 @@ public class TestGenericUDFGreatest {
     assertNotNull("greatest() test ", ex);
   }
 
-  @Test
   public void testVoids() throws HiveException {
     GenericUDFGreatest udf = new GenericUDFGreatest();
     ObjectInspector valueOI1 = PrimitiveObjectInspectorFactory.writableVoidObjectInspector;
@@ -68,7 +61,6 @@ public class TestGenericUDFGreatest {
     runAndVerify(new Object[] { null, 1, "test"}, null, udf);
   }
 
-  @Test
   public void testGreatestMixed() throws HiveException {
     GenericUDFGreatest udf = new GenericUDFGreatest();
     ObjectInspector valueOI1 = PrimitiveObjectInspectorFactory.writableIntObjectInspector;
@@ -81,7 +73,6 @@ public class TestGenericUDFGreatest {
   }
 
 
-  @Test
   public void testGreatestStr() throws HiveException {
     GenericUDFGreatest udf = new GenericUDFGreatest();
     ObjectInspector[] arguments = new ObjectInspector[3];
@@ -110,7 +101,6 @@ public class TestGenericUDFGreatest {
     runAndVerify(new String[] { null, null, null }, null, udf);
   }
 
-  @Test
   public void testGreatestInt() throws HiveException {
     GenericUDFGreatest udf = new GenericUDFGreatest();
     ObjectInspector[] arguments = new ObjectInspector[3];
@@ -133,7 +123,6 @@ public class TestGenericUDFGreatest {
     runAndVerify(new Integer[] { null, null, null }, null, udf);
   }
 
-  @Test
   public void testGreatestDouble() throws HiveException {
     GenericUDFGreatest udf = new GenericUDFGreatest();
     ObjectInspector[] arguments = new ObjectInspector[3];
@@ -156,7 +145,6 @@ public class TestGenericUDFGreatest {
     runAndVerify(new Double[] { null, null, null }, null, udf);
   }
 
-  @Test
   public void testGreatestDate() throws HiveException {
     GenericUDFGreatest udf = new GenericUDFGreatest();
     ObjectInspector[] arguments = new ObjectInspector[3];
@@ -179,7 +167,6 @@ public class TestGenericUDFGreatest {
     runAndVerify(new Date[] { null, null, null }, null, udf);
   }
 
-  @Test
   public void testGreatestIntTypes() throws HiveException {
     GenericUDFGreatest udf = new GenericUDFGreatest();
     ObjectInspector[] arguments = new ObjectInspector[4];
@@ -223,7 +210,7 @@ public class TestGenericUDFGreatest {
     } else if (o instanceof Double) {
       return o != null ? new DoubleWritable((Double) o) : null;
     } else if (o instanceof Date) {
-      return o != null ? new DateWritableV2((Date) o) : null;
+      return o != null ? new DateWritable((Date) o) : null;
     } else if (o instanceof Byte) {
       return o != null ? new ByteWritable((Byte) o): null;
     } else if (o instanceof Short) {
@@ -244,8 +231,8 @@ public class TestGenericUDFGreatest {
       return ((IntWritable) o).get();
     } else if (o instanceof DoubleWritable) {
       return ((DoubleWritable) o).get();
-    } else if (o instanceof DateWritableV2) {
-      return ((DateWritableV2) o).get();
+    } else if (o instanceof DateWritable) {
+      return ((DateWritable) o).get();
     } else if (o instanceof ByteWritable) {
       return ((ByteWritable) o).get();
     } else if (o instanceof ShortWritable) {

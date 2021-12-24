@@ -44,9 +44,9 @@ public class HostAffinitySplitLocationProvider implements SplitLocationProvider 
 
   private final static Logger LOG = LoggerFactory.getLogger(
       HostAffinitySplitLocationProvider.class);
+  private final boolean isDebugEnabled = LOG.isDebugEnabled();
 
-  @VisibleForTesting
-  final List<String> locations;
+  private final List<String> locations;
 
   public HostAffinitySplitLocationProvider(List<String> knownLocations) {
     Preconditions.checkState(knownLocations != null && !knownLocations.isEmpty(),
@@ -58,7 +58,9 @@ public class HostAffinitySplitLocationProvider implements SplitLocationProvider 
   @Override
   public String[] getLocations(InputSplit split) throws IOException {
     if (!(split instanceof FileSplit)) {
-      LOG.debug("Split: {} is not a FileSplit. Using default locations", split);
+      if (isDebugEnabled) {
+        LOG.debug("Split: " + split + " is not a FileSplit. Using default locations");
+      }
       return split.getLocations();
     }
     FileSplit fsplit = (FileSplit) split;
@@ -76,7 +78,9 @@ public class HostAffinitySplitLocationProvider implements SplitLocationProvider 
     long hash1 = hash1(bytes);
     int index = Hashing.consistentHash(hash1, locations.size());
     String location = locations.get(index);
-    LOG.debug("{} mapped to index={}, location={}", desc, index, location);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(desc + " mapped to index=" + index + ", location=" + location);
+    }
     int iter = 1;
     long hash2 = 0;
     // Since our probing method is totally bogus, give up after some time.
@@ -87,7 +91,9 @@ public class HostAffinitySplitLocationProvider implements SplitLocationProvider 
       // Note that this is not real double hashing since we have consistent hash on top.
       index = Hashing.consistentHash(hash1 + iter * hash2, locations.size());
       location = locations.get(index);
-      LOG.debug("{} remapped to index={}, location={}", desc, index, location);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(desc + " remapped to index=" + index + ", location=" + location);
+      }
       ++iter;
     }
     return index;

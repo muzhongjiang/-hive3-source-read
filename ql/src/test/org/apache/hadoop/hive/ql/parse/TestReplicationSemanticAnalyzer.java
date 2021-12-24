@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,221 +17,259 @@
  */
 package org.apache.hadoop.hive.ql.parse;
 
+import static org.junit.Assert.*;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import junit.framework.Assert;
+
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.QueryState;
+import org.apache.hadoop.hive.ql.exec.FetchTask;
+import org.apache.hadoop.hive.ql.exec.Task;
+import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat;
+import org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat;
+import org.apache.hadoop.hive.ql.metadata.Hive;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.runners.Enclosed;
-import org.junit.runner.RunWith;
 
-import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.HIVE_QUOTEDID_SUPPORT;
-import static org.junit.Assert.assertEquals;
-
-@RunWith(Enclosed.class)
 public class TestReplicationSemanticAnalyzer {
-  private static ParseDriver driver = new ParseDriver();
-  private static HiveConf hiveConf = buildHiveConf();
+  static QueryState queryState;
+  static HiveConf conf;
+  static String defaultDB = "default";
+  static String tblName = "testReplSA";
+  static ArrayList<String> cols =  new ArrayList<String>(Arrays.asList("col1", "col2"));
+  ParseDriver pd;
+  SemanticAnalyzer sA;
 
-  public static HiveConf buildHiveConf() {
-    HiveConf conf = new HiveConf();
-    conf.setVar(HIVE_QUOTEDID_SUPPORT, Quotation.NONE.stringValue());
-    return conf;
+
+  @BeforeClass
+  public static void initialize() throws HiveException {
+    queryState = new QueryState(new HiveConf(SemanticAnalyzer.class));
+    conf = queryState.getConf();
+    conf.set("hive.security.authorization.manager", "");
+    SessionState.start(conf);
+    Hive hiveDb = Hive.get(conf);
+    hiveDb.createTable(defaultDB + "." + tblName, cols, null, OrcInputFormat.class, OrcOutputFormat.class);
+    Table t = hiveDb.getTable(tblName);
   }
 
-  private static ASTNode parse(String command) throws Exception {
-    SessionState.start(hiveConf);
-    return (ASTNode) driver.parse(command, hiveConf).getTree().getChild(0);
+  @AfterClass
+  public static void teardown() throws HiveException {
   }
 
-  private static void assertWithClause(ASTNode root, int replConfigIndex) {
-    ASTNode replConfig = (ASTNode) root.getChild(replConfigIndex);
-    assertEquals("TOK_REPL_CONFIG", replConfig.getText());
-    assertEquals(1, replConfig.getChildCount());
-    ASTNode replConfigList = (ASTNode) replConfig.getChild(0);
-    assertEquals("TOK_REPL_CONFIG_LIST", replConfigList.getText());
-    assertEquals(2, replConfigList.getChildCount());
+  @Test
+  public void testReplDumpParse() throws Exception {
+    ParseDriver pd = new ParseDriver();
+    String fromEventId = "100";
+    String toEventId = "200";
+    String maxEventLimit = "50";
+    ASTNode root;
+    ASTNode child;
 
-    assertConfig(replConfigList, 0, "'key.1'", "'value.1'");
-    assertConfig(replConfigList, 1, "'key.2'", "'value.2'");
+    String query = "repl dump " + defaultDB;
+    root = (ASTNode) pd.parse(query).getChild(0);
+    assertEquals(root.getText(), "TOK_REPL_DUMP");
+    assertEquals(root.getChildCount(), 1);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), defaultDB);
+    assertEquals(child.getChildCount(), 0);
+
+    query = "repl dump " + defaultDB + "." + tblName;
+    root = (ASTNode) pd.parse(query).getChild(0);
+    assertEquals(root.getChildCount(), 2);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), defaultDB);
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(1);
+    assertEquals(child.getText(), tblName);
+    assertEquals(child.getChildCount(), 0);
+
+    query = "repl dump " + defaultDB + "." + tblName + " from " + fromEventId;
+    root = (ASTNode) pd.parse(query).getChild(0);
+    assertEquals(root.getChildCount(), 3);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), defaultDB);
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(1);
+    assertEquals(child.getText(), tblName);
+    assertEquals(child.getChildCount(), 0);
+
+    root =  (ASTNode) root.getChild(2);
+    assertEquals(root.getText(), "TOK_FROM");
+    assertEquals(root.getChildCount(), 1);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), fromEventId);
+    assertEquals(child.getChildCount(), 0);
+
+    query = "repl dump " + defaultDB + "." + tblName + " from " + fromEventId + " to " + toEventId;
+
+    root = (ASTNode) pd.parse(query).getChild(0);
+    assertEquals(root.getChildCount(), 3);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), defaultDB);
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(1);
+    assertEquals(child.getText(), tblName);
+    assertEquals(child.getChildCount(), 0);
+
+    root =  (ASTNode) root.getChild(2);
+    assertEquals(root.getText(), "TOK_FROM");
+    assertEquals(root.getChildCount(), 3);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), fromEventId);
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(1);
+    assertEquals(child.getText(), "TOK_TO");
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(2);
+    assertEquals(child.getText(), toEventId);
+    assertEquals(child.getChildCount(), 0);
+
+    query =
+        "repl dump " + defaultDB + "." + tblName + " from " + fromEventId + " to " + toEventId
+            + " limit " + maxEventLimit;
+
+    root = (ASTNode) pd.parse(query).getChild(0);
+    assertEquals(root.getChildCount(), 3);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), defaultDB);
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(1);
+    assertEquals(child.getText(), tblName);
+    assertEquals(child.getChildCount(), 0);
+
+    root =  (ASTNode) root.getChild(2);
+    assertEquals(root.getText(), "TOK_FROM");
+    assertEquals(root.getChildCount(), 5);
+
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), fromEventId);
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(1);
+    assertEquals(child.getText(), "TOK_TO");
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(2);
+    assertEquals(child.getText(), toEventId);
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(3);
+    assertEquals(child.getText(), "TOK_LIMIT");
+    assertEquals(child.getChildCount(), 0);
+
+    child =  (ASTNode) root.getChild(4);
+    assertEquals(child.getText(), maxEventLimit);
+    assertEquals(child.getChildCount(), 0);
   }
 
-  private static void assertConfig(ASTNode replConfigList, int atIndex, String expectedKey,
-      String expectedValue) {
-    ASTNode configOne = (ASTNode) replConfigList.getChild(atIndex);
-    assertEquals("TOK_TABLEPROPERTY", configOne.getText());
-    assertEquals(2, configOne.getChildCount());
-    assertEquals(expectedKey, configOne.getChild(0).getText());
-    assertEquals(expectedValue, configOne.getChild(1).getText());
+  @Test
+  public void testReplLoadParse() throws Exception {
+    // FileSystem fs = FileSystem.get(conf);
+    ParseDriver pd = new ParseDriver();
+    ASTNode root;
+    ASTNode child;
+    String replRoot = conf.getVar(HiveConf.ConfVars.REPLDIR);
+    Path dumpRoot = new Path(replRoot, "next");
+    System.out.println(replRoot);
+    System.out.println(dumpRoot);
+    String newDB = "default_bak";
+
+    String query = "repl load  from '" + dumpRoot.toString() + "'";
+    root = (ASTNode) pd.parse(query).getChild(0);
+    assertEquals(root.getText(), "TOK_REPL_LOAD");
+    assertEquals(root.getChildCount(), 1);
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), "'" + dumpRoot.toString() + "'");
+    assertEquals(child.getChildCount(), 0);
+
+    query = "repl load " + newDB + " from '" + dumpRoot.toString() + "'";
+    root = (ASTNode) pd.parse(query).getChild(0);
+    assertEquals(root.getText(), "TOK_REPL_LOAD");
+    assertEquals(root.getChildCount(), 2);
+    child =  (ASTNode) root.getChild(0);
+    assertEquals(child.getText(), "'" + dumpRoot.toString() + "'");
+    assertEquals(child.getChildCount(), 0);
+    child =  (ASTNode) root.getChild(1);
+    assertEquals(child.getText(), newDB);
+    assertEquals(child.getChildCount(), 0);
   }
 
-  private static void assertToEventId(ASTNode fromClauseRootNode) {
-    ASTNode child = (ASTNode) fromClauseRootNode.getChild(1);
-    assertEquals("TOK_TO", child.getText());
-    assertEquals(0, child.getChildCount());
+  // TODO: add this test after repl dump analyze generates tasks
+  //@Test
+  public void testReplDumpAnalyze() throws Exception {
 
-    child = (ASTNode) fromClauseRootNode.getChild(2);
-    assertEquals("200", child.getText());
-    assertEquals(0, child.getChildCount());
   }
 
-  private static ASTNode assertFromEvent(final int expectedNumberOfChildren, ASTNode root) {
-    ASTNode child = (ASTNode) root.getChild(2);
-    assertEquals("TOK_FROM", child.getText());
-    assertEquals(child.getChildCount(), expectedNumberOfChildren);
+  //@Test
+  public void testReplLoadAnalyze() throws Exception {
+    ParseDriver pd = new ParseDriver();
+    ASTNode root;
+    String replRoot = conf.getVar(HiveConf.ConfVars.REPLDIR);
+    FileSystem fs = FileSystem.get(conf);
+    Path dumpRoot = new Path(replRoot, "next");
+    System.out.println(replRoot);
+    System.out.println(dumpRoot);
+    String newDB = "default_bak";
 
-    ASTNode fromClauseChild = (ASTNode) child.getChild(0);
-    assertEquals("100", fromClauseChild.getText());
-    assertEquals(0, fromClauseChild.getChildCount());
-    return child;
+    // First create a dump
+    String query = "repl dump " + defaultDB;
+    root = (ASTNode) pd.parse(query).getChild(0);
+    ReplicationSemanticAnalyzer rs = (ReplicationSemanticAnalyzer) SemanticAnalyzerFactory.get(queryState, root);
+    rs.analyze(root, new Context(conf));
+
+    // Then analyze load
+    query = "repl load  from '" + dumpRoot.toString() + "'";
+    root = (ASTNode) pd.parse(query).getChild(0);
+    rs = (ReplicationSemanticAnalyzer) SemanticAnalyzerFactory.get(queryState, root);
+    rs.analyze(root, new Context(conf));
+    List<Task<? extends Serializable>> roots = rs.getRootTasks();
+    assertEquals(1, roots.size());
+
+    query = "repl load " + newDB + " from '" + dumpRoot.toString() + "'";
+    root = (ASTNode) pd.parse(query).getChild(0);
+    rs = (ReplicationSemanticAnalyzer) SemanticAnalyzerFactory.get(queryState, root);
+    rs.analyze(root, new Context(conf));
+    roots = rs.getRootTasks();
+    assertEquals(1, roots.size());
   }
 
-  private static void assertTableName(ASTNode root) {
-    ASTNode child = (ASTNode) root.getChild(1);
-    assertEquals("TOK_REPL_TABLES", child.getText());
-    assertEquals(1, child.getChildCount());
-    assertEquals("'test_table'", child.getChild(0).getText());
-  }
+  @Test
+  public void testReplStatusAnalyze() throws Exception {
+    ParseDriver pd = new ParseDriver();
+    ASTNode root;
 
-  private static void assertDatabase(final int expectedNumberOfChildren, ASTNode root) {
-    assertEquals("TOK_REPL_DUMP", root.getText());
-    assertEquals(expectedNumberOfChildren, root.getChildCount());
-    ASTNode child = (ASTNode) root.getChild(0);
-    assertEquals("testDb", child.getText());
-    assertEquals(0, child.getChildCount());
-  }
+    // Repl status command
+    String query = "repl status " + defaultDB;
+    root = (ASTNode) pd.parse(query).getChild(0);
+    ReplicationSemanticAnalyzer rs = (ReplicationSemanticAnalyzer) SemanticAnalyzerFactory.get(queryState, root);
+    rs.analyze(root, new Context(conf));
 
-  public static class ReplDump {
-
-    @Test
-    public void parseDbPattern() throws Exception {
-      ASTNode root = parse("repl dump `*`");
-      assertEquals("TOK_REPL_DUMP", root.getText());
-      assertEquals(1, root.getChildCount());
-      ASTNode child = (ASTNode) root.getChild(0);
-      assertEquals("`*`", child.getText());
-      assertEquals(0, child.getChildCount());
-    }
-
-    @Test
-    public void parseDb() throws Exception {
-      ASTNode root = parse("repl dump testDb");
-      assertDatabase(1, root);
-    }
-
-    @Test
-    public void parseTableName() throws Exception {
-      ASTNode root = parse("repl dump testDb.'test_table'");
-      assertDatabase(2, root);
-      assertTableName(root);
-    }
-  }
-
-  public static class ReplDumpWithClause {
-
-    @Test
-    public void parseDb() throws Exception {
-      ASTNode root = parse("repl dump testDb with ('key.1'='value.1','key.2'='value.2')");
-      assertDatabase(2, root);
-      assertWithClause(root, 1);
-    }
-
-    @Test
-    public void parseTableName() throws Exception {
-      ASTNode root =
-          parse("repl dump testDb.'test_table' with ('key.1'='value.1','key.2'='value.2')");
-      assertDatabase(3, root);
-      assertTableName(root);
-      assertWithClause(root, 2);
-    }
-  }
-
-  public static class ReplLoad {
-
-    @Test
-    public void parseFromLocation() throws Exception {
-      ASTNode root = parse("repl load testDbName");
-      assertFromLocation(1, root);
-    }
-
-    @Test
-    public void parseTargetDbName() throws Exception {
-      ASTNode root = parse("repl load testDbName into targetTestDbName");
-      assertFromLocation(2, root);
-      assertTargetDatabaseName(root);
-    }
-
-    @Test
-    public void parseWithClause() throws Exception {
-      ASTNode root = parse("repl load testDbName into targetTestDbName"
-          + " with ('mapred.job.queue.name'='repl','hive.repl.approx.max.load.tasks'='100')");
-      assertFromLocation(3, root);
-      assertTargetDatabaseName(root);
-
-      ASTNode child = (ASTNode) root.getChild(2);
-      assertEquals("TOK_REPL_CONFIG", child.getText());
-      assertEquals(1, child.getChildCount());
-      child = (ASTNode) child.getChild(0);
-      assertEquals("TOK_REPL_CONFIG_LIST", child.getText());
-      assertEquals(2, child.getChildCount());
-      ASTNode configNode = (ASTNode) child.getChild(0);
-      assertEquals("TOK_TABLEPROPERTY", configNode.getText());
-      assertEquals(2, configNode.getChildCount());
-      assertEquals("'mapred.job.queue.name'", configNode.getChild(0).getText());
-      assertEquals("'repl'", configNode.getChild(1).getText());
-      configNode = (ASTNode) child.getChild(1);
-      assertEquals("TOK_TABLEPROPERTY", configNode.getText());
-      assertEquals(2, configNode.getChildCount());
-      assertEquals("'hive.repl.approx.max.load.tasks'", configNode.getChild(0).getText());
-      assertEquals("'100'", configNode.getChild(1).getText());
-    }
-
-    private void assertFromLocation(final int expectedNumberOfChildren, ASTNode root) {
-      assertEquals("TOK_REPL_LOAD", root.getText());
-      assertEquals(expectedNumberOfChildren, root.getChildCount());
-      ASTNode child = (ASTNode) root.getChild(0);
-      assertEquals("testDbName", child.getText());
-      assertEquals(0, child.getChildCount());
-    }
-
-    private void assertTargetDatabaseName(ASTNode root) {
-      ASTNode child = (ASTNode) root.getChild(1);
-      assertEquals("TOK_DBNAME", child.getText());
-      assertEquals(1, child.getChildCount());
-      child = (ASTNode) child.getChild(0);
-      assertEquals("targetTestDbName", child.getText());
-      assertEquals(0, child.getChildCount());
-    }
-  }
-
-  public static class ReplStatus {
-
-    @Test
-    public void parseTargetDbName() throws Exception {
-      ASTNode root = parse("repl status targetTestDbName");
-      assertTargetDatabaseName(root);
-    }
-
-    @Test
-    public void parseWithClause() throws Exception {
-      ASTNode root = parse("repl status targetTestDbName with"
-          + "('hive.metastore.uris'='thrift://localhost:12341')");
-      assertTargetDatabaseName(root);
-
-      ASTNode child = (ASTNode) root.getChild(1);
-      assertEquals("TOK_REPL_CONFIG", child.getText());
-      assertEquals(1, child.getChildCount());
-      child = (ASTNode) child.getChild(0);
-      assertEquals("TOK_REPL_CONFIG_LIST", child.getText());
-      ASTNode configNode = (ASTNode) child.getChild(0);
-      assertEquals("TOK_TABLEPROPERTY", configNode.getText());
-      assertEquals(2, configNode.getChildCount());
-      assertEquals("'hive.metastore.uris'", configNode.getChild(0).getText());
-      assertEquals("'thrift://localhost:12341'", configNode.getChild(1).getText());
-    }
-
-    private void assertTargetDatabaseName(ASTNode root) {
-      ASTNode child = (ASTNode) root.getChild(0);
-      assertEquals("targetTestDbName", child.getText());
-      assertEquals(0, child.getChildCount());
-    }
+    FetchTask fetchTask = rs.getFetchTask();
+    assertNotNull(fetchTask);
   }
 }

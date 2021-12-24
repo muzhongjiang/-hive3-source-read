@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,10 +25,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
-
-import org.apache.hadoop.hive.ql.exec.tez.ReduceRecordSource;
-import org.apache.hadoop.hive.ql.util.NullOrdering;
-import org.apache.hadoop.hive.serde.serdeConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +42,7 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption;
+import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
@@ -92,8 +89,6 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
 
   // A field because we cannot multi-inherit.
   transient InterruptibleProcessing interruptChecker;
-
-  transient NullOrdering nullOrdering;
 
   /** Kryo ctor. */
   protected CommonMergeJoinOperator() {
@@ -153,7 +148,7 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
 
     for (byte pos = 0; pos < order.length; pos++) {
       if (pos != posBigTable) {
-        if ((parentOperators != null) && !parentOperators.isEmpty()
+        if ((parentOperators != null) && (parentOperators.isEmpty() == false)
             && (parentOperators.get(pos) instanceof TezDummyStoreOperator)) {
           TezDummyStoreOperator dummyStoreOp = (TezDummyStoreOperator) parentOperators.get(pos);
           fetchDone[pos] = dummyStoreOp.getFetchDone();
@@ -166,27 +161,6 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
 
     sources = ((TezContext) MapredContext.get()).getRecordSources();
     interruptChecker = new InterruptibleProcessing();
-
-    nullOrdering = NullOrdering.NULLS_FIRST;
-    if (sources[0] instanceof ReduceRecordSource) {
-      ReduceRecordSource reduceRecordSource = (ReduceRecordSource) sources[0];
-      if (reduceRecordSource.getKeyTableDesc() != null &&
-              reduceRecordSource.getKeyTableDesc().getProperties() != null) {
-        String nullSortOrder = reduceRecordSource.getKeyTableDesc().getProperties()
-                .getProperty(serdeConstants.SERIALIZATION_NULL_SORT_ORDER);
-        if (nullOrdering != null && !nullSortOrder.isEmpty()) {
-          nullOrdering = NullOrdering.fromSign(nullSortOrder.charAt(0));
-        }
-      }
-      nullOrdering = NullOrdering.defaultNullOrder(hconf);
-      if (parentOperators != null && !parentOperators.isEmpty()) {
-        // Tell ReduceRecordSource to flush last record as this is a reduce
-        // side SMB
-        for (RecordSource source : sources) {
-          ((ReduceRecordSource) source).setFlushLastRecord(true);
-        }
-      }
-    }
   }
 
   /*
@@ -241,7 +215,6 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
 
     //have we reached a new key group?
     boolean nextKeyGroup = processKey(alias, key);
-    addToAliasFilterTags(alias, value, nextKeyGroup);
     if (nextKeyGroup) {
       //assert this.nextGroupStorage[alias].size() == 0;
       this.nextGroupStorage[alias].addRow(value);
@@ -257,7 +230,7 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
             continue;
           }
 
-          if (!foundNextKeyGroup[i]) {
+          if (foundNextKeyGroup[i] == false) {
             canEmit = false;
             break;
           }
@@ -285,12 +258,13 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
     // catch up with the big table.
     if (nextKeyGroup) {
       assert tag == posBigTable;
-      List<Byte> listOfFetchNeeded = null;
+      List<Byte> smallestPos = null;
       do {
-        listOfFetchNeeded = joinOneGroup();
+        smallestPos = joinOneGroup();
         //jump out the loop if we need input from the big table
-      } while (listOfFetchNeeded != null && listOfFetchNeeded.size() > 0
-          && !listOfFetchNeeded.contains(this.posBigTable));
+      } while (smallestPos != null && smallestPos.size() > 0
+          && !smallestPos.contains(this.posBigTable));
+
       return;
     }
 
@@ -386,9 +360,6 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
   }
 
   private void fetchNextGroup(Byte t) throws HiveException {
-    if (keyWritables[t] != null) {
-      return; // First process the current key.
-    }
     if (foundNextKeyGroup[t]) {
       // first promote the next group to be the current group if we reached a
       // new group in the previous fetch
@@ -559,10 +530,6 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
     } else {
       int cmp = compareKeys(alias, key, keyWritable);
       if (cmp != 0) {
-        // Cant overwrite existing keys
-        if (nextKeyWritables[alias] != null) {
-          throw new HiveException("Attempting to overwrite nextKeyWritables[" + alias + "]");
-        }
         nextKeyWritables[alias] = key;
         return true;
       }
@@ -589,9 +556,9 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
       return compareKeysMany(comparators, k1, k2);
     } else {
       return compareKey(comparators, 0,
-              k1.get(0),
-              k2.get(0),
-              nullsafes != null ? nullsafes[0]: false);
+          (WritableComparable) k1.get(0),
+          (WritableComparable) k2.get(0),
+          nullsafes != null ? nullsafes[0]: false);
     }
   }
 
@@ -603,7 +570,9 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
     int ret = 0;
     final int size = k1.size();
     for (int i = 0; i < size; i++) {
-      ret = compareKey(comparators, i, k1.get(i), k2.get(i),
+      WritableComparable key_1 = (WritableComparable) k1.get(i);
+      WritableComparable key_2 = (WritableComparable) k2.get(i);
+      ret = compareKey(comparators, i, key_1, key_2,
           nullsafes != null ? nullsafes[i] : false);
       if (ret != 0) {
         return ret;
@@ -614,11 +583,24 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
 
   @SuppressWarnings("rawtypes")
   private int compareKey(final WritableComparator comparators[], final int pos,
-      final Object key_1,
-      final Object key_2,
+      final WritableComparable key_1,
+      final WritableComparable key_2,
       final boolean nullsafe) {
+
+    if (key_1 == null && key_2 == null) {
+      if (nullsafe) {
+        return 0;
+      } else {
+        return -1;
+      }
+    } else if (key_1 == null) {
+      return -1;
+    } else if (key_2 == null) {
+      return 1;
+    }
+
     if (comparators[pos] == null) {
-      comparators[pos] = WritableComparatorFactory.get(key_1, nullsafe, nullOrdering);
+      comparators[pos] = WritableComparator.get(key_1.getClass());
     }
     return comparators[pos].compare(key_1, key_2);
   }
@@ -628,11 +610,12 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
     if ((joinKeysObjectInspectors != null) && (joinKeysObjectInspectors[alias] != null)) {
       return JoinUtil.computeKeys(row, joinKeys[alias], joinKeysObjectInspectors[alias]);
     } else {
-      final List<Object> key = new ArrayList<Object>(1);
-      ObjectInspectorUtils.partialCopyToStandardObject(key, row,
-          Utilities.ReduceField.KEY.position, 1, (StructObjectInspector) inputObjInspectors[alias],
-          ObjectInspectorCopyOption.WRITABLE);
-      return (List<Object>) key.get(0); // this is always 0, even if KEY.position is not 
+      row =
+          ObjectInspectorUtils.copyToStandardObject(row, inputObjInspectors[alias],
+              ObjectInspectorCopyOption.WRITABLE);
+      StructObjectInspector soi = (StructObjectInspector) inputObjInspectors[alias];
+      StructField sf = soi.getStructFieldRef(Utilities.ReduceField.KEY.toString());
+      return (List<Object>) soi.getStructFieldData(row, sf);
     }
   }
 

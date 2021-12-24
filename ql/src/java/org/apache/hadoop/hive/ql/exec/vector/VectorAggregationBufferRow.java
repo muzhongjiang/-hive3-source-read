@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,8 +28,7 @@ public class VectorAggregationBufferRow {
   private VectorAggregateExpression.AggregationBuffer[] aggregationBuffers;
   private int version;
   private int index;
-  private int accessed = 0;
-
+  
   public VectorAggregationBufferRow(
       VectorAggregateExpression.AggregationBuffer[] aggregationBuffers) {
     this.aggregationBuffers = aggregationBuffers;
@@ -81,16 +80,5 @@ public class VectorAggregationBufferRow {
       aggregationBuffers[i].reset();
     }
   }
-
-  public int getAccessCount() {
-    return accessed;
-  }
-
-  public void incrementAccessCount() {
-    accessed++;
-  }
-
-  public void resetAccessCount() {
-    accessed = 0;
-  }
+  
 }

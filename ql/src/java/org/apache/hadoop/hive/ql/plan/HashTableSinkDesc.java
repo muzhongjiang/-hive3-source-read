@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,10 +23,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.ql.optimizer.signature.Signature;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 
 
@@ -290,7 +288,6 @@ public class HashTableSinkDesc extends JoinDesc implements Serializable {
 
   @Override
   @Explain(displayName = "filter mappings", explainLevels = { Level.EXTENDED })
-  @Signature
   public Map<Integer, String> getFilterMapString() {
     return toCompactString(filterMap);
   }
@@ -306,17 +303,15 @@ public class HashTableSinkDesc extends JoinDesc implements Serializable {
   /**
    * @return the keys in string form
    */
-  @Override
   @Explain(displayName = "keys")
-  public Map<String, String> getKeysString() {
-    Map<String, String> keyMap = new LinkedHashMap<>();
+  public Map<Byte, String> getKeysString() {
+    Map<Byte, String> keyMap = new LinkedHashMap<Byte, String>();
     for (Map.Entry<Byte, List<ExprNodeDesc>> k: getKeys().entrySet()) {
-      keyMap.put(String.valueOf(k.getKey()), PlanUtils.getExprListString(k.getValue()));
+      keyMap.put(k.getKey(), PlanUtils.getExprListString(k.getValue()));
     }
     return keyMap;
   }
 
-  @Override
   @Explain(displayName = "keys", explainLevels = { Level.USER })
   public Map<Byte, String> getUserLevelExplainKeysString() {
     Map<Byte, String> keyMap = new LinkedHashMap<Byte, String>();
@@ -394,14 +389,4 @@ public class HashTableSinkDesc extends JoinDesc implements Serializable {
   public void setBucketMapjoinContext(BucketMapJoinContext bucketMapjoinContext) {
     this.bucketMapjoinContext = bucketMapjoinContext;
   }
-
-  @Override
-  public boolean isSame(OperatorDesc other) {
-    if (super.isSame(other)) {
-      HashTableSinkDesc otherDesc = (HashTableSinkDesc) other;
-      return Objects.equals(getFilterMapString(), otherDesc.getFilterMapString());
-    }
-    return false;
-  }
-
 }

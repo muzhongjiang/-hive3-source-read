@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,28 +28,20 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.lang3.mutable.MutableObject;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang.mutable.MutableObject;
+import org.apache.hadoop.hive.common.ObjectPair;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaConstantStringObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.thrift.test.Complex;
-import com.google.common.collect.Lists;
 
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import org.junit.Test;
+import junit.framework.TestCase;
 
 /**
  * TestReflectionObjectInspectors.
  *
  */
-public class TestReflectionObjectInspectors {
+public class TestReflectionObjectInspectors extends TestCase {
 
-  @Test
   public void testReflectionObjectInspectors() throws Throwable {
     try {
       ObjectInspector oi1 = ObjectInspectorFactory
@@ -118,24 +110,6 @@ public class TestReflectionObjectInspectors {
     }
   }
 
-  @Test
-  public void testObjectInspectorMaxCacheSize() {
-    int maxSize = 10240;
-    for (int i = 0; i < maxSize; i++) {
-      ObjectInspectorFactory
-        .getStandardUnionObjectInspector(Lists.newArrayList(new JavaConstantStringObjectInspector("" + i)));
-    }
-    assertTrue("Got: " + ObjectInspectorFactory.cachedStandardUnionObjectInspector.size(),
-      ObjectInspectorFactory.cachedStandardUnionObjectInspector.size() <= maxSize);
-    for (int i = 0; i < 1000; i++) {
-      ObjectInspectorFactory.getStandardUnionObjectInspector(Lists.newArrayList(new
-        JavaConstantStringObjectInspector("" + (10240 + i))));
-    }
-    assertTrue("Got: " + ObjectInspectorFactory.cachedStandardUnionObjectInspector.size(), ObjectInspectorFactory
-      .cachedStandardUnionObjectInspector.size() <= maxSize);
-  }
-
-  @Test
   public void testObjectInspectorThreadSafety() throws InterruptedException {
     final int workerCount = 5; // 5 workers to run getReflectionObjectInspector concurrently
     final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(workerCount);
@@ -145,21 +119,23 @@ public class TestReflectionObjectInspectors {
       @SuppressWarnings("unchecked")
       public void run() {
         Future<ObjectInspector>[] results = (Future<ObjectInspector>[])new Future[workerCount];
-        Pair<Type, ObjectInspectorFactory.ObjectInspectorOptions>[] types =
-          (Pair<Type, ObjectInspectorFactory.ObjectInspectorOptions>[])new Pair[] {
-             Pair.of(Complex.class, ObjectInspectorFactory.ObjectInspectorOptions.THRIFT),
-             Pair.of(MyStruct.class, ObjectInspectorFactory.ObjectInspectorOptions.JAVA),
+        ObjectPair<Type, ObjectInspectorFactory.ObjectInspectorOptions>[] types =
+          (ObjectPair<Type, ObjectInspectorFactory.ObjectInspectorOptions>[])new ObjectPair[] {
+             new ObjectPair<Type, ObjectInspectorFactory.ObjectInspectorOptions>(Complex.class,
+               ObjectInspectorFactory.ObjectInspectorOptions.THRIFT),
+             new ObjectPair<Type, ObjectInspectorFactory.ObjectInspectorOptions>(MyStruct.class,
+               ObjectInspectorFactory.ObjectInspectorOptions.JAVA),
           };
         try {
           for (int i = 0; i < 20; i++) { // repeat 20 times
-            for (final Pair<Type, ObjectInspectorFactory.ObjectInspectorOptions> t: types) {
-              ObjectInspectorFactory.objectInspectorCache.asMap().clear();
+            for (final ObjectPair<Type, ObjectInspectorFactory.ObjectInspectorOptions> t: types) {
+              ObjectInspectorFactory.objectInspectorCache.clear();
               for (int k = 0; k < workerCount; k++) {
                 results[k] = executorService.schedule(new Callable<ObjectInspector>() {
                   @Override
                   public ObjectInspector call() throws Exception {
                     return ObjectInspectorFactory.getReflectionObjectInspector(
-                      t.getLeft(), t.getRight());
+                      t.getFirst(), t.getSecond());
                   }
                 }, 50, TimeUnit.MILLISECONDS);
               }

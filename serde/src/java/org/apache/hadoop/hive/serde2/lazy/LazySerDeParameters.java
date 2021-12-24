@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.classification.InterfaceAudience.Public;
 import org.apache.hadoop.hive.common.classification.InterfaceStability.Stable;
@@ -31,14 +33,11 @@ import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.lazy.objectinspector.primitive.LazyObjectInspectorParameters;
-import org.apache.hadoop.hive.serde2.typeinfo.TimestampLocalTZTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hive.common.util.HiveStringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * SerDeParameters.
@@ -53,9 +52,7 @@ public class LazySerDeParameters implements LazyObjectInspectorParameters {
   	= "hive.serialization.extend.nesting.levels";
   public static final String SERIALIZATION_EXTEND_ADDITIONAL_NESTING_LEVELS
 	= "hive.serialization.extend.additional.nesting.levels";
-  public static final String SERIALIZATION_DECODE_BINARY_AS_BASE64
-  	= "hive.serialization.decode.binary.as.base64";
-  
+
   private Properties tableProperties;
   private String serdeName;
 
@@ -76,7 +73,6 @@ public class LazySerDeParameters implements LazyObjectInspectorParameters {
   private boolean[] needsEscape = new boolean[256];  // A flag for each byte to indicate if escape is needed.
 
   private boolean extendedBooleanLiteral;
-  private boolean decodeBinaryAsBase64;
   List<String> timestampFormats;
   
   public LazySerDeParameters(Configuration job, Properties tbl, String serdeName) throws SerDeException {
@@ -92,9 +88,7 @@ public class LazySerDeParameters implements LazyObjectInspectorParameters {
     lastColumnTakesRest = (lastColumnTakesRestString != null && lastColumnTakesRestString
         .equalsIgnoreCase("true"));
 
-    decodeBinaryAsBase64 = Boolean.parseBoolean(tableProperties.getProperty(SERIALIZATION_DECODE_BINARY_AS_BASE64, "true"));
-
-    extractColumnInfo(job);
+    extractColumnInfo();
 
     // Create the LazyObject for storing the rows
     rowTypeInfo = TypeInfoFactory.getStructTypeInfo(columnNames, columnTypes);
@@ -139,7 +133,7 @@ public class LazySerDeParameters implements LazyObjectInspectorParameters {
    * Extracts and set column names and column types from the table properties
    * @throws SerDeException
    */
-  public void extractColumnInfo(Configuration conf) throws SerDeException {
+  public void extractColumnInfo() throws SerDeException {
     // Read the configuration parameters
     String columnNameProperty = tableProperties.getProperty(serdeConstants.LIST_COLUMNS);
     // NOTE: if "columns.types" is missing, all columns will be of String type
@@ -166,16 +160,6 @@ public class LazySerDeParameters implements LazyObjectInspectorParameters {
     }
 
     columnTypes = TypeInfoUtils.getTypeInfosFromTypeString(columnTypeProperty);
-    // Insert time-zone for timestamp type
-    if (conf != null) {
-      final TimestampLocalTZTypeInfo tsTZTypeInfo = new TimestampLocalTZTypeInfo(
-          conf.get(ConfVars.HIVE_LOCAL_TIME_ZONE.varname));
-      for (int i = 0; i < columnTypes.size(); i++) {
-        if (columnTypes.get(i) instanceof TimestampLocalTZTypeInfo) {
-          columnTypes.set(i, tsTZTypeInfo);
-        }
-      }
-    }
 
     if (columnNames.size() != columnTypes.size()) {
       throw new SerDeException(serdeName + ": columns has " + columnNames.size()
@@ -223,10 +207,6 @@ public class LazySerDeParameters implements LazyObjectInspectorParameters {
     return extendedBooleanLiteral;
   }
 
-  public boolean isDecodeBinaryAsBase64() {
-    return decodeBinaryAsBase64;
-  }
-  
   public List<String> getTimestampFormats() {
     return timestampFormats;
   }

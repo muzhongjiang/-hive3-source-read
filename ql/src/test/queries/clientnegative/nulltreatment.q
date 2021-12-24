@@ -1,3 +1,0 @@
-CREATE TABLE t1(a int);
-
-SELECT sum(a) IGNORE NULLS OVER (ORDER BY a) FROM t1;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.DecimalUtil;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 
 import java.util.Arrays;
@@ -32,29 +31,35 @@ import java.util.Arrays;
 public class FuncRoundWithNumDigitsDecimalToDecimal extends VectorExpression {
   private static final long serialVersionUID = 1L;
 
+  private int colNum;
+  private int outputColumn;
   private int decimalPlaces;
 
-  public FuncRoundWithNumDigitsDecimalToDecimal(int colNum, int scalarValue, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  public FuncRoundWithNumDigitsDecimalToDecimal(int colNum, int scalarValue, int outputColumn) {
+    this();
+    this.colNum = colNum;
+    this.outputColumn = outputColumn;
     this.decimalPlaces = scalarValue;
+    this.outputType = "decimal";
   }
-
+  
   public FuncRoundWithNumDigitsDecimalToDecimal() {
     super();
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       this.evaluateChildren(batch);
     }
 
-    DecimalColumnVector inputColVector = (DecimalColumnVector) batch.cols[inputColumnNum[0]];
-    DecimalColumnVector outputColVector = (DecimalColumnVector) batch.cols[outputColumnNum];
+    DecimalColumnVector inputColVector = (DecimalColumnVector) batch.cols[colNum];
+    DecimalColumnVector outputColVector = (DecimalColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
     boolean[] inputIsNull = inputColVector.isNull;
     boolean[] outputIsNull = outputColVector.isNull;
+    outputColVector.noNulls = inputColVector.noNulls;
     int n = batch.size;
     HiveDecimalWritable[] vector = inputColVector.vector;
 
@@ -63,57 +68,32 @@ public class FuncRoundWithNumDigitsDecimalToDecimal extends VectorExpression {
       return;
     }
 
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
     if (inputColVector.isRepeating) {
-      if (inputColVector.noNulls || !inputIsNull[0]) {
-        // Set isNull before call in case it changes it mind.
-        outputIsNull[0] = false;
-        round(0, vector[0], decimalPlaces, outputColVector);
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-      }
+
+      // All must be selected otherwise size would be zero
+      // Repeating property will not change.
+      outputIsNull[0] = inputIsNull[0];
+      round(0, vector[0], decimalPlaces, outputColVector);
       outputColVector.isRepeating = true;
-      return;
-    }
-
-    if (inputColVector.noNulls) {
+    } else if (inputColVector.noNulls) {
       if (batch.selectedInUse) {
+        for(int j = 0; j != n; j++) {
+          int i = sel[j];
 
-        // CONSIDER: For large n, fill n or all of isNull array and use the tighter ELSE loop.
-
-        if (!outputColVector.noNulls) {
-          for(int j = 0; j != n; j++) {
-           final int i = sel[j];
-           // Set isNull before call in case it changes it mind.
-           outputIsNull[i] = false;
-           round(i, vector[i], decimalPlaces, outputColVector);
-         }
-        } else {
-          for(int j = 0; j != n; j++) {
-            final int i = sel[j];
-            round(i, vector[i], decimalPlaces, outputColVector);
-          }
+          // Set isNull because decimal operation can yield a null.
+          outputIsNull[i] = false;
+          round(i, vector[i], decimalPlaces, outputColVector);
         }
       } else {
-        if (!outputColVector.noNulls) {
 
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
-        }
+        // Set isNull because decimal operation can yield a null.
+        Arrays.fill(outputIsNull, 0, n, false);
         for(int i = 0; i != n; i++) {
           round(i, vector[i], decimalPlaces, outputColVector);
         }
       }
-    } else /* there are nulls in the inputColVector */ {
-
-      // Carefully handle NULLs...
-      outputColVector.noNulls = false;
-
+      outputColVector.isRepeating = false;
+    } else /* there are nulls */ {
       if (batch.selectedInUse) {
         for(int j = 0; j != n; j++) {
           int i = sel[j];
@@ -126,11 +106,22 @@ public class FuncRoundWithNumDigitsDecimalToDecimal extends VectorExpression {
           round(i, vector[i], decimalPlaces, outputColVector);
         }
       }
+      outputColVector.isRepeating = false;
     }
   }
 
+  @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+  
+  @Override
+  public String getOutputType() {
+    return outputType;
+  }
+
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", decimalPlaces " + decimalPlaces;
+    return "col " + colNum + ", decimalPlaces " + decimalPlaces;
   }
 
   @Override

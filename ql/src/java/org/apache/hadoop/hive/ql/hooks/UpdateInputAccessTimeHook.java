@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,9 +19,8 @@ package org.apache.hadoop.hive.ql.hooks;
 
 import java.util.Set;
 
-import org.apache.hadoop.hive.common.StatsSetupConst;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
+import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
@@ -35,16 +34,14 @@ public class UpdateInputAccessTimeHook {
 
   private static final String LAST_ACCESS_TIME = "lastAccessTime";
 
-  public static class PreExec implements ExecuteWithHookContext {
-
-    @Override
-    public void run(HookContext hookContext) throws Exception {
-      HiveConf conf = hookContext.getConf();
-      Set<ReadEntity> inputs = hookContext.getQueryPlan().getInputs();
+  public static class PreExec implements PreExecute {
+    public void run(SessionState sess, Set<ReadEntity> inputs,
+                    Set<WriteEntity> outputs, UserGroupInformation ugi)
+      throws Exception {
 
       Hive db;
       try {
-        db = Hive.get(conf);
+        db = Hive.get(sess.getConf());
       } catch (HiveException e) {
         // ignore
         db = null;
@@ -61,32 +58,19 @@ public class UpdateInputAccessTimeHook {
         // of the object, before it was modified by StatsTask.
         // Get the latest versions of the object
         case TABLE: {
-          if(re.getTable().getTableName().equals("_dummy_table")){
-            break;
-          }
-          String dbName = re.getTable().getDbName();
-          String tblName = re.getTable().getTableName();
-          Table t = db.getTable(dbName, tblName);
+          Table t = db.getTable(re.getTable().getTableName());
           t.setLastAccessTime(lastAccessTime);
-          EnvironmentContext ec = new EnvironmentContext();
-          /*we are not modifying any data so stats should be exactly the same*/
-          ec.putToProperties(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE);
-          db.alterTable(dbName + "." + tblName, t, false, ec, false);
+          db.alterTable(t.getDbName() + "." + t.getTableName(), t, null);
           break;
         }
         case PARTITION: {
-          String dbName = re.getTable().getDbName();
-          String tblName = re.getTable().getTableName();
           Partition p = re.getPartition();
-          Table t = db.getTable(dbName, tblName);
+          Table t = db.getTable(p.getTable().getTableName());
           p = db.getPartition(t, p.getSpec(), false);
           p.setLastAccessTime(lastAccessTime);
-          db.alterPartition(null, dbName, tblName, p, null, false);
+          db.alterPartition(t.getTableName(), p, null);
           t.setLastAccessTime(lastAccessTime);
-          EnvironmentContext ec = new EnvironmentContext();
-          /*we are not modifying any data so stats should be exactly the same*/
-          ec.putToProperties(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE);
-          db.alterTable(dbName + "." + tblName, t, false, ec, false);
+          db.alterTable(t.getDbName() + "." + t.getTableName(), t, null);
           break;
         }
         default:

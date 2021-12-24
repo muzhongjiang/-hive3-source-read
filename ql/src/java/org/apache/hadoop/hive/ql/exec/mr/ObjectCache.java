@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -36,11 +36,14 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
 
   private static final Logger LOG = LoggerFactory.getLogger(ObjectCache.class.getName());
+  private static final boolean isDebugEnabled = LOG.isDebugEnabled();
 
   @Override
   public void release(String key) {
     // nothing to do
-    LOG.debug("{} no longer needed", key);
+    if (isDebugEnabled) {
+      LOG.debug(key + " no longer needed");
+    }
   }
 
   @Override
@@ -51,7 +54,9 @@ public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
   @Override
   public <T> T retrieve(String key, Callable<T> fn) throws HiveException {
     try {
-      LOG.debug("Creating {}", key);
+      if (isDebugEnabled) {
+        LOG.debug("Creating " + key);
+      }
       return fn.call();
     } catch (Exception e) {
       throw new HiveException(e);

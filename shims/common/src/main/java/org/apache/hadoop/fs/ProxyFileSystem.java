@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,7 +23,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Shell;
@@ -42,6 +41,7 @@ public class ProxyFileSystem extends FilterFileSystem {
 
   protected String realScheme;
   protected String realAuthority;
+  protected URI realUri;
 
 
 
@@ -102,7 +102,8 @@ public class ProxyFileSystem extends FilterFileSystem {
 
     URI realUri = fs.getUri();
     this.realScheme = realUri.getScheme();
-    this.realAuthority = realUri.getAuthority();
+    this.realAuthority=realUri.getAuthority();
+    this.realUri = realUri;
 
     this.myScheme = myUri.getScheme();
     this.myAuthority=myUri.getAuthority();
@@ -180,12 +181,6 @@ public class ProxyFileSystem extends FilterFileSystem {
   }
 
   @Override
-  protected void rename(Path src, Path dst, Rename... options)
-      throws IOException {
-    super.rename(swizzleParamPath(src), swizzleParamPath(dst), options);
-  }
-
-  @Override
   public boolean delete(Path f, boolean recursive) throws IOException {
     return super.delete(swizzleParamPath(f), recursive);
   }
@@ -203,25 +198,6 @@ public class ProxyFileSystem extends FilterFileSystem {
       ret[i] = swizzleFileStatus(orig[i], false);
     }
     return ret;
-  }
-
-  @Override //ref. HADOOP-12502
-  public RemoteIterator<FileStatus> listStatusIterator(Path f) throws IOException {
-    return new RemoteIterator<FileStatus>() {
-      private final RemoteIterator<FileStatus> orig =
-              ProxyFileSystem.super.listStatusIterator(swizzleParamPath(f));
-
-      @Override
-      public boolean hasNext() throws IOException {
-        return orig.hasNext();
-      }
-
-      @Override
-      public FileStatus next() throws IOException {
-        FileStatus ret = orig.next();
-        return swizzleFileStatus(ret, false);
-      }
-    };
   }
 
   @Override
@@ -242,11 +218,6 @@ public class ProxyFileSystem extends FilterFileSystem {
   @Override
   public boolean mkdirs(Path f, FsPermission permission) throws IOException {
     return super.mkdirs(swizzleParamPath(f), permission);
-  }
-
-  @Override
-  public boolean mkdirs(Path f) throws IOException {
-    return mkdirs(f, FsPermission.getDirDefault());
   }
 
   @Override
@@ -290,11 +261,6 @@ public class ProxyFileSystem extends FilterFileSystem {
   @Override
   public ContentSummary getContentSummary(Path f) throws IOException {
     return super.getContentSummary(swizzleParamPath(f));
-  }
-
-  @Override
-  public FileStatus getFileLinkStatus(Path f) throws IOException {
-    return swizzleFileStatus(super.getFileLinkStatus(swizzleParamPath(f)), false);
   }
 
   @Override

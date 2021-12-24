@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.metadata.formatting;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -24,46 +25,43 @@ import java.util.Map;
  * Helper class to build Maps consumed by the JSON formatter.  Only
  * add non-null entries to the Map.
  */
-public final class MapBuilder {
-  private Map<String, Object> map = new LinkedHashMap<String, Object>();
+public class MapBuilder {
+    private Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-  private MapBuilder() {
-  }
+    private MapBuilder() {}
 
-  public static MapBuilder create() {
-    return new MapBuilder();
-  }
-
-  public MapBuilder put(String name, Object val) {
-    if (val != null) {
-      map.put(name, val);
+    public static MapBuilder create() {
+        return new MapBuilder();
     }
-    return this;
-  }
 
-  public MapBuilder put(String name, boolean val) {
-    map.put(name, Boolean.valueOf(val));
-    return this;
-  }
-
-  public MapBuilder put(String name, int val) {
-    map.put(name, Integer.valueOf(val));
-    return this;
-  }
-
-  public MapBuilder put(String name, long val) {
-    map.put(name, Long.valueOf(val));
-    return this;
-  }
-
-  public <T> MapBuilder put(String name, T val, boolean use) {
-    if (use) {
-      put(name, val);
+    public MapBuilder put(String name, Object val) {
+        if (val != null)
+            map.put(name, val);
+        return this;
     }
-    return this;
-  }
 
-  public Map<String, Object> build() {
-    return map;
-  }
+    public MapBuilder put(String name, boolean val) {
+        map.put(name, Boolean.valueOf(val));
+        return this;
+    }
+
+    public MapBuilder put(String name, int val) {
+        map.put(name, Integer.valueOf(val));
+        return this;
+    }
+
+    public MapBuilder put(String name, long val) {
+        map.put(name, Long.valueOf(val));
+        return this;
+    }
+
+    public <T> MapBuilder put(String name, T val, boolean use) {
+        if (use)
+            put(name, val);
+        return this;
+    }
+
+    public Map<String, Object> build() {
+        return map;
+    }
 }

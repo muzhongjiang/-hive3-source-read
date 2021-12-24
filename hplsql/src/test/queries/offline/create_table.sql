@@ -1,1 +1,0 @@
-CREATE TABLE tbl LIKE tbl2;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,24 +21,27 @@ package org.apache.hadoop.hive.ql.udf.generic;
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.FuncAbsDecimalToDecimal;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.FuncAbsDoubleToDouble;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.FuncAbsLongToLong;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.udf.UDFType;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters.Converter;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.io.BooleanWritable;
+import org.apache.hadoop.io.LongWritable;
 
 /**
- * GenericUDFSQCountCheck.
+ * GenericUDFAbs.
  *
  */
-@UDFType(deterministic = false)
 @Description(name = "sq_count_check",
     value = "_FUNC_(x) - Internal check on scalar subquery expression to make sure atmost one row is returned",
     extended = "For internal use only")
+@VectorizedExpressions({FuncAbsLongToLong.class, FuncAbsDoubleToDouble.class, FuncAbsDecimalToDecimal.class})
 public class GenericUDFSQCountCheck extends GenericUDF {
-  private final BooleanWritable resultBool = new BooleanWritable();
+  private final LongWritable resultLong = new LongWritable();
   private transient Converter[] converters = new Converter[1];
 
   @Override
@@ -51,15 +54,19 @@ public class GenericUDFSQCountCheck extends GenericUDF {
     converters[0] = ObjectInspectorConverters.getConverter(arguments[0],
             PrimitiveObjectInspectorFactory.writableLongObjectInspector);
 
-    return PrimitiveObjectInspectorFactory.writableBooleanObjectInspector;
+    ObjectInspector outputOI = null;
+    outputOI = PrimitiveObjectInspectorFactory.writableLongObjectInspector;
+    return outputOI;
   }
 
   @Override
   public Object evaluate(DeferredObject[] arguments) throws HiveException {
 
+    Long val = getLongValue(arguments, 0, converters);
+
     switch (arguments.length){
       case 1: //Scalar queries, should expect value/count less than 1
-        if (getLongValue(arguments, 0, converters) > 1) {
+        if (val > 1) {
           throw new UDFArgumentException(
                   " Scalar subquery expression returns more than one row.");
         }
@@ -78,8 +85,8 @@ public class GenericUDFSQCountCheck extends GenericUDF {
         break;
     }
 
-    resultBool.set(true);
-    return resultBool;
+    resultLong.set(val);
+    return resultLong;
   }
 
   @Override
@@ -93,4 +100,3 @@ public class GenericUDFSQCountCheck extends GenericUDF {
   }
 
 }
- 

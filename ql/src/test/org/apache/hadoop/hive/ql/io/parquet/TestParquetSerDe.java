@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -15,13 +15,14 @@ package org.apache.hadoop.hive.ql.io.parquet;
 
 import java.util.Properties;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.io.ByteWritable;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.ParquetHiveRecord;
@@ -34,16 +35,9 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import org.junit.Test;
 
-/**
- * TestParquetSerDe.
- */
-public class TestParquetSerDe {
+public class TestParquetSerDe extends TestCase {
 
-  @Test
   public void testParquetHiveSerDe() throws Throwable {
     try {
       // Create the SerDe
@@ -52,7 +46,7 @@ public class TestParquetSerDe {
       final ParquetHiveSerDe serDe = new ParquetHiveSerDe();
       final Configuration conf = new Configuration();
       final Properties tbl = createProperties();
-      serDe.initialize(conf, tbl, null);
+      SerDeUtils.initializeSerDe(serDe, conf, tbl, null);
 
       // Data
       final Writable[] arr = new Writable[9];
@@ -91,7 +85,6 @@ public class TestParquetSerDe {
     }
   }
 
-  @Test
   public void testParquetHiveSerDeComplexTypes() throws Throwable {
     // Initialize
     ParquetHiveSerDe serDe = new ParquetHiveSerDe();
@@ -102,7 +95,7 @@ public class TestParquetSerDe {
     tblProperties.setProperty(serdeConstants.LIST_COLUMN_TYPES, "int,struct<a:int,b:string>");
     conf.set(ColumnProjectionUtils.READ_NESTED_COLUMN_PATH_CONF_STR, "s.b");
 
-    serDe.initialize(conf, tblProperties, null);
+    serDe.initialize(conf, tblProperties);
 
     // Generate test data
     Writable[] wb = new Writable[1];
@@ -122,8 +115,7 @@ public class TestParquetSerDe {
     assertEquals(wb[0], boi.getStructFieldData(awb, b));
   }
 
-  private void deserializeAndSerializeLazySimple(final ParquetHiveSerDe serDe, final ArrayWritable t)
-      throws SerDeException {
+  private void deserializeAndSerializeLazySimple(final ParquetHiveSerDe serDe, final ArrayWritable t) throws SerDeException {
 
     // Get the row structure
     final StructObjectInspector oi = (StructObjectInspector) serDe.getObjectInspector();
@@ -131,13 +123,13 @@ public class TestParquetSerDe {
     // Deserialize
     final Object row = serDe.deserialize(t);
     assertEquals("deserialization gives the wrong object class", row.getClass(), ArrayWritable.class);
+    assertEquals("size correct after deserialization", serDe.getSerDeStats().getRawDataSize(), t.get().length);
     assertEquals("deserialization gives the wrong object", t, row);
 
     // Serialize
     final ParquetHiveRecord serializedArr = (ParquetHiveRecord) serDe.serialize(row, oi);
-    assertTrue("serialized object should be equal to starting object",
-        arrayWritableEquals(t, (ArrayWritable)serializedArr.getObject()));
-    assertEquals("Stats are not collected during serialization and deserialization", null, serDe.getSerDeStats());
+    assertEquals("size correct after serialization", serDe.getSerDeStats().getRawDataSize(), ((ArrayWritable)serializedArr.getObject()).get().length);
+    assertTrue("serialized object should be equal to starting object", arrayWritableEquals(t, (ArrayWritable)serializedArr.getObject()));
   }
 
   private Properties createProperties() {

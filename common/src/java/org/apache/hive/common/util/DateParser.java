@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,71 +17,37 @@
  */
 package org.apache.hive.common.util;
 
-import java.util.Objects;
-
-import org.apache.hadoop.hive.common.type.Date;
-
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
+import java.sql.Date;
+import java.text.ParsePosition;
+import java.text.SimpleDateFormat;
 
 /**
  * Date parser class for Hive.
  */
-public final class DateParser {
-
-  /**
-   * Cache 10 years worth of dates before evicting. Note, it is possible to cast
-   * timestamps (Date and Time) into Dates, therefore the effectiveness of the
-   * cache may be limited if the Time portion of the timestamp has many distinct
-   * values.
-   */
-  private static final LoadingCache<String, Date> DATE_CACHE =
-      CacheBuilder.newBuilder().maximumSize(10 * 365).build(new CacheLoader<String, Date>() {
-        @Override
-        public Date load(final String text) throws Exception {
-          return Date.valueOf(text);
-        }
-      });
-
-  private DateParser() {
+public class DateParser {
+  private final SimpleDateFormat formatter;
+  private final ParsePosition pos;
+  public DateParser() {
+    formatter = new SimpleDateFormat("yyyy-MM-dd");
+    // TODO: ideally, we should set formatter.setLenient(false);
+    pos = new ParsePosition(0);
   }
 
-  /**
-   * Obtains an instance of Date from a text string such as 2021-02-21.
-   *
-   * @param text the text to parse
-   * @return The Date objects generated from parsing the text or null if the
-   *         text could not be parsed
-   * @throws NullPointerException if {@code text} is null
-   */
-  public static Date parseDate(final String text) {
-    Objects.requireNonNull(text);
-
-    // Date is a mutable class; do not return cached value
-    Date result = new Date();
-    return (parseDate(text, result)) ? result : null;
+  public Date parseDate(String strValue) {
+    Date result = new Date(0);
+    if (parseDate(strValue, result)) {
+      return result;
+    }
+    return null;
   }
 
-  /**
-   * Obtains an instance of Date from a text string such as 2021-02-21. The
-   * {@code result} is not modified if parsing of the {@code text} fails.
-   *
-   * @param text the text to parse
-   * @param result the {@code Date} to load the results into
-   * @return True if parsing was successful; false otherwise.
-   * @throws NullPointerException if {@code text} or {@code result} is null
-   */
-  public static boolean parseDate(final String text, final Date result) {
-    Objects.requireNonNull(text);
-    Objects.requireNonNull(result);
-
-    try {
-      Date date = DATE_CACHE.get(text);
-      result.setTimeInMillis(date.toEpochMilli());
-      return true;
-    } catch (Exception e) {
+  public boolean parseDate(String strValue, Date result) {
+    pos.setIndex(0);
+    java.util.Date parsedVal = formatter.parse(strValue, pos);
+    if (parsedVal == null) {
       return false;
     }
+    result.setTime(parsedVal.getTime());
+    return true;
   }
 }

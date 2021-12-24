@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,15 +18,6 @@
 
 package org.apache.hive.jdbc;
 
-import java.util.ArrayList;
-
-import java.util.List;
-
-import jline.internal.Log;
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hive.jdbc.Utils.JdbcConnectionParams;
-import org.apache.hive.service.cli.TableSchema;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -35,8 +26,8 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Map;
 import java.util.jar.Attributes;
+
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hive.service.cli.GetInfoType;
 import org.apache.hive.service.rpc.thrift.TCLIService;
@@ -152,54 +143,13 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
 
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(catalogResp.getOperationHandle())
     .build();
   }
 
-  private static final class ClientInfoPropertiesResultSet extends HiveMetaDataResultSet<Object> {
-    private final static String[] COLUMNS = { "NAME", "MAX_LEN", "DEFAULT_VALUE", "DESCRIPTION" };
-    private final static String[] COLUMN_TYPES = { "STRING", "INT", "STRING", "STRING" };
-
-    private final static Object[][] DATA = {
-      { "ApplicationName", 1000, null, null },
-      // Note: other standard ones include e.g. ClientUser and ClientHostname,
-      //       but we don't need them for now.
-    };
-    private int index = -1;
-
-    public ClientInfoPropertiesResultSet() throws SQLException {
-      super(Arrays.asList(COLUMNS), Arrays.asList(COLUMN_TYPES), null);
-      List<FieldSchema> fieldSchemas = new ArrayList<>(COLUMNS.length);
-      for (int i = 0; i < COLUMNS.length; ++i) {
-        fieldSchemas.add(new FieldSchema(COLUMNS[i], COLUMN_TYPES[i], null));
-      }
-      setSchema(new TableSchema(fieldSchemas));
-    }
-
-    @Override
-    public boolean next() throws SQLException {
-      if ((++index) >= DATA.length) return false;
-      row = Arrays.copyOf(DATA[index], DATA[index].length);
-      return true;
-    }
-
-    public <T> T getObject(String columnLabel, Class<T> type)  throws SQLException {
-      for (int i = 0; i < COLUMNS.length; ++i) {
-        if (COLUMNS[i].equalsIgnoreCase(columnLabel)) return getObject(i, type);
-      }
-      throw new SQLException("No column " + columnLabel);
-    }
-
-    @SuppressWarnings("unchecked")
-    public <T> T getObject(int columnIndex, Class<T> type)  throws SQLException {
-      // TODO: perhaps this could use a better implementation... for now even the Hive query result
-      //       set doesn't support this, so assume the user knows what he's doing when calling us.
-      return (T) super.getObject(columnIndex);
-    }
-  }
-
   public ResultSet getClientInfoProperties() throws SQLException {
-    return new ClientInfoPropertiesResultSet();
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public ResultSet getColumnPrivileges(String catalog, String schema,
@@ -277,6 +227,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
     // build the resultset from response
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(colResp.getOperationHandle())
     .build();
   }
@@ -327,6 +278,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
 
    return new HiveQueryResultSet.Builder(connection)
      .setClient(client)
+     .setSessionHandle(sessHandle)
      .setStmtHandle(getFKResp.getOperationHandle())
      .build();
   }
@@ -407,12 +359,13 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
 
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(funcResp.getOperationHandle())
     .build();
   }
 
   public String getIdentifierQuoteString() throws SQLException {
-    return "`";
+    return " ";
   }
 
   public ResultSet getImportedKeys(String catalog, String schema, String table)
@@ -579,6 +532,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
 
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(getPKResp.getOperationHandle())
     .build();
   }
@@ -625,13 +579,11 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
   public RowIdLifetime getRowIdLifetime() throws SQLException {
     throw new SQLFeatureNotSupportedException("Method not supported");
   }
+
   public String getSQLKeywords() throws SQLException {
-    // Note: the definitions of what ODBC and JDBC keywords exclude are different in different
-    //       places. For now, just return the ODBC version here; that excludes Hive keywords 
-    //       that are also ODBC reserved keywords. We could also exclude SQL:2003.
-    TGetInfoResp resp = getServerInfo(GetInfoType.CLI_ODBC_KEYWORDS.toTGetInfoType());
-    return resp.getInfoValue().getStringValue();
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
+
   public int getSQLStateType() throws SQLException {
     return DatabaseMetaData.sqlStateSQL99;
   }
@@ -667,6 +619,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
 
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(schemaResp.getOperationHandle())
     .build();
   }
@@ -710,6 +663,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
 
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(tableTypeResp.getOperationHandle())
     .build();
   }
@@ -740,6 +694,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
 
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(getTableResp.getOperationHandle())
     .build();
   }
@@ -797,6 +752,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
     Utils.verifySuccess(getTypeInfoResp.getStatus());
     return new HiveQueryResultSet.Builder(connection)
     .setClient(client)
+    .setSessionHandle(sessHandle)
     .setStmtHandle(getTypeInfoResp.getOperationHandle())
     .build();
   }
@@ -804,7 +760,7 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
   public ResultSet getUDTs(String catalog, String schemaPattern,
       String typeNamePattern, int[] types) throws SQLException {
 
-    return new HiveMetaDataResultSet<Object>(
+    return new HiveMetaDataResultSet(
             Arrays.asList("TYPE_CAT", "TYPE_SCHEM", "TYPE_NAME", "CLASS_NAME", "DATA_TYPE"
                     , "REMARKS", "BASE_TYPE")
             , Arrays.asList("STRING", "STRING", "STRING", "STRING", "INT", "STRING", "INT")
@@ -860,19 +816,19 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
   }
 
   public boolean nullsAreSortedAtEnd() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean nullsAreSortedAtStart() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean nullsAreSortedHigh() throws SQLException {
-    return getHiveDefaultNullsLast(connection.getConnParams().getHiveConfs());
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean nullsAreSortedLow() throws SQLException {
-    return !getHiveDefaultNullsLast(connection.getConnParams().getHiveConfs());
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean othersDeletesAreVisible(int type) throws SQLException {
@@ -900,27 +856,27 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
   }
 
   public boolean storesLowerCaseIdentifiers() throws SQLException {
-    return true;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean storesLowerCaseQuotedIdentifiers() throws SQLException {
-    return true;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean storesMixedCaseIdentifiers() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean storesMixedCaseQuotedIdentifiers() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean storesUpperCaseIdentifiers() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean storesUpperCaseQuotedIdentifiers() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean supportsANSI92EntryLevelSQL() throws SQLException {
@@ -1045,11 +1001,11 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
   }
 
   public boolean supportsMixedCaseIdentifiers() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean supportsMixedCaseQuotedIdentifiers() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("Method not supported");
   }
 
   public boolean supportsMultipleOpenResults() throws SQLException {
@@ -1231,21 +1187,5 @@ public class HiveDatabaseMetaData implements DatabaseMetaData {
     }
     Utils.verifySuccess(resp.getStatus());
     return resp;
-  }
-
-  /**
-   * This returns Hive configuration for HIVE_DEFAULT_NULLS_LAST.
-   *
-   * @param hiveConfs
-   * @return
-   */
-  public static boolean getHiveDefaultNullsLast(Map<String, String> hiveConfs) throws SQLException {
-    if (hiveConfs == null) {
-      throw new SQLException("hiveConfs is not available");
-    }
-    if (hiveConfs.get(JdbcConnectionParams.HIVE_DEFAULT_NULLS_LAST_KEY) == null) {
-      throw new SQLException("HIVE_DEFAULT_NULLS_LAST is not available");
-    }
-    return Boolean.parseBoolean(hiveConfs.get(JdbcConnectionParams.HIVE_DEFAULT_NULLS_LAST_KEY));
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,7 @@ import org.apache.hive.spark.counter.SparkCounter;
 import org.apache.hive.spark.counter.SparkCounterGroup;
 import org.apache.hive.spark.counter.SparkCounters;
 
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -31,15 +31,15 @@ public class SparkStatisticsBuilder {
   private Map<String, List<SparkStatistic>> statisticMap;
 
   public SparkStatisticsBuilder() {
-    statisticMap = new LinkedHashMap<>();
+    statisticMap = new HashMap<String, List<SparkStatistic>>();
   }
 
   public SparkStatistics build() {
     List<SparkStatisticGroup> statisticGroups = new LinkedList<SparkStatisticGroup>();
     for (Map.Entry<String, List<SparkStatistic>> entry : statisticMap.entrySet()) {
       String groupName = entry.getKey();
-      List<SparkStatistic> statisticList = entry.getValue();
-      statisticGroups.add(new SparkStatisticGroup(groupName, statisticList));
+      List<SparkStatistic> statisitcList = entry.getValue();
+      statisticGroups.add(new SparkStatisticGroup(groupName, statisitcList));
     }
 
     return new SparkStatistics(statisticGroups);

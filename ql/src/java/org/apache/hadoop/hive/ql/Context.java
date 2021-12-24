@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,14 +23,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.text.SimpleDateFormat;
-import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -41,8 +38,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hive.common.BlobStorageUtils;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.hadoop.hive.common.BlobStorageUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -57,24 +54,18 @@ import org.apache.hadoop.hive.ql.parse.ASTNode;
 import org.apache.hadoop.hive.ql.parse.ExplainConfiguration;
 import org.apache.hadoop.hive.ql.parse.ExplainConfiguration.AnalyzeState;
 import org.apache.hadoop.hive.ql.parse.HiveParser;
-import org.apache.hadoop.hive.ql.parse.QB;
 import org.apache.hadoop.hive.ql.plan.LoadTableDesc;
-import org.apache.hadoop.hive.ql.plan.mapper.EmptyStatsSource;
-import org.apache.hadoop.hive.ql.plan.mapper.PlanMapper;
-import org.apache.hadoop.hive.ql.plan.mapper.StatsSource;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hadoop.hive.ql.wm.WmContext;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 /**
  * Context for Semantic Analyzers. Usage: not reusable - construct a new one for
  * each query should call clear() at end of use to remove temporary folders
  */
 public class Context {
-
   private boolean isHDFSCleanup;
   private Path resFile;
   private Path resDir;
@@ -99,18 +90,14 @@ public class Context {
   // Keeps track of scratch directories created for different scheme/authority
   private final Map<String, Path> fsScratchDirs = new HashMap<String, Path>();
 
-  // keeps track of result cache dir for the query, later cleaned up by context cleanup
-  private Path fsResultCacheDirs = null;
-
-  private Configuration conf;
+  private final Configuration conf;
   protected int pathid = 10000;
-  private int moveTaskId = 0;
   protected ExplainConfiguration explainConfig = null;
   protected String cboInfo;
   protected boolean cboSucceeded;
-  protected String optimizedSql;
-  protected String calcitePlan;
   protected String cmd = "";
+  // number of previous attempts
+  protected int tryCount = 0;
   private TokenRewriteStream tokenRewriteStream;
   // Holds the qualified name to tokenRewriteStream for the views
   // referenced by the query. This is used to rewrite the view AST
@@ -118,12 +105,6 @@ public class Context {
   private final Map<String, TokenRewriteStream> viewsTokenRewriteStreams;
 
   private final String executionId;
-  // Some statements, e.g., UPDATE, DELETE, or MERGE, get rewritten into different
-  // subqueries that create new contexts. We keep them here so we can clean them
-  // up when we are done.
-  private final Set<Context> subContexts;
-
-  private String replPolicy;
 
   // List of Locks for this query
   protected List<HiveLock> hiveLocks;
@@ -152,9 +133,6 @@ public class Context {
   // Identify whether the query involves an UPDATE, DELETE or MERGE
   private boolean isUpdateDeleteMerge;
 
-  // Whether the analyzer has been instantiated to read and load materialized view plans
-  private boolean isLoadingMaterializedView;
-
   /**
    * This determines the prefix of the
    * {@link org.apache.hadoop.hive.ql.parse.SemanticAnalyzer.Phase1Ctx#dest}
@@ -164,65 +142,21 @@ public class Context {
    */
   private Map<Integer, DestClausePrefix> insertBranchToNamePrefix = new HashMap<>();
   private Operation operation = Operation.OTHER;
-  private WmContext wmContext;
-
-  private boolean isExplainPlan = false;
-  private PlanMapper planMapper = new PlanMapper();
-  private StatsSource statsSource;
-  private int executionIndex;
-
-  // Load data rewrite
-  private Table tempTableForLoad;
-  /**
-   * Unparsing is not available in {@link SemanticAnalyzer} by default - because of performance reasons.
-   * After enabling unparsing before analysis - a valid query unparse can be done.
-   */
-  private boolean enableUnparse;
-  /**
-   * true if this Context belongs to a statement which is analyzed by {@link org.apache.hadoop.hive.ql.parse.ScheduledQueryAnalyzer}.
-   * If the goal of the statement is to schedule an alter materialized view rebuild command we need the the fully qualified name
-   * if the materialized view only which is done by {@link org.apache.hadoop.hive.ql.parse.UnparseTranslator} and the query
-   * shouldn't be rewritten.
-   * See {@link org.apache.hadoop.hive.ql.ddl.view.materialized.alter.rebuild.AlterMaterializedViewRebuildAnalyzer}.
-   */
-  private boolean scheduledQuery;
-
   public void setOperation(Operation operation) {
     this.operation = operation;
-  }
-
-  public Operation getOperation() {
-    return operation;
-  }
-
-  public WmContext getWmContext() {
-    return wmContext;
-  }
-
-  public void setWmContext(final WmContext wmContext) {
-    this.wmContext = wmContext;
-  }
-
-  public void setReplPolicy(String replPolicy) {
-    this.replPolicy = replPolicy;
-  }
-
-  public String getReplPolicy() {
-    return this.replPolicy;
   }
 
   /**
    * These ops require special handling in various places
    * (note that Insert into Acid table is in OTHER category)
    */
-  public enum Operation {UPDATE, DELETE, MERGE, OTHER}
+  public enum Operation {UPDATE, DELETE, MERGE, OTHER};
   public enum DestClausePrefix {
     INSERT("insclause-"), UPDATE("updclause-"), DELETE("delclause-");
     private final String prefix;
     DestClausePrefix(String prefix) {
       this.prefix = prefix;
     }
-    @Override
     public String toString() {
       return prefix;
     }
@@ -231,25 +165,10 @@ public class Context {
     return getTokenRewriteStream().toString(n.getTokenStartIndex(), n.getTokenStopIndex() + 1).trim();
   }
   /**
-   * The suffix is always relative to a given ASTNode.
-   * We need this so that FileSinkOperatorS corresponding to different branches of a multi-insert
-   * statement which represents a SQL Merge statement get marked correctly with
-   * {@link org.apache.hadoop.hive.ql.io.AcidUtils.Operation}.  See usages
-   * of {@link #getDestNamePrefix(ASTNode, QB)} and
-   * {@link org.apache.hadoop.hive.ql.parse.SemanticAnalyzer#updating(String)} and
-   * {@link org.apache.hadoop.hive.ql.parse.SemanticAnalyzer#deleting(String)}.
+   * The suffix is always relative to a given ASTNode
    */
-  public DestClausePrefix getDestNamePrefix(ASTNode curNode, QB queryBlock) {
+  public DestClausePrefix getDestNamePrefix(ASTNode curNode) {
     assert curNode != null : "must supply curNode";
-    if(queryBlock.isInsideView() || queryBlock.getParseInfo().getIsSubQ()) {
-      /**
-       * Views get inlined in the logical plan but not in the AST
-       * {@link org.apache.hadoop.hive.ql.parse.SemanticAnalyzer#replaceViewReferenceWithDefinition(QB, Table, String, String)}
-       * Since here we only care to identify clauses representing Update/Delete which are not
-       * possible inside a view/subquery, we can immediately return the default {@link DestClausePrefix.INSERT}
-       */
-      return DestClausePrefix.INSERT;
-    }
     if(curNode.getType() != HiveParser.TOK_INSERT_INTO) {
       //select statement
       assert curNode.getType() == HiveParser.TOK_DESTINATION;
@@ -281,7 +200,7 @@ public class Context {
       }
       if(!thisIsInASubquery) {
         throw new IllegalStateException("Expected '" + getMatchedText(curNode) + "' to be in sub-query or set operation.");
-      }
+      } 
       return DestClausePrefix.INSERT;
     }
     switch (operation) {
@@ -292,7 +211,7 @@ public class Context {
       case DELETE:
         return DestClausePrefix.DELETE;
       case MERGE:
-      /* This is the structure expected here
+      /* This is the structrue expected here
         HiveParser.TOK_QUERY;
           HiveParser.TOK_FROM
           HiveParser.TOK_INSERT;
@@ -304,7 +223,7 @@ public class Context {
         assert insert != null && insert.getType() == HiveParser.TOK_INSERT;
         ASTNode query = (ASTNode) insert.getParent();
         assert query != null && query.getType() == HiveParser.TOK_QUERY;
-
+        
         for(int childIdx = 1; childIdx < query.getChildCount(); childIdx++) {//1st child is TOK_FROM
           assert query.getChild(childIdx).getType() == HiveParser.TOK_INSERT;
           if(insert == query.getChild(childIdx)) {
@@ -331,8 +250,7 @@ public class Context {
   public DestClausePrefix addDestNamePrefix(int pos, DestClausePrefix prefix) {
     return insertBranchToNamePrefix.put(pos, prefix);
   }
-
-  public Context(Configuration conf) {
+  public Context(Configuration conf) throws IOException {
     this(conf, generateExecutionId());
   }
 
@@ -340,10 +258,9 @@ public class Context {
    * Create a Context with a given executionId.  ExecutionId, together with
    * user name and conf, will determine the temporary directory locations.
    */
-  private Context(Configuration conf, String executionId) {
+  public Context(Configuration conf, String executionId)  {
     this.conf = conf;
     this.executionId = executionId;
-    this.subContexts = new HashSet<>();
 
     // local & non-local tmp location is configurable. however it is the same across
     // all external file systems
@@ -354,71 +271,8 @@ public class Context {
     opContext = new CompilationOpContext();
 
     viewsTokenRewriteStreams = new HashMap<>();
-    // Sql text based materialized view auto rewriting compares the extended query text (contains fully qualified
-    // identifiers) to the stored Materialized view query definitions. We have to enable unparsing for generating
-    // the extended query text when auto rewriting is enabled.
-    enableUnparse =
-        HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MATERIALIZED_VIEW_ENABLE_AUTO_REWRITING_SQL);
-    scheduledQuery = false;
   }
 
-  protected Context(Context ctx) {
-    // This method creates a deep copy of context, but the copy is partial,
-    // hence it needs to be used carefully. In particular, following objects
-    // are ignored:
-    // opContext, pathToCS, cboInfo, cboSucceeded, tokenRewriteStream, viewsTokenRewriteStreams,
-    // subContexts, cteTables, loadTableOutputMap, planMapper, insertBranchToNamePrefix
-    this.isHDFSCleanup = ctx.isHDFSCleanup;
-    this.resFile = ctx.resFile;
-    this.resDir = ctx.resDir;
-    this.resFs = ctx.resFs;
-    this.resDirPaths = ctx.resDirPaths;
-    this.resDirFilesNum = ctx.resDirFilesNum;
-    this.initialized = ctx.initialized;
-    this.originalTracker = ctx.originalTracker;
-    this.nonLocalScratchPath = ctx.nonLocalScratchPath;
-    this.localScratchDir = ctx.localScratchDir;
-    this.scratchDirPermission = ctx.scratchDirPermission;
-    this.fsScratchDirs.putAll(ctx.fsScratchDirs);
-    this.fsResultCacheDirs = ctx.fsResultCacheDirs;
-    this.conf = ctx.conf;
-    this.pathid = ctx.pathid;
-    this.explainConfig = ctx.explainConfig;
-    this.cmd = ctx.cmd;
-    this.executionId = ctx.executionId;
-    this.hiveLocks = ctx.hiveLocks;
-    this.hiveTxnManager = ctx.hiveTxnManager;
-    this.needLockMgr = ctx.needLockMgr;
-    this.sequencer = ctx.sequencer;
-    this.outputLockObjects.putAll(ctx.outputLockObjects);
-    this.stagingDir = ctx.stagingDir;
-    this.heartbeater = ctx.heartbeater;
-    this.skipTableMasking = ctx.skipTableMasking;
-    this.isUpdateDeleteMerge = ctx.isUpdateDeleteMerge;
-    this.isLoadingMaterializedView = ctx.isLoadingMaterializedView;
-    this.operation = ctx.operation;
-    this.wmContext = ctx.wmContext;
-    this.isExplainPlan = ctx.isExplainPlan;
-    this.statsSource = ctx.statsSource;
-    this.executionIndex = ctx.executionIndex;
-    this.viewsTokenRewriteStreams = new HashMap<>();
-    this.subContexts = new HashSet<>();
-    this.opContext = new CompilationOpContext();
-    this.enableUnparse = ctx.enableUnparse;
-    this.scheduledQuery = ctx.scheduledQuery;
-  }
-
-  public Map<String, Path> getFsScratchDirs() {
-    return fsScratchDirs;
-  }
-
-  public void setFsResultCacheDirs(Path fsResultCacheDirs) {
-    this.fsResultCacheDirs = fsResultCacheDirs;
-  }
-
-  public Path getFsResultCacheDirs() {
-    return this.fsResultCacheDirs;
-  }
 
   public Map<LoadTableDesc, WriteEntity> getLoadTableOutputMap() {
     return loadTableOutputMap;
@@ -501,14 +355,15 @@ public class Context {
       // Append task specific info to stagingPathName, instead of creating a sub-directory.
       // This way we don't have to worry about deleting the stagingPathName separately at
       // end of query execution.
-      dir = fs.makeQualified(new Path(
-          stagingPathName + "_" + this.executionId + "-" + TaskRunner.getTaskRunnerID()));
+      dir = fs.makeQualified(new Path(stagingPathName + "_" + this.executionId + "-" + TaskRunner.getTaskRunnerID()));
 
       LOG.debug("Created staging dir = " + dir + " for path = " + inputPath);
 
       if (mkdir) {
         try {
-          if (!FileUtils.mkdir(fs, dir, conf)) {
+          boolean inheritPerms = HiveConf.getBoolVar(conf,
+              HiveConf.ConfVars.HIVE_WAREHOUSE_SUBDIR_INHERIT_PERMS);
+          if (!FileUtils.mkdir(fs, dir, inheritPerms, conf)) {
             throw new IllegalStateException("Cannot create staging directory  '" + dir.toString() + "'");
           }
 
@@ -586,14 +441,14 @@ public class Context {
 
   /**
    * Create a map-reduce scratch directory on demand and return it.
-   * @param mkDir flag to indicate if scratch dir is to be created or not
    *
    */
-  public Path getMRScratchDir(boolean mkDir) {
+  public Path getMRScratchDir() {
+
     // if we are executing entirely on the client side - then
     // just (re)use the local scratch directory
     if(isLocalOnlyExecutionMode()) {
-      return getLocalScratchDir(mkDir);
+      return getLocalScratchDir(!isExplainSkipExecution());
     }
 
     try {
@@ -601,22 +456,15 @@ public class Context {
       URI uri = dir.toUri();
 
       Path newScratchDir = getScratchDir(uri.getScheme(), uri.getAuthority(),
-                                         mkDir, uri.getPath());
+          !isExplainSkipExecution(), uri.getPath());
       LOG.info("New scratch dir is " + newScratchDir);
       return newScratchDir;
     } catch (IOException e) {
       throw new RuntimeException(e);
     } catch (IllegalArgumentException e) {
       throw new RuntimeException("Error while making MR scratch "
-                                     + "directory - check filesystem config (" + e.getCause() + ")", e);
+          + "directory - check filesystem config (" + e.getCause() + ")", e);
     }
-  }
-  /**
-   * Create a map-reduce scratch directory on demand and return it.
-   *
-   */
-  public Path getMRScratchDir() {
-    return getMRScratchDir(!isExplainSkipExecution());
   }
 
   /**
@@ -627,21 +475,23 @@ public class Context {
    * - If path is on HDFS, then create a staging directory inside the path
    *
    * @param path Path used to verify the Filesystem to use for temporary directory
+   * @param isFinalJob true if the required {@link Path} will be used for the final job (e.g. the final FSOP)
    *
    * @return A path to the new temporary directory
    */
-  public Path getTempDirForInterimJobPath(Path path) {
-    // For better write performance, we use HDFS for temporary data when object store is used.
-    // Note that the scratch directory configuration variable must use HDFS or any other
-    // non-blobstorage system to take advantage of this performance.
-    boolean isBlobstorageOptimized = BlobStorageUtils.isBlobStoragePath(conf, path)
-        && !BlobStorageUtils.isBlobStorageAsScratchDir(conf) && BlobStorageUtils.areOptimizationsEnabled(conf);
-
-    if (isPathLocal(path) || isBlobstorageOptimized) {
-      return getMRTmpPath();
+  public Path getTempDirForPath(Path path, boolean isFinalJob) {
+    if (((BlobStorageUtils.isBlobStoragePath(conf, path) && !BlobStorageUtils.isBlobStorageAsScratchDir(
+            conf)) || isPathLocal(path))) {
+      if (!(isFinalJob && BlobStorageUtils.areOptimizationsEnabled(conf))) {
+        // For better write performance, we use HDFS for temporary data when object store is used.
+        // Note that the scratch directory configuration variable must use HDFS or any other non-blobstorage system
+        // to take advantage of this performance.
+        return getMRTmpPath();
+      }
     }
     return getExtTmpPathRelTo(path);
   }
+
 
   /**
    * Create a temporary directory depending of the path specified.
@@ -651,8 +501,8 @@ public class Context {
    * @param path Path used to verify the Filesystem to use for temporary directory
    * @return A path to the new temporary directory
    */
-  public Path getTempDirForFinalJobPath(Path path) {
-    return getExtTmpPathRelTo(path);
+  public Path getTempDirForPath(Path path) {
+    return getTempDirForPath(path, false);
   }
 
   /*
@@ -676,58 +526,20 @@ public class Context {
   /**
    * Remove any created scratch directories.
    */
-  public void removeResultCacheDir() {
-    if(this.fsResultCacheDirs != null) {
+  public void removeScratchDir() {
+    for (Map.Entry<String, Path> entry : fsScratchDirs.entrySet()) {
       try {
-        Path p = this.fsResultCacheDirs;
+        Path p = entry.getValue();
         FileSystem fs = p.getFileSystem(conf);
-        LOG.debug("Deleting result cache dir: {}", p);
+        LOG.debug("Deleting scratch dir: {}",  p);
         fs.delete(p, true);
         fs.cancelDeleteOnExit(p);
       } catch (Exception e) {
-        LOG.warn("Error Removing result cache dir:", e);
-      }
-    }
-  }
-
-  /**
-   * Remove any created scratch directories.
-   */
-  public void removeScratchDir() {
-    String resultCacheDir = null;
-    if(this.fsResultCacheDirs != null) {
-      resultCacheDir = this.fsResultCacheDirs.toUri().getPath();
-    }
-    SessionState sessionState = SessionState.get();
-    for (Path p: fsScratchDirs.values()) {
-      try {
-        if (p.toUri().getPath().contains(stagingDir) && subDirOf(p, fsScratchDirs.values())  ) {
-          LOG.debug("Skip deleting stagingDir: " + p);
-          FileSystem fs = p.getFileSystem(conf);
-          fs.cancelDeleteOnExit(p);
-          continue; // staging dir is deleted when deleting the scratch dir
-        }
-        if (resultCacheDir == null || !p.toUri().getPath().contains(resultCacheDir)) {
-          // delete only the paths which aren't result cache dir path
-          // because that will be taken care by removeResultCacheDir
-          FileSystem fs = p.getFileSystem(conf);
-          LOG.info("Deleting scratch dir: {}", p);
-          sessionState.getCleanupService().deleteRecursive(p, fs);
-        }
-      } catch (Exception e) {
-        LOG.warn("Error Removing Scratch", e);
+        LOG.warn("Error Removing Scratch: "
+            + StringUtils.stringifyException(e));
       }
     }
     fsScratchDirs.clear();
-  }
-
-  private boolean subDirOf(Path path, Collection<Path> parents) {
-    for (Path each : parents) {
-      if (!path.equals(each) && FileUtils.isPathWithinSubtree(path, each)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   /**
@@ -744,7 +556,8 @@ public class Context {
             + materializedTable.getTableName() + ", status=" + status);
       } catch (IOException e) {
         // ignore
-        LOG.warn("Error removing " + location + " for materialized " + materializedTable.getTableName(), e);
+        LOG.warn("Error removing " + location + " for materialized " + materializedTable.getTableName() +
+                ": " + StringUtils.stringifyException(e));
       }
     }
     cteTables.clear();
@@ -754,12 +567,9 @@ public class Context {
     return Integer.toString(pathid++);
   }
 
-  private String nextMoveTaskId() {
-    return Integer.toString(moveTaskId++);
-  }
 
   private static final String MR_PREFIX = "-mr-";
-  public static final String EXT_PREFIX = "-ext-";
+  private static final String EXT_PREFIX = "-ext-";
   private static final String LOCAL_PREFIX = "-local-";
 
   /**
@@ -772,30 +582,10 @@ public class Context {
         (uriStr.indexOf(MR_PREFIX) != -1);
   }
 
-  /**
-   * Check if the path is a result cache dir for this query. This doesn't work unless the result
-   * paths have already been set in SemanticAnalyzer::getDestinationFilePath to prevent someone from
-   * overriding LOCATION in a create table command to overwrite cached results
-   *
-   * @param destinationPath
-   * @return true if the path is a result cache dir
-   */
-
-  public boolean isResultCacheDir(Path destinationPath) {
-    if (this.fsResultCacheDirs != null) {
-      return this.fsResultCacheDirs.equals(destinationPath);
-    }
-    return false;
-  }
-
   public Path getMRTmpPath(URI uri) {
     return new Path(getStagingDir(new Path(uri), !isExplainSkipExecution()), MR_PREFIX + nextPathId());
   }
 
-  public Path getMRTmpPath(boolean mkDir) {
-    return new Path(getMRScratchDir(mkDir), MR_PREFIX +
-        nextPathId());
-  }
   /**
    * Get a path to store map-reduce intermediate data in.
    *
@@ -823,13 +613,14 @@ public class Context {
    */
   public Path getExternalTmpPath(Path path) {
     URI extURI = path.toUri();
-    if ("viewfs".equals(extURI.getScheme())) {
+    if (extURI.getScheme().equals("viewfs")) {
       // if we are on viewfs we don't want to use /tmp as tmp dir since rename from /tmp/..
       // to final /user/hive/warehouse/ will fail later, so instead pick tmp dir
       // on same namespace as tbl dir.
       return getExtTmpPathRelTo(path.getParent());
     }
-    return new Path(getExternalScratchDir(extURI), EXT_PREFIX + nextPathId());
+    return new Path(getExternalScratchDir(extURI), EXT_PREFIX +
+        nextPathId());
   }
 
   /**
@@ -839,11 +630,6 @@ public class Context {
    */
   public Path getExtTmpPathRelTo(Path path) {
     return new Path(getStagingDir(path, !isExplainSkipExecution()), EXT_PREFIX + nextPathId());
-  }
-
-  public String getMoveTaskId() {
-    String moveTaskId = this.executionId + "_" + nextMoveTaskId();
-    return moveTaskId;
   }
 
   /**
@@ -883,47 +669,30 @@ public class Context {
     resDirPaths = null;
   }
 
-  public void clear() throws IOException{
-    this.clear(true);
-  }
-
-  public void clear(boolean deleteResultDir) throws IOException {
-    // First clear the other contexts created by this query
-    for (Context subContext : subContexts) {
-      subContext.clear();
-    }
-    // Then clear this context
-      if (resDir != null && !isInScratchDir(resDir)) { // resDir is inside the scratch dir, removeScratchDir will take care of removing it
-        try {
-          FileSystem fs = resDir.getFileSystem(conf);
-          LOG.debug("Deleting result dir: {}", resDir);
-          fs.delete(resDir, true);
-        } catch (IOException e) {
-          LOG.info("Context clear error", e);
-        }
+  public void clear() throws IOException {
+    if (resDir != null) {
+      try {
+        FileSystem fs = resDir.getFileSystem(conf);
+        LOG.debug("Deleting result dir: {}",  resDir);
+        fs.delete(resDir, true);
+      } catch (IOException e) {
+        LOG.info("Context clear error: " + StringUtils.stringifyException(e));
       }
+    }
 
-    if (resFile != null && !isInScratchDir(resFile.getParent())) { // resFile is inside the scratch dir, removeScratchDir will take care of removing it
+    if (resFile != null) {
       try {
         FileSystem fs = resFile.getFileSystem(conf);
         LOG.debug("Deleting result file: {}",  resFile);
         fs.delete(resFile, false);
       } catch (IOException e) {
-        LOG.info("Context clear error", e);
+        LOG.info("Context clear error: " + StringUtils.stringifyException(e));
       }
-    }
-    if(deleteResultDir) {
-      removeResultCacheDir();
     }
     removeMaterializedCTEs();
     removeScratchDir();
     originalTracker = null;
     setNeedLockMgr(false);
-  }
-
-  private boolean isInScratchDir(Path path) {
-    return path.toUri().getPath().startsWith(localScratchDir)
-      || path.toUri().getPath().startsWith(nonLocalScratchPath.toUri().getPath());
   }
 
   public DataInput getStream() {
@@ -957,10 +726,13 @@ public class Context {
       } else {
         return getNextStream();
       }
+    } catch (FileNotFoundException e) {
+      LOG.info("getStream error: " + StringUtils.stringifyException(e));
+      return null;
     } catch (IOException e) {
-      LOG.info("getStream error", e);
+      LOG.info("getStream error: " + StringUtils.stringifyException(e));
+      return null;
     }
-    return null;
   }
 
   private DataInput getNextStream() {
@@ -969,9 +741,14 @@ public class Context {
           && (resDirPaths[resDirFilesNum] != null)) {
         return resFs.open(resDirPaths[resDirFilesNum++]);
       }
+    } catch (FileNotFoundException e) {
+      LOG.info("getNextStream error: " + StringUtils.stringifyException(e));
+      return null;
     } catch (IOException e) {
-      LOG.info("getNextStream error", e);
+      LOG.info("getNextStream error: " + StringUtils.stringifyException(e));
+      return null;
     }
+
     return null;
   }
 
@@ -986,7 +763,7 @@ public class Context {
    * Little abbreviation for StringUtils.
    */
   private static boolean strEquals(String str1, String str2) {
-    return org.apache.commons.lang3.StringUtils.equals(str1, str2);
+    return org.apache.commons.lang.StringUtils.equals(str1, str2);
   }
 
   /**
@@ -1000,8 +777,7 @@ public class Context {
    *          the stream being used
    */
   public void setTokenRewriteStream(TokenRewriteStream tokenRewriteStream) {
-    assert (this.tokenRewriteStream == null || this.getExplainAnalyze() == AnalyzeState.RUNNING ||
-        skipTableMasking);
+    assert (this.tokenRewriteStream == null || this.getExplainAnalyze() == AnalyzeState.RUNNING);
     this.tokenRewriteStream = tokenRewriteStream;
   }
 
@@ -1082,10 +858,6 @@ public class Context {
     }
   }
 
-  public void addSubContext(Context context) {
-    subContexts.add(context);
-  }
-
   public void addCS(String path, ContentSummary cs) {
     pathToCS.put(path, cs);
   }
@@ -1128,6 +900,14 @@ public class Context {
     this.needLockMgr = needLockMgr;
   }
 
+  public int getTryCount() {
+    return tryCount;
+  }
+
+  public void setTryCount(int tryCount) {
+    this.tryCount = tryCount;
+  }
+
   public String getCboInfo() {
     return cboInfo;
   }
@@ -1136,38 +916,12 @@ public class Context {
     this.cboInfo = cboInfo;
   }
 
-  public String getOptimizedSql() {
-    return this.optimizedSql;
-  }
-
-  public void setOptimizedSql(String newSql) {
-    this.optimizedSql = newSql;
-  }
-
   public boolean isCboSucceeded() {
     return cboSucceeded;
   }
 
   public void setCboSucceeded(boolean cboSucceeded) {
     this.cboSucceeded = cboSucceeded;
-  }
-
-  public String getCalcitePlan() {
-    if (this.calcitePlan != null) {
-      return this.calcitePlan;
-    }
-
-    for (Context context : subContexts) {
-      if (context.calcitePlan != null) {
-        return context.calcitePlan;
-      }
-    }
-
-    return null;
-  }
-
-  public void setCalcitePlan(String calcitePlan) {
-    this.calcitePlan = calcitePlan;
   }
 
   public Table getMaterializedTable(String cteName) {
@@ -1184,10 +938,6 @@ public class Context {
 
   public CompilationOpContext getOpContext() {
     return opContext;
-  }
-
-  public void setOpContext(CompilationOpContext opContext) {
-    this.opContext = opContext;
   }
 
   public Heartbeater getHeartbeater() {
@@ -1216,18 +966,11 @@ public class Context {
     return explainConfig;
   }
 
-  public boolean isExplainPlan() {
-    return isExplainPlan;
-  }
-  public void setExplainPlan(boolean t) {
-    this.isExplainPlan = t;
-  }
-
   public void setExplainConfig(ExplainConfiguration explainConfig) {
     this.explainConfig = explainConfig;
   }
 
-  public void resetOpContext() {
+  public void resetOpContext(){
     opContext = new CompilationOpContext();
     sequencer = new AtomicInteger();
   }
@@ -1238,74 +981,5 @@ public class Context {
 
   public void setIsUpdateDeleteMerge(boolean isUpdate) {
     this.isUpdateDeleteMerge = isUpdate;
-  }
-
-  public boolean isLoadingMaterializedView() {
-    return isLoadingMaterializedView;
-  }
-
-  public void setIsLoadingMaterializedView(boolean isLoadingMaterializedView) {
-    this.isLoadingMaterializedView = isLoadingMaterializedView;
-  }
-
-  public String getExecutionId() {
-    return executionId;
-  }
-
-  public void setPlanMapper(PlanMapper planMapper) {
-    this.planMapper = planMapper;
-  }
-
-  public PlanMapper getPlanMapper() {
-    return planMapper;
-  }
-
-  public void setStatsSource(StatsSource statsSource) {
-    this.statsSource = statsSource;
-  }
-
-  public StatsSource getStatsSource() {
-    if (statsSource != null) {
-      return statsSource;
-    } else {
-      // hierarchical; add def stats also here
-      return EmptyStatsSource.INSTANCE;
-    }
-  }
-
-  public int getExecutionIndex() {
-    return executionIndex;
-  }
-
-  public void setExecutionIndex(int executionIndex) {
-    this.executionIndex = executionIndex;
-  }
-
-  public void setConf(HiveConf conf) {
-    this.conf = conf;
-  }
-
-  public Table getTempTableForLoad() {
-    return tempTableForLoad;
-  }
-
-  public void setTempTableForLoad(Table tempTableForLoad) {
-    this.tempTableForLoad = tempTableForLoad;
-  }
-
-  public boolean enableUnparse() {
-    return enableUnparse;
-  }
-
-  public void setEnableUnparse(boolean enableUnparse) {
-    this.enableUnparse = enableUnparse;
-  }
-
-  public boolean isScheduledQuery() {
-    return scheduledQuery;
-  }
-
-  public void setScheduledQuery(boolean scheduledQuery) {
-    this.scheduledQuery = scheduledQuery;
   }
 }

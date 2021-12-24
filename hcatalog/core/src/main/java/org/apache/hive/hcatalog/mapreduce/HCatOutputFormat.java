@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,6 @@
 package org.apache.hive.hcatalog.mapreduce;
 
 import java.io.IOException;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -33,9 +32,9 @@ import org.apache.hadoop.hive.common.classification.InterfaceAudience;
 import org.apache.hadoop.hive.common.classification.InterfaceStability;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.metadata.HiveStorageHandler;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.Index;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.io.WritableComparable;
@@ -56,7 +55,7 @@ import org.slf4j.LoggerFactory;
 /** The OutputFormat to use to write data to HCatalog. The key value is ignored and
  *  should be given as null. The value is the HCatRecord to write.*/
 @InterfaceAudience.Public
-@InterfaceStability.Stable
+@InterfaceStability.Evolving
 public class HCatOutputFormat extends HCatBaseOutputFormat {
 
   static final private Logger LOG = LoggerFactory.getLogger(HCatOutputFormat.class);
@@ -92,6 +91,14 @@ public class HCatOutputFormat extends HCatBaseOutputFormat {
       Table table = HCatUtil.getTable(client, outputJobInfo.getDatabaseName(),
         outputJobInfo.getTableName());
 
+      List<String> indexList = client.listIndexNames(outputJobInfo.getDatabaseName(), outputJobInfo.getTableName(), Short.MAX_VALUE);
+
+      for (String indexName : indexList) {
+        Index index = client.getIndex(outputJobInfo.getDatabaseName(), outputJobInfo.getTableName(), indexName);
+        if (!index.isDeferredRebuild()) {
+          throw new HCatException(ErrorType.ERROR_NOT_SUPPORTED, "Store into a table with an automatic index from Pig/Mapreduce is not supported");
+        }
+      }
       StorageDescriptor sd = table.getTTable().getSd();
 
       if (sd.isCompressed()) {
@@ -105,17 +112,12 @@ public class HCatOutputFormat extends HCatBaseOutputFormat {
       if (sd.getSortCols() != null && !sd.getSortCols().isEmpty()) {
         throw new HCatException(ErrorType.ERROR_NOT_SUPPORTED, "Store into a partition with sorted column definition from Pig/Mapreduce is not supported");
       }
-      if (AcidUtils.isTransactionalTable(table)) {
-        throw new HCatException(ErrorType.ERROR_NOT_SUPPORTED, "Store into a transactional table "
-          + table.getFullyQualifiedName() + " from Pig/Mapreduce is not supported");
-      }
 
       // Set up a common id hash for this job, so that when we create any temporary directory
       // later on, it is guaranteed to be unique.
       String idHash;
-      DecimalFormat df = new DecimalFormat("#.####################");
       if ((idHash = conf.get(HCatConstants.HCAT_OUTPUT_ID_HASH)) == null) {
-        idHash = String.valueOf(df.format(Math.random()));
+        idHash = String.valueOf(Math.random());
       }
       conf.set(HCatConstants.HCAT_OUTPUT_ID_HASH,idHash);
 

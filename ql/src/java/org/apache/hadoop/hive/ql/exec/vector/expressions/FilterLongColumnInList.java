@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor.Descriptor;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
@@ -37,11 +36,8 @@ import java.util.regex.Pattern;
 public class FilterLongColumnInList extends VectorExpression implements ILongInExpr {
 
   private static final long serialVersionUID = 1L;
-
-  protected final int inputCol;
-  protected long[] inListValues;
-
-  // Transient members initialized by transientInit method.
+  private int inputCol;
+  private long[] inListValues;
 
   // The set object containing the IN list. This is optimized for lookup
   // of the data type of the column.
@@ -49,32 +45,27 @@ public class FilterLongColumnInList extends VectorExpression implements ILongInE
 
   public FilterLongColumnInList() {
     super();
-
-    // Dummy final assignments.
-    inputCol = -1;
+    inSet = null;
   }
 
   /**
    * After construction you must call setInListValues() to add the values to the IN set.
    */
   public FilterLongColumnInList(int colNum) {
-    super();
     this.inputCol = colNum;
+    inSet = null;
   }
 
   @Override
-  public void transientInit(Configuration conf) throws HiveException {
-    super.transientInit(conf);
-
-    inSet = new CuckooSetLong(inListValues.length);
-    inSet.load(inListValues);
-  }
-
-  @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
+    }
+
+    if (inSet == null) {
+      inSet = new CuckooSetLong(inListValues.length);
+      inSet.load(inListValues);
     }
 
     LongColumnVector inputColVector = (LongColumnVector) batch.cols[inputCol];
@@ -161,6 +152,17 @@ public class FilterLongColumnInList extends VectorExpression implements ILongInE
     }
   }
 
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
+  @Override
+  public int getOutputColumn() {
+    return -1;
+  }
+
   @Override
   public Descriptor getDescriptor() {
 
@@ -178,7 +180,7 @@ public class FilterLongColumnInList extends VectorExpression implements ILongInE
 
   @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputCol) + ", values " + Arrays.toString(inListValues);
+    return "col " + inputCol + ", values " + Arrays.toString(inListValues);
   }
 
 

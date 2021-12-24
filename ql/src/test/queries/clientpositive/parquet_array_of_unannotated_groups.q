@@ -1,5 +1,3 @@
-set hive.vectorized.execution.enabled=false;
-
 -- this test creates a Parquet table from a structure with an unannotated
 -- repeated structure of (x,y) structs
 

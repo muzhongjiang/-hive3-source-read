@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -120,14 +120,18 @@ public class OrcNewInputFormat extends InputFormat<NullWritable, OrcStruct>{
   @Override
   public List<InputSplit> getSplits(JobContext jobContext)
       throws IOException, InterruptedException {
-    LOG.debug("getSplits started");
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("getSplits started");
+    }
     Configuration conf = ShimLoader.getHadoopShims().getConfiguration(jobContext);
     List<OrcSplit> splits = OrcInputFormat.generateSplitsInfo(conf, createContext(conf, -1));
     List<InputSplit> result = new ArrayList<InputSplit>(splits.size());
     for(OrcSplit split: splits) {
       result.add(new OrcNewSplit(split));
     }
-    LOG.debug("getSplits finished");
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("getSplits finished");
+    }
     return result;
   }
 

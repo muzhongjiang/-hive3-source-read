@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,9 +29,8 @@ import java.util.ArrayList;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.cli.CliSessionState;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.Warehouse;
-import org.apache.hadoop.hive.ql.DriverFactory;
-import org.apache.hadoop.hive.ql.IDriver;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
+import org.apache.hadoop.hive.ql.Driver;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -44,6 +43,8 @@ import org.apache.hive.hcatalog.common.HCatException;
 import org.apache.hive.hcatalog.data.DefaultHCatRecord;
 import org.apache.hive.hcatalog.data.schema.HCatFieldSchema;
 import org.apache.hive.hcatalog.data.schema.HCatSchema;
+import org.apache.pig.ExecType;
+import org.apache.pig.PigServer;
 import org.junit.Test;
 
 public class TestPassProperties {
@@ -52,7 +53,8 @@ public class TestPassProperties {
   private static final String TEST_WAREHOUSE_DIR = TEST_DATA_DIR + "/warehouse";
   private static final String INPUT_FILE_NAME = TEST_DATA_DIR + "/input.data";
 
-  private static IDriver driver;
+  private static Driver driver;
+  private static PigServer server;
   private static String[] input;
   private static HiveConf hiveConf;
 
@@ -65,7 +67,7 @@ public class TestPassProperties {
     hiveConf
     .setVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER,
         "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory");
-    driver = DriverFactory.newDriver(hiveConf);
+    driver = new Driver(hiveConf);
     SessionState.start(new CliSessionState(hiveConf));
 
     new File(TEST_WAREHOUSE_DIR).mkdirs();
@@ -78,6 +80,7 @@ public class TestPassProperties {
       input[i] = i + "," + col1 + "," + col2;
     }
     HcatTestUtils.createTestDataFile(INPUT_FILE_NAME, input);
+    server = new PigServer(ExecType.LOCAL);
   }
 
   @Test
@@ -85,7 +88,8 @@ public class TestPassProperties {
     Initialize();
     String createTable = "CREATE TABLE bad_props_table(a0 int, a1 String, a2 String) STORED AS SEQUENCEFILE";
     driver.run("drop table bad_props_table");
-    driver.run(createTable);
+    int retCode1 = driver.run(createTable).getResponseCode();
+    assertTrue(retCode1 == 0);
 
     boolean caughtException = false;
     try {
@@ -101,7 +105,7 @@ public class TestPassProperties {
       TextInputFormat.setInputPaths(job, INPUT_FILE_NAME);
 
       HCatOutputFormat.setOutput(job, OutputJobInfo.create(
-          Warehouse.DEFAULT_DATABASE_NAME, "bad_props_table", null));
+          MetaStoreUtils.DEFAULT_DATABASE_NAME, "bad_props_table", null));
       job.setOutputFormatClass(HCatOutputFormat.class);
       HCatOutputFormat.setSchema(job, getSchema());
       job.setNumReduceTasks(0);

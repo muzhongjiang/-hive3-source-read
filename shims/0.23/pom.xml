@@ -19,7 +19,7 @@
   <parent>
     <groupId>org.apache.hive</groupId>
     <artifactId>hive</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>2.3.9</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -33,7 +33,7 @@
   </properties>
 
   <dependencies>
-    <!-- dependencies are always listed in sorted order by groupId, artifactId -->
+    <!-- dependencies are always listed in sorted order by groupId, artifectId -->
     <!-- intra-project -->
     <dependency>
       <groupId>org.apache.hive.shims</groupId>
@@ -42,51 +42,43 @@
     </dependency>
     <!-- inter-project -->
     <dependency>
+      <groupId>commons-lang</groupId>
+      <artifactId>commons-lang</artifactId>
+      <version>${commons-lang.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <version>${hadoop.version}</version>
       <optional>true</optional>
          <exclusions>
             <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
-           <exclusion>
-            <groupId>commons-beanutils</groupId>
-            <artifactId>commons-beanutils</artifactId>
-          </exclusion>
-         <exclusion>
-            <groupId>commons-logging</groupId>
+          <exclusion>
+            <groupId>commmons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
    </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs-client</artifactId>
+      <artifactId>hadoop-hdfs</artifactId>
       <version>${hadoop.version}</version>
       <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
       <version>${hadoop.version}</version>
-      <classifier>tests</classifier>
+      <type>test-jar</type>
       <optional>true</optional>
-      <exclusions>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <version>${hadoop.version}</version>
       <optional>true</optional>
           <exclusions>
             <exclusion>
@@ -94,7 +86,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-logging</groupId>
+            <groupId>commmons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
@@ -102,6 +94,7 @@
   <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-common</artifactId>
+      <version>${hadoop.version}</version>
       <optional>true</optional>
           <exclusions>
             <exclusion>
@@ -109,7 +102,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-logging</groupId>
+            <groupId>commmons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
@@ -118,7 +111,7 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
       <version>${hadoop.version}</version>
-      <classifier>tests</classifier>
+      <type>test-jar</type>
       <optional>true</optional>
            <exclusions>
             <exclusion>
@@ -126,23 +119,21 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-logging</groupId>
+            <groupId>commmons-logging</groupId>
             <artifactId>commons-logging</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
   </dependency>
     <dependency>
       <groupId>org.apache.tez</groupId>
       <artifactId>tez-api</artifactId>
+      <version>${tez.version}</version>
       <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.tez</groupId>
       <artifactId>tez-runtime-library</artifactId>
+      <version>${tez.version}</version>
       <optional>true</optional>
             <exclusions>
             <exclusion>
@@ -150,7 +141,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-logging</groupId>
+            <groupId>commmons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
         </exclusions>
@@ -158,36 +149,25 @@
     <dependency>
       <groupId>org.apache.tez</groupId>
       <artifactId>tez-mapreduce</artifactId>
+      <version>${tez.version}</version>
       <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-api</artifactId>
+      <version>${hadoop.version}</version>
       <optional>true</optional>
    </dependency>
    <dependency>
      <groupId>org.apache.hadoop</groupId>
      <artifactId>hadoop-yarn-common</artifactId>
      <version>${hadoop.version}</version>
-       <exclusions>
-        <exclusion>
-          <groupId>commons-beanutils</groupId>
-          <artifactId>commons-beanutils</artifactId>
-          </exclusion>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-log4j12</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-      </exclusions>
-    <optional>true</optional>
+     <optional>true</optional>
    </dependency>
    <dependency>
      <groupId>org.apache.hadoop</groupId>
      <artifactId>hadoop-yarn-client</artifactId>
+     <version>${hadoop.version}</version>
      <optional>true</optional>
    </dependency>
    <dependency>
@@ -196,24 +176,8 @@
      <version>${hadoop.version}</version>
      <exclusions>
        <exclusion>
-         <groupId>commons-beanutils</groupId>
-         <artifactId>commons-beanutils</artifactId>
-       </exclusion>
-       <exclusion>
-         <groupId>org.slf4j</groupId>
-         <artifactId>slf4j-log4j12</artifactId>
-       </exclusion>
-       <exclusion>
-         <groupId>commons-logging</groupId>
-         <artifactId>commons-logging</artifactId>
-       </exclusion>
-       <exclusion>
          <groupId>javax.servlet</groupId>
          <artifactId>servlet-api</artifactId>
-       </exclusion>
-       <exclusion>
-         <groupId>org.slf4j</groupId>
-         <artifactId>slf4j-log4j12</artifactId>
        </exclusion>
      </exclusions>
    </dependency>
@@ -221,21 +185,15 @@
      <groupId>org.apache.tez</groupId>
      <artifactId>tez-tests</artifactId>
      <version>${tez.version}</version>
-     <optional>true</optional>
-     <classifier>tests</classifier>
+      <optional>true</optional>
+     <type>test-jar</type>
    </dependency>
    <dependency>
      <groupId>org.apache.hadoop</groupId>
      <artifactId>hadoop-yarn-server-tests</artifactId>
      <version>${hadoop.version}</version>
       <optional>true</optional>
-     <classifier>tests</classifier>
-     <exclusions>
-       <exclusion>
-         <groupId>com.codahale.metrics</groupId>
-         <artifactId>metrics-core</artifactId>
-       </exclusion>
-     </exclusions>
+     <type>test-jar</type>
    </dependency>
    <dependency>
      <groupId>org.apache.hadoop</groupId>
@@ -243,14 +201,6 @@
      <version>${hadoop.version}</version>
      <scope>provided</scope>
    </dependency>
-   <dependency>
-     <groupId>junit</groupId>
-     <artifactId>junit</artifactId>
-     <scope>test</scope>
-   </dependency>
   </dependencies>
-  <build>
-    <sourceDirectory>${basedir}/src/main/java</sourceDirectory>
-    <testSourceDirectory>${basedir}/src/main/test</testSourceDirectory>
-  </build>
+
 </project>

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,11 +27,10 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Objects;
 
 /**
  * Join conditions Descriptor implementation.
- *
+ * 
  */
 public class JoinCondDesc implements Serializable {
   private static final long serialVersionUID = 1L;
@@ -72,9 +71,6 @@ public class JoinCondDesc implements Serializable {
       break;
     case LEFTSEMI:
       type = JoinDesc.LEFT_SEMI_JOIN;
-      break;
-    case ANTI:
-      type = JoinDesc.ANTI_JOIN;
       break;
     default:
       assert false;
@@ -129,25 +125,22 @@ public class JoinCondDesc implements Serializable {
       sb.append("Inner Join ");
       break;
     case JoinDesc.FULL_OUTER_JOIN:
-      sb.append("Full Outer Join ");
+      sb.append("Outer Join ");
       break;
     case JoinDesc.LEFT_OUTER_JOIN:
-      sb.append("Left Outer Join ");
+      sb.append("Left Outer Join");
       break;
     case JoinDesc.RIGHT_OUTER_JOIN:
-      sb.append("Right Outer Join ");
+      sb.append("Right Outer Join");
       break;
     case JoinDesc.UNIQUE_JOIN:
-      sb.append("Unique Join ");
+      sb.append("Unique Join");
       break;
     case JoinDesc.LEFT_SEMI_JOIN:
       sb.append("Left Semi Join ");
       break;
-    case JoinDesc.ANTI_JOIN:
-      sb.append("Anti Join ");
-      break;
     default:
-      sb.append("Unknown Join ");
+      sb.append("Unknow Join ");
       break;
     }
 
@@ -160,7 +153,7 @@ public class JoinCondDesc implements Serializable {
 
   @Explain(explainLevels = { Level.USER })
   public String getUserLevelJoinCondString() {
-    JSONObject join = new JSONObject(new LinkedHashMap<>());
+    JSONObject join = new JSONObject(new LinkedHashMap());
     try {
       switch (type) {
       case JoinDesc.INNER_JOIN:
@@ -181,11 +174,8 @@ public class JoinCondDesc implements Serializable {
       case JoinDesc.LEFT_SEMI_JOIN:
         join.put("type", "Left Semi");
         break;
-      case JoinDesc.ANTI_JOIN:
-        join.put("type", "Anti");
-        break;
       default:
-        join.put("type", "Unknown Join");
+        join.put("type", "Unknow Join");
         break;
       }
       join.put("left", left);
@@ -209,10 +199,5 @@ public class JoinCondDesc implements Serializable {
       return false;
     }
     return true;
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(type, left, right, preserved);
   }
 }

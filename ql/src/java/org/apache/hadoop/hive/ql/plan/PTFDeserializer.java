@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -110,7 +110,7 @@ public class PTFDeserializer {
     TableFunctionEvaluator tEval = def.getTFunction();
     WindowingTableFunctionResolver tResolver =
         (WindowingTableFunctionResolver) constructResolver(def.getResolverClassName());
-    tResolver.initialize(hConf, ptfDesc, def, tEval);
+    tResolver.initialize(ptfDesc, def, tEval);
 
 
     /*
@@ -171,7 +171,7 @@ public class PTFDeserializer {
     TableFunctionEvaluator tEval = def.getTFunction();
     // TableFunctionResolver tResolver = FunctionRegistry.getTableFunctionResolver(def.getName());
     TableFunctionResolver tResolver = constructResolver(def.getResolverClassName());
-    tResolver.initialize(hConf, ptfDesc, def, tEval);
+    tResolver.initialize(ptfDesc, def, tEval);
 
     /*
      * 3. give Evaluator chance to setup for RawInput execution; setup RawInput shape
@@ -265,7 +265,7 @@ public class PTFDeserializer {
     try {
       AbstractSerDe serDe =  ReflectionUtils.newInstance(hConf.getClassByName(serdeClassName).
           asSubclass(AbstractSerDe.class), hConf);
-      serDe.initialize(hConf, serDeProps, null);
+      SerDeUtils.initializeSerDe(serDe, hConf, serDeProps, null);
       shp.setSerde(serDe);
       StructObjectInspector outOI = PTFPartition.setupPartitionOutputOI(serDe, OI);
       shp.setOI(outOI);
@@ -304,10 +304,10 @@ public class PTFDeserializer {
       return;
     }
 
-    List<? extends Object>[] tInfo = getTypeMap(OI);
+    ArrayList<? extends Object>[] tInfo = getTypeMap(OI);
 
-    List<String> columnNames = (List<String>) tInfo[0];
-    List<TypeInfo> fields = (List<TypeInfo>) tInfo[1];
+    ArrayList<String> columnNames = (ArrayList<String>) tInfo[0];
+    ArrayList<TypeInfo> fields = (ArrayList<TypeInfo>) tInfo[1];
     StringBuilder cNames = new StringBuilder();
     StringBuilder cTypes = new StringBuilder();
 
@@ -325,13 +325,14 @@ public class PTFDeserializer {
         cTypes.toString());
   }
 
-  private static List<? extends Object>[] getTypeMap(
+  private static ArrayList<? extends Object>[] getTypeMap(
       StructObjectInspector oi) {
     StructTypeInfo t = (StructTypeInfo) TypeInfoUtils
         .getTypeInfoFromObjectInspector(oi);
-    List<String> fnames = t.getAllStructFieldNames();
-    List<TypeInfo> fields = t.getAllStructFieldTypeInfos();
-    return new List<?>[] {fnames, fields};
+    ArrayList<String> fnames = t.getAllStructFieldNames();
+    ArrayList<TypeInfo> fields = t.getAllStructFieldTypeInfos();
+    return new ArrayList<?>[]
+    {fnames, fields};
   }
 
   /*

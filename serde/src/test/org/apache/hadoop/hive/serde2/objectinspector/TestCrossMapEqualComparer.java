@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,20 +26,15 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.ByteStream;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
 import org.apache.hadoop.hive.serde2.lazy.LazySerDeParameters;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions;
 import org.apache.hadoop.io.Text;
 
+import junit.framework.TestCase;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import org.junit.Test;
-
-/**
- * CrossMapEqualComparer Test.
- */
-public class TestCrossMapEqualComparer {
+public class TestCrossMapEqualComparer extends TestCase {
 
   public static class IntegerStringMapHolder {
     Map<Integer, String> mMap;
@@ -49,7 +44,6 @@ public class TestCrossMapEqualComparer {
     }
   }
 
-  @Test
   public void testSameType() {
     // empty maps
     IntegerStringMapHolder o1 = new IntegerStringMapHolder();
@@ -94,7 +88,6 @@ public class TestCrossMapEqualComparer {
     return serde.deserialize(t);
   }
 
-  @Test
   public void testCompatibleType() throws SerDeException, IOException {
     // empty maps
     TextStringMapHolder o1 = new TextStringMapHolder();
@@ -107,7 +100,7 @@ public class TestCrossMapEqualComparer {
     tbl.setProperty(serdeConstants.LIST_COLUMNS, ObjectInspectorUtils.getFieldNames(oi1));
     tbl.setProperty(serdeConstants.LIST_COLUMN_TYPES, ObjectInspectorUtils.getFieldTypes(oi1));
     LazySerDeParameters serdeParams = new LazySerDeParameters(conf, tbl, LazySimpleSerDe.class.getName());
-    serde.initialize(conf, tbl, null);
+    SerDeUtils.initializeSerDe(serde, conf, tbl, null);
     ObjectInspector oi2 = serde.getObjectInspector();
 
     Object o2 = serializeAndDeserialize(o1, oi1, serde, serdeParams);
@@ -148,7 +141,6 @@ public class TestCrossMapEqualComparer {
     return serde.deserialize(t);
   }
 
-  @Test
   public void testIncompatibleType() throws SerDeException, IOException {
     // empty maps
     StringTextMapHolder o1 = new StringTextMapHolder();
@@ -161,7 +153,7 @@ public class TestCrossMapEqualComparer {
     tbl.setProperty(serdeConstants.LIST_COLUMNS, ObjectInspectorUtils.getFieldNames(oi1));
     tbl.setProperty(serdeConstants.LIST_COLUMN_TYPES, ObjectInspectorUtils.getFieldTypes(oi1));
     LazySerDeParameters serdeParams = new LazySerDeParameters(conf, tbl, LazySimpleSerDe.class.getName());
-    serde.initialize(conf, tbl, null);
+    SerDeUtils.initializeSerDe(serde, conf, tbl, null);
     ObjectInspector oi2 = serde.getObjectInspector();
 
     Object o2 = serializeAndDeserialize(o1, oi1, serde, serdeParams);

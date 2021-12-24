@@ -63,32 +63,23 @@ public class StringInternUtils {
     schemeSpecificPartField.setAccessible(true);
   }
 
-  /**
-   * This method interns all the URI strings in place.
-   * Goes over the URI strings, checks if each string element is already interned,
-   * and if not it replaces each element with the interned copy.
-   * Eventually returns the same URI.
-   *
-   * @param uri
-   * @return
-   */
   public static URI internStringsInUri(URI uri) {
     if (uri == null) return null;
     try {
       String string = (String) stringField.get(uri);
-      if (string != null && string != string.intern()) stringField.set(uri, string.intern());
+      if (string != null) stringField.set(uri, string.intern());
       String scheme = (String) schemeField.get(uri);
-      if (scheme != null && scheme != scheme.intern()) schemeField.set(uri, scheme.intern());
+      if (scheme != null) schemeField.set(uri, scheme.intern());
       String authority = (String) authorityField.get(uri);
-      if (authority != null && authority != authority.intern()) authorityField.set(uri, authority.intern());
+      if (authority != null) authorityField.set(uri, authority.intern());
       String host = (String) hostField.get(uri);
-      if (host != null && host != host.intern()) hostField.set(uri, host.intern());
+      if (host != null) hostField.set(uri, host.intern());
       String path = (String) pathField.get(uri);
-      if (path != null && path != path.intern()) pathField.set(uri, path.intern());
+      if (path != null) pathField.set(uri, path.intern());
       String fragment = (String) fragmentField.get(uri);
-      if (fragment != null && fragment != fragment.intern()) fragmentField.set(uri, fragment.intern());
-      String schemeSPart = (String) schemeSpecificPartField.get(uri);
-      if (schemeSPart != null && schemeSPart != schemeSPart.intern()) schemeSpecificPartField.set(uri, schemeSPart.intern());
+      if (fragment != null) fragmentField.set(uri, fragment.intern());
+      String schemeSpecificPart = (String) schemeSpecificPartField.get(uri);
+      if (schemeSpecificPart != null) schemeSpecificPartField.set(uri, schemeSpecificPart.intern());
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -111,9 +102,8 @@ public class StringInternUtils {
 
   /**
    * This method interns all the strings in the given list in place. That is,
-   * it iterates over the list, checks if each string element is already interned,
-   * and if not it replaces each element with the interned copy.
-   * Eventually returns the same list.
+   * it iterates over the list, replaces each element with the interned copy
+   * and eventually returns the same list.
    *
    * Note that the provided List implementation should return an iterator
    * (via list.listIterator()) method, and that iterator should implement
@@ -126,11 +116,7 @@ public class StringInternUtils {
       try {
         ListIterator<String> it = list.listIterator();
         while (it.hasNext()) {
-          String curr = it.next();
-          // Intern values only when they are not part of the String pool already
-          if (curr != curr.intern()) {
-            it.set(curr.intern());
-          }
+          it.set(it.next().intern());
         }
       } catch (UnsupportedOperationException e) { } // set() not implemented - ignore
     }
@@ -140,8 +126,7 @@ public class StringInternUtils {
   /** Interns all the strings in the given array in place, returning the same array */
   public static String[] internStringsInArray(String[] strings) {
     for (int i = 0; i < strings.length; i++) {
-      // Intern values only when they are not part of the String pool already
-      if (strings[i] != null && strings[i] != strings[i].intern()) {
+      if (strings[i] != null) {
         strings[i] = strings[i].intern();
       }
     }
@@ -150,11 +135,10 @@ public class StringInternUtils {
 
   public static <K> Map<K, String> internValuesInMap(Map<K, String> map) {
     if (map != null) {
-      for (Map.Entry<K, String> entry : map.entrySet()) {
-        String value = entry.getValue();
-        // Intern values only when they are not part of the String pool already
-        if (value != null && value != value.intern()) {
-          map.put(entry.getKey(), value.intern());
+      for (K key : map.keySet()) {
+        String value = map.get(key);
+        if (value != null) {
+          map.put(key, value.intern());
         }
       }
     }

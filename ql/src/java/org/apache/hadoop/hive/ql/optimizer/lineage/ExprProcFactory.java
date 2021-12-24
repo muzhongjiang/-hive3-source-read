@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,7 @@
 
 package org.apache.hadoop.hive.ql.optimizer.lineage;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -42,16 +42,15 @@ import org.apache.hadoop.hive.ql.hooks.LineageInfo.Predicate;
 import org.apache.hadoop.hive.ql.hooks.LineageInfo.TableAliasInfo;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
-import org.apache.hadoop.hive.ql.plan.ExprDynamicParamDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
@@ -66,23 +65,10 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
  */
 public class ExprProcFactory {
 
-
-  private static final String exprNodeColDescRegExp = ExprNodeColumnDesc.class.getName() + "%";
-  private static final String exprNodeFieldDescRegExp = ExprNodeFieldDesc.class.getName() + "%";
-  private static final String exprNodeGenFuncDescRegExp = ExprNodeGenericFuncDesc.class.getName() + "%";
-
-  private static final Map<SemanticRule, SemanticNodeProcessor> exprRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
-
-  static {
-    exprRules.put(new RuleRegExp("R1", exprNodeColDescRegExp), getColumnProcessor());
-    exprRules.put(new RuleRegExp("R2", exprNodeFieldDescRegExp), getFieldProcessor());
-    exprRules.put(new RuleRegExp("R3", exprNodeGenFuncDescRegExp), getGenericFuncProcessor());
-  }
-
   /**
    * Processor for column expressions.
    */
-  public static class ColumnExprProcessor implements SemanticNodeProcessor {
+  public static class ColumnExprProcessor implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -114,7 +100,7 @@ public class ExprProcFactory {
   /**
    * Processor for any function or field expression.
    */
-  public static class GenericExprProcessor implements SemanticNodeProcessor {
+  public static class GenericExprProcessor implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
@@ -151,12 +137,12 @@ public class ExprProcFactory {
    * Processor for constants and null expressions. For such expressions the
    * processor simply returns a null dependency vector.
    */
-  public static class DefaultExprProcessor implements SemanticNodeProcessor {
+  public static class DefaultExprProcessor implements NodeProcessor {
 
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
         Object... nodeOutputs) throws SemanticException {
-      assert (nd instanceof ExprNodeConstantDesc || nd instanceof ExprDynamicParamDesc);
+      assert (nd instanceof ExprNodeConstantDesc);
 
       // Create a dependency that has no basecols
       Dependency dep = new Dependency();
@@ -167,19 +153,19 @@ public class ExprProcFactory {
     }
   }
 
-  public static SemanticNodeProcessor getDefaultExprProcessor() {
+  public static NodeProcessor getDefaultExprProcessor() {
     return new DefaultExprProcessor();
   }
 
-  public static SemanticNodeProcessor getGenericFuncProcessor() {
+  public static NodeProcessor getGenericFuncProcessor() {
     return new GenericExprProcessor();
   }
 
-  public static SemanticNodeProcessor getFieldProcessor() {
+  public static NodeProcessor getFieldProcessor() {
     return new GenericExprProcessor();
   }
 
-  public static SemanticNodeProcessor getColumnProcessor() {
+  public static NodeProcessor getColumnProcessor() {
     return new ColumnExprProcessor();
   }
 
@@ -286,26 +272,6 @@ public class ExprProcFactory {
   public static Dependency getExprDependency(LineageCtx lctx,
       Operator<? extends OperatorDesc> inpOp, ExprNodeDesc expr)
       throws SemanticException {
-    return getExprDependency(lctx, inpOp, expr, new HashMap<Node, Object>());
-  }
-
-  /**
-   * Gets the expression dependencies for the expression.
-   *
-   * @param lctx
-   *          The lineage context containing the input operators dependencies.
-   * @param inpOp
-   *          The input operator to the current operator.
-   * @param expr
-   *          The expression that is being processed.
-   * @param outputMap
-   * @throws SemanticException
-   */
-  public static Dependency getExprDependency(LineageCtx lctx,
-      Operator<? extends OperatorDesc> inpOp, ExprNodeDesc expr, HashMap<Node, Object> outputMap)
-      throws SemanticException {
-
-    outputMap.clear();
 
     // Create the walker, the rules dispatcher and the context.
     ExprProcCtx exprCtx = new ExprProcCtx(lctx, inpOp);
@@ -313,15 +279,26 @@ public class ExprProcFactory {
     // create a walker which walks the tree in a DFS manner while maintaining
     // the operator stack. The dispatcher
     // generates the plan from the operator tree
+    Map<Rule, NodeProcessor> exprRules = new LinkedHashMap<Rule, NodeProcessor>();
+    exprRules.put(
+        new RuleRegExp("R1", ExprNodeColumnDesc.class.getName() + "%"),
+        getColumnProcessor());
+    exprRules.put(
+        new RuleRegExp("R2", ExprNodeFieldDesc.class.getName() + "%"),
+        getFieldProcessor());
+    exprRules.put(new RuleRegExp("R3", ExprNodeGenericFuncDesc.class.getName()
+        + "%"), getGenericFuncProcessor());
 
     // The dispatcher fires the processor corresponding to the closest matching
     // rule and passes the context along
-    SemanticDispatcher disp = new DefaultRuleDispatcher(getDefaultExprProcessor(),
+    Dispatcher disp = new DefaultRuleDispatcher(getDefaultExprProcessor(),
         exprRules, exprCtx);
-    SemanticGraphWalker egw = new DefaultGraphWalker(disp);
+    GraphWalker egw = new DefaultGraphWalker(disp);
 
-    List<Node> startNodes = Collections.singletonList((Node)expr);
+    List<Node> startNodes = new ArrayList<Node>();
+    startNodes.add(expr);
 
+    HashMap<Node, Object> outputMap = new HashMap<Node, Object>();
     egw.startWalking(startNodes, outputMap);
     return (Dependency)outputMap.get(expr);
   }

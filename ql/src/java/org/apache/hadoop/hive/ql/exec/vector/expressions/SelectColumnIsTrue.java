@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,30 +21,25 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * This expression selects a row if the given boolean column is true.
  */
 public class SelectColumnIsTrue extends VectorExpression {
   private static final long serialVersionUID = 1L;
-
-  private final int colNum1;
+  private int colNum1;
 
   public SelectColumnIsTrue(int colNum1) {
-    super();
+    this();
     this.colNum1 = colNum1;
   }
 
   public SelectColumnIsTrue() {
     super();
-
-    // Dummy final assignments.
-    colNum1 = -1;
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
@@ -125,8 +120,26 @@ public class SelectColumnIsTrue extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return -1;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "boolean";
+  }
+
+  public int getColNum1() {
+    return colNum1;
+  }
+
+  public void setColNum1(int colNum1) {
+    this.colNum1 = colNum1;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, colNum1);
+    return "col " + colNum1;
   }
 
   @Override

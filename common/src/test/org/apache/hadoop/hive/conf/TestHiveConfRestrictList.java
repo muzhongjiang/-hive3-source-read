@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,24 +17,18 @@
  */
 package org.apache.hadoop.hive.conf;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import org.junit.Before;
 import org.junit.Test;
 
-/**
- * HiveConfRestrictList Test.
- */
-public class TestHiveConfRestrictList {
+public class TestHiveConfRestrictList extends TestCase {
 
   private HiveConf conf = null;
 
-  @Before
-  public void setUp() throws Exception {
-
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
     System.setProperty(ConfVars.HIVE_CONF_RESTRICTED_LIST.varname,
         ConfVars.HIVETESTMODEPREFIX.varname);
     conf = new HiveConf();
@@ -47,17 +41,7 @@ public class TestHiveConfRestrictList {
   @Test
   public void testRestriction() throws Exception {
     verifyRestriction(ConfVars.HIVETESTMODEPREFIX.varname, "foo");
-    conf.verifyAndSet(ConfVars.HIVE_AM_SPLIT_GENERATION.varname, "false");
-  }
-
-  /**
-   * Test that configs in restrict list can't be changed
-   * @throws Exception
-   */
-  @Test
-  public void testMultipleRestrictions() throws Exception {
-    verifyRestriction(ConfVars.HIVETESTMODEPREFIX.varname, "foo");
-    verifyRestriction(ConfVars.HIVE_IN_TEST.varname, "true");
+    conf.verifyAndSet(ConfVars.HIVETESTMODE.varname, "false");
   }
 
   /**

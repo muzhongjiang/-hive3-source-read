@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.See the NOTICE file
  * distributed with this work for additional information
@@ -38,10 +38,8 @@ import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
-import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
@@ -59,7 +57,7 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 /**
  * this transformation does bucket map join optimization.
  */
-abstract public class AbstractBucketJoinProc implements SemanticNodeProcessor {
+abstract public class AbstractBucketJoinProc implements NodeProcessor {
 
   protected ParseContext pGraphContext;
 
@@ -191,19 +189,21 @@ abstract public class AbstractBucketJoinProc implements SemanticNodeProcessor {
       String baseBigAlias,
       List<String> joinAliases) throws SemanticException {
 
-    Map<String, List<Integer>> tblAliasToNumberOfBucketsInEachPartition =
+    LinkedHashMap<String, List<Integer>> tblAliasToNumberOfBucketsInEachPartition =
         new LinkedHashMap<String, List<Integer>>();
-    Map<String, List<List<String>>> tblAliasToBucketedFilePathsInEachPartition =
+    LinkedHashMap<String, List<List<String>>> tblAliasToBucketedFilePathsInEachPartition =
         new LinkedHashMap<String, List<List<String>>>();
 
-    Map<String, TableScanOperator> topOps = pGraphContext.getTopOps();
+    HashMap<String, TableScanOperator> topOps = pGraphContext.getTopOps();
 
-    Map<String, String> aliasToNewAliasMap = new HashMap<String, String>();
+    HashMap<String, String> aliasToNewAliasMap = new HashMap<String, String>();
 
     // (partition to bucket file names) and (partition to bucket number) for
     // the big table;
-    Map<Partition, List<String>> bigTblPartsToBucketFileNames = new LinkedHashMap<Partition, List<String>>();
-    Map<Partition, Integer> bigTblPartsToBucketNumber = new LinkedHashMap<Partition, Integer>();
+    LinkedHashMap<Partition, List<String>> bigTblPartsToBucketFileNames =
+        new LinkedHashMap<Partition, List<String>>();
+    LinkedHashMap<Partition, Integer> bigTblPartsToBucketNumber =
+        new LinkedHashMap<Partition, Integer>();
 
     Integer[] joinKeyOrder = null; // accessing order of join cols to bucket cols, should be same
     boolean bigTablePartitioned = true;
@@ -262,10 +262,6 @@ abstract public class AbstractBucketJoinProc implements SemanticNodeProcessor {
       }
 
       Table tbl = tso.getConf().getTableMetadata();
-      if (AcidUtils.isInsertOnlyTable(tbl.getParameters())) {
-        Utilities.FILE_OP_LOGGER.debug("No bucketed join on MM table " + tbl.getTableName());
-        return false;
-      }
       if (tbl.isPartitioned()) {
         PrunedPartitionList prunedParts = pGraphContext.getPrunedPartitions(alias, tso);
         List<Partition> partitions = prunedParts.getNotDeniedPartns();
@@ -314,7 +310,7 @@ abstract public class AbstractBucketJoinProc implements SemanticNodeProcessor {
         }
         List<String> fileNames =
             getBucketFilePathsOfPartition(tbl.getDataLocation(), pGraphContext);
-        int num = tbl.getNumBuckets();
+        Integer num = new Integer(tbl.getNumBuckets());
 
         // The number of files for the table should be same as number of buckets.
         if (fileNames.size() != 0 && fileNames.size() != num) {
@@ -330,7 +326,7 @@ abstract public class AbstractBucketJoinProc implements SemanticNodeProcessor {
           bigTblPartsToBucketNumber.put(null, tbl.getNumBuckets());
           bigTablePartitioned = false;
         } else {
-          tblAliasToNumberOfBucketsInEachPartition.put(alias, Arrays.asList(Integer.valueOf(num)));
+          tblAliasToNumberOfBucketsInEachPartition.put(alias, Arrays.asList(num));
           tblAliasToBucketedFilePathsInEachPartition.put(alias, Arrays.asList(fileNames));
         }
       }

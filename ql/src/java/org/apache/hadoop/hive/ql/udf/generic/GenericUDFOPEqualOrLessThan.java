@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,7 +20,9 @@ package org.apache.hadoop.hive.ql.udf.generic;
 
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressionsSupportDecimal64;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.LongColLessEqualLongColumn;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.LongColLessEqualLongScalar;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.LongScalarLessEqualLongColumn;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.*;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
@@ -36,11 +38,6 @@ import org.apache.hadoop.io.Text;
   DoubleColLessEqualLongScalar.class, DoubleColLessEqualDoubleScalar.class,
   LongScalarLessEqualLongColumn.class, LongScalarLessEqualDoubleColumn.class,
   DoubleScalarLessEqualLongColumn.class, DoubleScalarLessEqualDoubleColumn.class,
-
-  DecimalColLessEqualDecimalColumn.class, DecimalColLessEqualDecimalScalar.class,
-  DecimalScalarLessEqualDecimalColumn.class,
-  Decimal64ColLessEqualDecimal64Column.class, Decimal64ColLessEqualDecimal64Scalar.class,
-  Decimal64ScalarLessEqualDecimal64Column.class,
 
   StringGroupColLessEqualStringGroupColumn.class, FilterStringGroupColLessEqualStringGroupColumn.class,
   StringGroupColLessEqualStringScalar.class,
@@ -58,12 +55,8 @@ import org.apache.hadoop.io.Text;
   FilterDoubleColLessEqualLongScalar.class, FilterDoubleColLessEqualDoubleScalar.class,
   FilterLongScalarLessEqualLongColumn.class, FilterLongScalarLessEqualDoubleColumn.class,
   FilterDoubleScalarLessEqualLongColumn.class, FilterDoubleScalarLessEqualDoubleColumn.class,
-
   FilterDecimalColLessEqualDecimalColumn.class, FilterDecimalColLessEqualDecimalScalar.class,
   FilterDecimalScalarLessEqualDecimalColumn.class,
-
-  FilterDecimal64ColLessEqualDecimal64Column.class, FilterDecimal64ColLessEqualDecimal64Scalar.class,
-  FilterDecimal64ScalarLessEqualDecimal64Column.class,
 
   TimestampColLessEqualTimestampColumn.class,
   TimestampColLessEqualTimestampScalar.class, TimestampScalarLessEqualTimestampColumn.class,
@@ -97,7 +90,6 @@ import org.apache.hadoop.io.Text;
   DateColLessEqualDateScalar.class,FilterDateColLessEqualDateScalar.class,
   DateScalarLessEqualDateColumn.class,FilterDateScalarLessEqualDateColumn.class,
   })
-@VectorizedExpressionsSupportDecimal64()
 @NDV(maxNdv = 2)
 public class GenericUDFOPEqualOrLessThan extends GenericUDFBaseCompare {
   public GenericUDFOPEqualOrLessThan(){

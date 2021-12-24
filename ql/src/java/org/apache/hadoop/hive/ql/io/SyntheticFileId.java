@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -96,17 +96,5 @@ public final class SyntheticFileId implements Writable {
     if (extraBytes > 0) {
       in.skipBytes(extraBytes);
     }
-  }
-
-  public long getPathHash() {
-    return pathHash;
-  }
-
-  public long getModTime() {
-    return modTime;
-  }
-
-  public long getLength() {
-    return length;
   }
 }

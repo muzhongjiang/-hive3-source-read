@@ -30,17 +30,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.llap.LlapUtil;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstanceSet;
+import org.apache.hadoop.hive.llap.registry.ServiceInstance;
+import org.apache.hadoop.hive.llap.registry.ServiceInstanceSet;
+import org.apache.hadoop.hive.llap.registry.ServiceInstanceStateChangeListener;
 import org.apache.hadoop.hive.llap.registry.ServiceRegistry;
-import org.apache.hadoop.hive.registry.ServiceInstance;
-import org.apache.hadoop.hive.registry.ServiceInstanceStateChangeListener;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -48,7 +45,7 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstance> {
+public class LlapFixedRegistryImpl implements ServiceRegistry {
 
   private static final Logger LOG = LoggerFactory.getLogger(LlapFixedRegistryImpl.class);
 
@@ -60,9 +57,7 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
   private final int shuffle;
   private final int mngPort;
   private final int webPort;
-  private Configuration conf;
   private final int outputFormatPort;
-  private final int externalClientsRpcPort;
   private final String webScheme;
   private final String[] hosts;
   private final int memory;
@@ -78,10 +73,9 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
     this.resolveHosts = conf.getBoolean(FIXED_REGISTRY_RESOLVE_HOST_NAMES, true);
     this.mngPort = HiveConf.getIntVar(conf, ConfVars.LLAP_MANAGEMENT_RPC_PORT);
     this.outputFormatPort = HiveConf.getIntVar(conf, ConfVars.LLAP_DAEMON_OUTPUT_SERVICE_PORT);
-    this.externalClientsRpcPort = HiveConf.getIntVar(conf, ConfVars.LLAP_EXTERNAL_CLIENT_CLOUD_RPC_PORT);
+
 
     this.webPort = HiveConf.getIntVar(conf, ConfVars.LLAP_DAEMON_WEB_PORT);
-    this.conf = conf;
     boolean isSsl = HiveConf.getBoolVar(conf, ConfVars.LLAP_DAEMON_WEB_SSL);
     this.webScheme = isSsl ? "https" : "http";
 
@@ -118,21 +112,12 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
     // nothing to unregister
   }
 
-  @Override
-  public void updateRegistration(Iterable<Map.Entry<String, String>> attributes) throws IOException {
-    throw new UnsupportedOperationException();
-  }
-
   public static String getWorkerIdentity(String host) {
     // trigger clean errors for anyone who mixes up identity with hosts
     return "host-" + host;
   }
 
-  /**
-   * A single instance in an Llap Service.
-   */
-  @VisibleForTesting
-  public final class FixedServiceInstance implements LlapServiceInstance {
+  private final class FixedServiceInstance implements ServiceInstance {
 
     private final String host;
     private final String serviceAddress;
@@ -195,18 +180,6 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
     }
 
     @Override
-    public String getExternalHostname() {
-      ensureCloudEnv(LlapFixedRegistryImpl.this.conf);
-      return LlapUtil.getPublicHostname();
-    }
-
-    @Override
-    public int getExternalClientsRpcPort() {
-      ensureCloudEnv(LlapFixedRegistryImpl.this.conf);
-      return LlapFixedRegistryImpl.this.externalClientsRpcPort;
-    }
-
-    @Override
     public String getServicesAddress() {
       return serviceAddress;
     }
@@ -233,10 +206,10 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
     }
   }
 
-  private final class FixedServiceInstanceSet implements LlapServiceInstanceSet {
+  private final class FixedServiceInstanceSet implements ServiceInstanceSet {
 
     // LinkedHashMap have a repeatable iteration order.
-    private final Map<String, LlapServiceInstance> instances = new LinkedHashMap<>();
+    private final Map<String, ServiceInstance> instances = new LinkedHashMap<>();
 
     public FixedServiceInstanceSet() {
       for (String host : hosts) {
@@ -246,17 +219,17 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
     }
 
     @Override
-    public Collection<LlapServiceInstance> getAll() {
+    public Collection<ServiceInstance> getAll() {
       return instances.values();
     }
 
     @Override
-    public List<LlapServiceInstance> getAllInstancesOrdered(boolean consistentIndexes) {
-      List<LlapServiceInstance> list = new LinkedList<>();
+    public List<ServiceInstance> getAllInstancesOrdered(boolean consistentIndexes) {
+      List<ServiceInstance> list = new LinkedList<>();
       list.addAll(instances.values());
-      Collections.sort(list, new Comparator<LlapServiceInstance>() {
+      Collections.sort(list, new Comparator<ServiceInstance>() {
         @Override
-        public int compare(LlapServiceInstance o1, LlapServiceInstance o2) {
+        public int compare(ServiceInstance o1, ServiceInstance o2) {
           return o2.getWorkerIdentity().compareTo(o2.getWorkerIdentity());
         }
       });
@@ -264,14 +237,14 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
     }
 
     @Override
-    public LlapServiceInstance getInstance(String name) {
+    public ServiceInstance getInstance(String name) {
       return instances.get(name);
     }
 
     @Override
-    public Set<LlapServiceInstance> getByHost(String host) {
-      Set<LlapServiceInstance> byHost = new HashSet<LlapServiceInstance>();
-      LlapServiceInstance inst = getInstance(getWorkerIdentity(host));
+    public Set<ServiceInstance> getByHost(String host) {
+      Set<ServiceInstance> byHost = new HashSet<ServiceInstance>();
+      ServiceInstance inst = getInstance(getWorkerIdentity(host));
       if (inst != null) {
         byHost.add(inst);
       }
@@ -282,20 +255,15 @@ public class LlapFixedRegistryImpl implements ServiceRegistry<LlapServiceInstanc
     public int size() {
       return instances.size();
     }
-
-    @Override
-    public ApplicationId getApplicationId() {
-      return null;
-    }
   }
 
   @Override
-  public LlapServiceInstanceSet getInstances(String component, long timeoutMs) throws IOException {
+  public ServiceInstanceSet getInstances(String component, long timeoutMs) throws IOException {
     return new FixedServiceInstanceSet();
   }
 
   @Override
-  public void registerStateChangeListener(final ServiceInstanceStateChangeListener listener) throws IOException {
+  public void registerStateChangeListener(final ServiceInstanceStateChangeListener listener) {
     // nothing to set
     LOG.warn("Callbacks for instance state changes are not supported in fixed registry.");
   }

@@ -19,7 +19,7 @@ package org.apache.hive.service.cli.operation;
 
 import java.util.HashMap;
 
-import org.apache.hadoop.hive.UtilsForTest;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.jdbc.miniHS2.MiniHS2;
 import org.apache.hive.jdbc.miniHS2.MiniHS2.MiniClusterType;
@@ -49,13 +49,14 @@ public class TestOperationLoggingAPIWithTez extends OperationLoggingAPITestBase 
     expectedLogsPerformance = new String[]{
       "<PERFLOG method=compile from=org.apache.hadoop.hive.ql.Driver>",
       "<PERFLOG method=parse from=org.apache.hadoop.hive.ql.Driver>",
+      "<PERFLOG method=Driver.run from=org.apache.hadoop.hive.ql.Driver>",
       "from=org.apache.hadoop.hive.ql.exec.tez.monitoring.TezJobMonitor",
       "org.apache.tez.common.counters.DAGCounter",
       "NUM_SUCCEEDED_TASKS",
       "TOTAL_LAUNCHED_TASKS",
       "CPU_MILLISECONDS"
     };
-    hiveConf = UtilsForTest.getHiveOnTezConfFromDir("../../data/conf/tez/");
+    hiveConf = new HiveConf();
     hiveConf.set(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LEVEL.varname, "verbose");
     // Set tez execution summary to false.
     hiveConf.setBoolVar(ConfVars.TEZ_EXEC_SUMMARY, false);

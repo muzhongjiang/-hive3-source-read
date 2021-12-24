@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,7 +28,6 @@ public enum OperationType {
 
   UNKNOWN_OPERATION(TOperationType.UNKNOWN),
   EXECUTE_STATEMENT(TOperationType.EXECUTE_STATEMENT),
-  PROCEDURAL_SQL(TOperationType.PROCEDURAL_SQL),
   GET_TYPE_INFO(TOperationType.GET_TYPE_INFO),
   GET_CATALOGS(TOperationType.GET_CATALOGS),
   GET_SCHEMAS(TOperationType.GET_SCHEMAS),

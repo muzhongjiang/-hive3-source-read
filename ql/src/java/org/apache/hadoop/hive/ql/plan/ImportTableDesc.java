@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,24 +20,20 @@ package org.apache.hadoop.hive.ql.plan;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import org.apache.hadoop.hive.common.TableName;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Order;
-import org.apache.hadoop.hive.ql.ddl.DDLWork;
-import org.apache.hadoop.hive.ql.ddl.table.create.CreateTableDesc;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
-import org.apache.hadoop.hive.ql.hooks.ReadEntity;
-import org.apache.hadoop.hive.ql.hooks.WriteEntity;
+import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.parse.HiveTableName;
+import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer;
+import org.apache.hadoop.hive.ql.parse.EximUtil;
 import org.apache.hadoop.hive.ql.parse.ReplicationSpec;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
-import org.apache.hadoop.hive.ql.parse.repl.metric.ReplicationMetricCollector;
+import org.apache.hadoop.hive.ql.plan.CreateTableDesc;
+import org.apache.hadoop.hive.ql.plan.CreateViewDesc;
 
 /**
  * ImportTableDesc.
@@ -45,149 +41,281 @@ import org.apache.hadoop.hive.ql.parse.repl.metric.ReplicationMetricCollector;
  */
 public class ImportTableDesc {
   private String dbName = null;
+  private Table table = null;
   private CreateTableDesc createTblDesc = null;
+  private CreateViewDesc createViewDesc = null;
+
+  public enum TYPE { TABLE, VIEW };
 
   public ImportTableDesc(String dbName, Table table) throws Exception {
-    if (table.getTableType() == TableType.VIRTUAL_VIEW || table.getTableType() == TableType.MATERIALIZED_VIEW) {
-      throw new IllegalStateException("Trying to import view or materialized view: " + table.getTableName());
+    this.dbName = dbName;
+    this.table = table;
+
+    switch (getTableType()) {
+      case TABLE:
+        this.createTblDesc = new CreateTableDesc(dbName,
+                table.getTableName(),
+                false, // isExternal: set to false here, can be overwritten by the IMPORT stmt
+                table.isTemporary(),
+                table.getSd().getCols(),
+                table.getPartitionKeys(),
+                table.getSd().getBucketCols(),
+                table.getSd().getSortCols(),
+                table.getSd().getNumBuckets(),
+                null, null, null, null, null, // these 5 delims passed as serde params
+                null, // comment passed as table params
+                table.getSd().getInputFormat(),
+                table.getSd().getOutputFormat(),
+                null, // location: set to null here, can be overwritten by the IMPORT stmt
+                table.getSd().getSerdeInfo().getSerializationLib(),
+                null, // storagehandler passed as table params
+                table.getSd().getSerdeInfo().getParameters(),
+                table.getParameters(), false,
+                (null == table.getSd().getSkewedInfo()) ? null : table.getSd().getSkewedInfo()
+                        .getSkewedColNames(),
+                (null == table.getSd().getSkewedInfo()) ? null : table.getSd().getSkewedInfo()
+                        .getSkewedColValues(), null, null);
+        this.createTblDesc.setStoredAsSubDirectories(table.getSd().isStoredAsSubDirectories());
+        break;
+      case VIEW:
+        String[] qualViewName = { dbName, table.getTableName() };
+        String dbDotView = BaseSemanticAnalyzer.getDotName(qualViewName);
+        if (table.isMaterializedView()) {
+          this.createViewDesc = new CreateViewDesc(dbDotView,
+                  table.getAllCols(),
+                  null, // comment passed as table params
+                  table.getParameters(),
+                  table.getPartColNames(),
+                  false,false,false,false,
+                  table.getSd().getInputFormat(),
+                  table.getSd().getOutputFormat(),
+                  null, // location: set to null here, can be overwritten by the IMPORT stmt
+                  table.getSd().getSerdeInfo().getSerializationLib(),
+                  null, // storagehandler passed as table params
+                  table.getSd().getSerdeInfo().getParameters());
+        } else {
+          this.createViewDesc = new CreateViewDesc(dbDotView,
+                  table.getAllCols(),
+                  null, // comment passed as table params
+                  table.getParameters(),
+                  table.getPartColNames(),
+                  false,false,false,
+                  table.getSd().getInputFormat(),
+                  table.getSd().getOutputFormat(),
+                  table.getSd().getSerdeInfo().getSerializationLib());
+        }
+
+        this.setViewAsReferenceText(dbName, table);
+        this.createViewDesc.setPartCols(table.getPartCols());
+        break;
+      default:
+        throw new HiveException("Invalid table type");
+    }
+  }
+
+  public TYPE getTableType() {
+    if (table.isView() || table.isMaterializedView()) {
+      return TYPE.VIEW;
+    }
+    return TYPE.TABLE;
+  }
+
+  public void setViewAsReferenceText(String dbName, Table table) {
+    String originalText = table.getViewOriginalText();
+    String expandedText = table.getViewExpandedText();
+
+    if (!dbName.equals(table.getDbName())) {
+      // TODO: If the DB name doesn't match with the metadata from dump, then need to rewrite the original and expanded
+      // texts using new DB name. Currently it refers to the source database name.
     }
 
-    this.dbName = dbName;
-    TableName tableName = HiveTableName.ofNullable(table.getTableName(), dbName);
-
-    this.createTblDesc = new CreateTableDesc(tableName,
-        false, // isExternal: set to false here, can be overwritten by the IMPORT stmt
-        false,
-        table.getSd().getCols(),
-        table.getPartitionKeys(),
-        table.getSd().getBucketCols(),
-        table.getSd().getSortCols(),
-        table.getSd().getNumBuckets(),
-        null, null, null, null, null, // these 5 delims passed as serde params
-        null, // comment passed as table params
-        table.getSd().getInputFormat(),
-        table.getSd().getOutputFormat(),
-        null, // location: set to null here, can be overwritten by the IMPORT stmt
-        table.getSd().getSerdeInfo().getSerializationLib(),
-        null, // storagehandler passed as table params
-        table.getSd().getSerdeInfo().getParameters(),
-        table.getParameters(), false,
-        (null == table.getSd().getSkewedInfo()) ? null : table.getSd().getSkewedInfo().getSkewedColNames(),
-        (null == table.getSd().getSkewedInfo()) ? null : table.getSd().getSkewedInfo().getSkewedColValues(),
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        table.getColStats(),
-        table.getTTable().getWriteId());
-    this.createTblDesc.setStoredAsSubDirectories(table.getSd().isStoredAsSubDirectories());
+    this.createViewDesc.setViewOriginalText(originalText);
+    this.createViewDesc.setViewExpandedText(expandedText);
   }
 
   public void setReplicationSpec(ReplicationSpec replSpec) {
-    createTblDesc.setReplicationSpec(replSpec);
+    switch (getTableType()) {
+      case TABLE:
+        createTblDesc.setReplicationSpec(replSpec);
+        break;
+      case VIEW:
+        createViewDesc.setReplicationSpec(replSpec);
+        break;
+    }
   }
 
   public void setExternal(boolean isExternal) {
-    createTblDesc.setExternal(isExternal);
+    if (TYPE.TABLE.equals(getTableType())) {
+      createTblDesc.setExternal(isExternal);
+    }
   }
 
   public boolean isExternal() {
-    return createTblDesc.isExternal();
+    if (TYPE.TABLE.equals(getTableType())) {
+      return createTblDesc.isExternal();
+    }
+    return false;
   }
 
   public void setLocation(String location) {
-    createTblDesc.setLocation(location);
+    switch (getTableType()) {
+      case TABLE:
+        createTblDesc.setLocation(location);
+        break;
+      case VIEW:
+        createViewDesc.setLocation(location);
+        break;
+    }
   }
 
   public String getLocation() {
-    return createTblDesc.getLocation();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getLocation();
+      case VIEW:
+        return createViewDesc.getLocation();
+    }
+    return null;
   }
 
-  public void setTableName(TableName tableName) throws SemanticException {
-    createTblDesc.setTableName(tableName);
+  public void setTableName(String tableName) throws SemanticException {
+    switch (getTableType()) {
+      case TABLE:
+        createTblDesc.setTableName(tableName);
+        break;
+      case VIEW:
+        String[] qualViewName = { dbName, tableName };
+        String dbDotView = BaseSemanticAnalyzer.getDotName(qualViewName);
+        createViewDesc.setViewName(dbDotView);
+        break;
+    }
   }
 
   public String getTableName() throws SemanticException {
-    return createTblDesc.getTableName().getTable();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getTableName();
+      case VIEW:
+        String dbDotView = createViewDesc.getViewName();
+        String[] names = Utilities.getDbTableName(dbDotView);
+        return names[1]; // names[0] have the Db name and names[1] have the view name
+    }
+    return null;
   }
 
   public List<FieldSchema> getPartCols() {
-    return createTblDesc.getPartCols();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getPartCols();
+      case VIEW:
+        return createViewDesc.getPartCols();
+    }
+    return null;
   }
 
   public List<FieldSchema> getCols() {
-    return createTblDesc.getCols();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getCols();
+      case VIEW:
+        return createViewDesc.getSchema();
+    }
+    return null;
   }
 
   public Map<String, String> getTblProps() {
-    return createTblDesc.getTblProps();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getTblProps();
+      case VIEW:
+        return createViewDesc.getTblProps();
+    }
+    return null;
   }
 
   public String getInputFormat() {
-    return createTblDesc.getInputFormat();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getInputFormat();
+      case VIEW:
+        return createViewDesc.getInputFormat();
+    }
+    return null;
   }
 
   public String getOutputFormat() {
-    return createTblDesc.getOutputFormat();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getOutputFormat();
+      case VIEW:
+        return createViewDesc.getOutputFormat();
+    }
+    return null;
   }
 
   public String getSerName() {
-    return createTblDesc.getSerName();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getSerName();
+      case VIEW:
+        return createViewDesc.getSerde();
+    }
+    return null;
   }
 
   public Map<String, String> getSerdeProps() {
-    return createTblDesc.getSerdeProps();
+    switch (getTableType()) {
+      case TABLE:
+        return createTblDesc.getSerdeProps();
+      case VIEW:
+        return createViewDesc.getSerdeProps();
+    }
+    return null;
   }
 
   public List<String> getBucketCols() {
-    return createTblDesc.getBucketCols();
+    if (TYPE.TABLE.equals(getTableType())) {
+      return createTblDesc.getBucketCols();
+    }
+    return null;
   }
 
   public List<Order> getSortCols() {
-    return createTblDesc.getSortCols();
+    if (TYPE.TABLE.equals(getTableType())) {
+      return createTblDesc.getSortCols();
+    }
+    return null;
   }
 
   /**
    * @param replaceMode Determine if this CreateTable should behave like a replace-into alter instead
    */
   public void setReplaceMode(boolean replaceMode) {
-    createTblDesc.setReplaceMode(replaceMode);
+    if (TYPE.TABLE.equals(getTableType())) {
+      createTblDesc.setReplaceMode(replaceMode);
+    }
   }
 
   public String getDatabaseName() {
     return dbName;
   }
 
-  public Task<?> getCreateTableTask(Set<ReadEntity> inputs, Set<WriteEntity> outputs, HiveConf conf) {
-    return TaskFactory.get(new DDLWork(inputs, outputs, createTblDesc), conf);
+  public Task <?> getCreateTableTask(EximUtil.SemanticAnalyzerWrapperContext x) {
+    switch (getTableType()) {
+      case TABLE:
+        return TaskFactory.get(new DDLWork(x.getInputs(), x.getOutputs(), createTblDesc), x.getConf());
+      case VIEW:
+        return TaskFactory.get(new DDLWork(x.getInputs(), x.getOutputs(), createViewDesc), x.getConf());
+    }
+    return null;
   }
 
-  public Task<?> getCreateTableTask(Set<ReadEntity> inputs, Set<WriteEntity> outputs, HiveConf conf,
-                                    boolean isReplication,
-                                    String dumpRoot, ReplicationMetricCollector metricCollector) {
-    return TaskFactory.get(new DDLWork(inputs, outputs, createTblDesc, isReplication,
-            dumpRoot, metricCollector), conf);
-  }
+  /**
+   * @return whether this table is actually a view
+   */
+  public boolean isView() { return table.isView(); }
 
-  public TableType tableType() {
-    return TableType.MANAGED_TABLE;
-  }
-
-  public Table toTable(HiveConf conf) throws Exception {
-    return createTblDesc.toTable(conf);
-  }
-
-  public void setReplWriteId(Long replWriteId) {
-    this.createTblDesc.setReplWriteId(replWriteId);
-  }
-
-  public void setOwnerName(String ownerName) {
-    createTblDesc.setOwnerName(ownerName);
-  }
-
-  public Long getReplWriteId() {
-    return this.createTblDesc.getReplWriteId();
+  public boolean isMaterializedView() {
+    return table.isMaterializedView();
   }
 }

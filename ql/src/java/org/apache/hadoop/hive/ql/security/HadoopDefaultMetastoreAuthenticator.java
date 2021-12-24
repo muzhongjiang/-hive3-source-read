@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,13 +18,13 @@
 
 package org.apache.hadoop.hive.ql.security;
 
-import org.apache.hadoop.hive.metastore.IHMSHandler;
+import org.apache.hadoop.hive.metastore.HiveMetaStore.HMSHandler;
 
 public class HadoopDefaultMetastoreAuthenticator extends HadoopDefaultAuthenticator
   implements HiveMetastoreAuthenticationProvider {
 
   @Override
-  public void setMetaStoreHandler(IHMSHandler handler) {
+  public void setMetaStoreHandler(HMSHandler handler) {
     setConf(handler.getConf());
   }
 

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,13 +23,14 @@ import java.io.DataOutput;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.FastHiveDecimal;
 import org.apache.hadoop.hive.common.type.FastHiveDecimalImpl;
+import org.apache.hadoop.hive.common.type.HiveDecimalVersionV2;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.hive.common.util.SuppressFBWarnings;
 
 /**
  * A mutable decimal.
@@ -487,64 +488,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
             scratchLongs);
   }
 
-  /*
-   * Maximum number of decimal digits in a decimal64 long.
-   */
-  @HiveDecimalWritableVersionV2
-  public static final int DECIMAL64_DECIMAL_DIGITS = FastHiveDecimalImpl.DECIMAL64_DECIMAL_DIGITS;
-
-  /*
-   * Test whether a precision will fit within a decimal64 (64-bit signed long with <= 18 decimal
-   * digits).
-   */
-  @HiveDecimalWritableVersionV2
-  public static boolean isPrecisionDecimal64(int precision) {
-    return (precision <= DECIMAL64_DECIMAL_DIGITS);
-  }
-
-  /*
-   * Return the maximum absolute decimal64 value for a precision.
-   */
-  @HiveDecimalWritableVersionV2
-  public static long getDecimal64AbsMax(int precision) {
-    return FastHiveDecimalImpl.getDecimal64AbsMax(precision);
-  }
-
-  /*
-   * Deserializes 64-bit decimals up to the maximum 64-bit precision (18 decimal digits).
-   *
-   * NOTE: Major assumption: the input decimal64 has already been bounds checked and a least
-   * has a precision <= DECIMAL64_DECIMAL_DIGITS.  We do not bounds check here for better
-   * performance.  You can bounds check beforehand with:
-   *     Math.abs(decimal64Long) <= getDecimal64AbsMax(precision)
-   */
-  @HiveDecimalWritableVersionV2
-  public void deserialize64(
-      long decimal64Long, int scale) {
-    fastDeserialize64(decimal64Long, scale);
-    isSet = true;
-  }
-
-   /*
-    * Serializes decimal64 up to the maximum 64-bit precision (18 decimal digits).
-    *
-    * NOTE: Major assumption: the fast decimal has already been bounds checked and a least
-    * has a precision <= DECIMAL64_DECIMAL_DIGITS.  We do not bounds check here for better
-    * performance.
-    */
-  @HiveDecimalWritableVersionV2
-  public long serialize64(int scale) {
-    return fastSerialize64(scale);
-  }
-
-  @HiveDecimalWritableVersionV2
-  public boolean isValid() {
-    if (!isSet) {
-      return false;
-    }
-    return FastHiveDecimalImpl.fastIsValid(this);
-  }
-
   /**
    * Returns the length of the decimal converted to bytes.
    * Call bigIntegerBytesBuffer() to get a reference to the converted bytes.
@@ -576,7 +519,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
    *
    */
   @HiveDecimalWritableVersionV2
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "Expose internal rep for efficiency")
   public byte[] bigIntegerBytesInternalScratchBuffer() {
     return internalScratchBuffer;
   }
@@ -759,12 +701,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
 
   @HiveDecimalWritableVersionV2
   public void mutateAdd(HiveDecimal dec) {
-    if (dec == null) {
-
-      // Can't add NULL.
-      isSet = false;
-      return;
-    }
     if (!isSet) {
       return;
     }
@@ -784,12 +720,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
 
   @HiveDecimalWritableVersionV2
   public void mutateSubtract(HiveDecimal dec) {
-    if (dec == null) {
-
-      // Can't subtract NULL.
-      isSet = false;
-      return;
-    }
     if (!isSet) {
       return;
     }
@@ -809,12 +739,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
 
   @HiveDecimalWritableVersionV2
   public void mutateMultiply(HiveDecimal dec) {
-    if (dec == null) {
-
-      // Can't multiply NULL.
-      isSet = false;
-      return;
-    }
     if (!isSet) {
       return;
     }
@@ -834,12 +758,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
 
   @HiveDecimalWritableVersionV2
   public void mutateDivide(HiveDecimal dec) {
-    if (dec == null) {
-
-      // Can't divide NULL.
-      isSet = false;
-      return;
-    }
     if (!isSet) {
       return;
     }
@@ -860,12 +778,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
 
   @HiveDecimalWritableVersionV2
   public void mutateRemainder(HiveDecimal dec) {
-    if (dec == null) {
-
-      // Can't do remainder on NULL.
-      isSet = false;
-      return;
-    }
     if (!isSet) {
       return;
     }

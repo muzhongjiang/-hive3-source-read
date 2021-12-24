@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,10 +32,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.ExprNodeEvaluator;
 import org.apache.hadoop.hive.ql.exec.JoinUtil;
-import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer.NonMatchedSmallTableIterator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorHashKeyWrapper;
+import org.apache.hadoop.hive.ql.exec.vector.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriter;
-import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
-import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
@@ -54,7 +53,7 @@ import org.apache.hadoop.io.Writable;
 public class HashMapWrapper extends AbstractMapJoinTableContainer implements Serializable {
   private static final long serialVersionUID = 1L;
   protected static final Logger LOG = LoggerFactory.getLogger(HashMapWrapper.class);
-  private static final long DEFAULT_HASHMAP_ENTRY_SIZE = 1024L;
+
   // default threshold for using main memory based HashMap
   private static final int THRESHOLD = 1000000;
   private static final float LOADFACTOR = 0.75f;
@@ -114,7 +113,6 @@ public class HashMapWrapper extends AbstractMapJoinTableContainer implements Ser
   public int size() {
     return mHash.size();
   }
-
   @Override
   public Set<Entry<MapJoinKey, MapJoinRowContainer>> entrySet() {
     return mHash.entrySet();
@@ -142,20 +140,6 @@ public class HashMapWrapper extends AbstractMapJoinTableContainer implements Ser
     return new GetAdaptor(keyTypeFromLoader);
   }
 
-  @Override
-  public NonMatchedSmallTableIterator createNonMatchedSmallTableIterator(
-      MatchTracker matchTracker) {
-    throw new RuntimeException("Not applicable");
-  }
-
-  @Override
-  public long getEstimatedMemorySize() {
-    // TODO: Key and Values are Object[] which can be eagerly deserialized or lazily deserialized. To accurately
-    // estimate the entry size, every possible Objects in Key, Value should implement MemoryEstimate interface which
-    // is very intrusive. So assuming default entry size here.
-    return size() * DEFAULT_HASHMAP_ENTRY_SIZE;
-  }
-
   private class GetAdaptor implements ReusableGetAdaptor {
 
     private Object[] currentKey;
@@ -171,7 +155,7 @@ public class HashMapWrapper extends AbstractMapJoinTableContainer implements Ser
     }
 
     @Override
-    public JoinUtil.JoinResult setFromVector(VectorHashKeyWrapperBase kw,
+    public JoinUtil.JoinResult setFromVector(VectorHashKeyWrapper kw,
         VectorExpressionWriter[] keyOutputWriters, VectorHashKeyWrapperBatch keyWrapperBatch)
         throws HiveException {
       if (currentKey == null) {
@@ -196,14 +180,6 @@ public class HashMapWrapper extends AbstractMapJoinTableContainer implements Ser
     }
 
     @Override
-    public JoinUtil.JoinResult setFromVectorNoNulls(VectorHashKeyWrapperBase kw,
-        VectorExpressionWriter[] keyOutputWriters, VectorHashKeyWrapperBatch keyWrapperBatch,
-        MatchTracker matchTracer)
-        throws HiveException {
-      throw new RuntimeException("Not supported");
-    }
-
-    @Override
     public JoinUtil.JoinResult setFromRow(Object row, List<ExprNodeEvaluator> fields,
         List<ObjectInspector> ois) throws HiveException {
       if (currentKey == null) {
@@ -221,12 +197,6 @@ public class HashMapWrapper extends AbstractMapJoinTableContainer implements Ser
       else {
         return JoinUtil.JoinResult.MATCH;
       }
-    }
-
-    @Override
-    public JoinUtil.JoinResult setFromRowNoNulls(Object row, List<ExprNodeEvaluator> fields,
-        List<ObjectInspector> ois, MatchTracker matchTracker) throws HiveException {
-      throw new RuntimeException("Not supported");
     }
 
     @Override

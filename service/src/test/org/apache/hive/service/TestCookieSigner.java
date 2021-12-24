@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,61 +18,42 @@
 
 package org.apache.hive.service;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
 import java.util.Random;
 
+import junit.framework.TestCase;
+
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 /**
- * TestCookieSigner.
+ * CLIServiceTest.
  *
  */
-public class TestCookieSigner {
+public class TestCookieSigner extends TestCase {
+
+  protected static CookieSigner cs;
   private static final Random RAN = new Random();
 
-  private CookieSigner cs;
-
+  /**
+   * @throws java.lang.Exception
+   */
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     cs = new CookieSigner(Long.toString(RAN.nextLong()).getBytes());
   }
 
-  @Test
-  public void testVerifyAndExtract() {
-    String originalStr = "cu=scott";
-    String signedStr = cs.signCookie(originalStr);
-    assertEquals(originalStr, cs.verifyAndExtract(signedStr));
+  /**
+   * @throws java.lang.Exception
+   */
+  @After
+  public void tearDown() throws Exception {
   }
 
   @Test
-  public void testVerifyAndExtractNoSignature() {
+  public void testVerifyAndExtract() throws Exception {
     String originalStr = "cu=scott";
     String signedStr = cs.signCookie(originalStr);
-    String modifedSignedStr = signedStr.replace("&s=", "");
-    try {
-      cs.verifyAndExtract(modifedSignedStr);
-    } catch (IllegalArgumentException e) {
-      assertEquals("Invalid input sign: " + modifedSignedStr, e.getMessage());
-      return;
-    }
-    fail("Expected IllegalArgumentException due to no signature");
-  }
-
-  @Test
-  public void testVerifyAndExtractInvalidSignature() {
-    String originalStr = "cu=scott";
-    String signedStr = cs.signCookie(originalStr);
-    String modifedSignedStr = signedStr.replace("&s=", "&s=abc");
-    try {
-      cs.verifyAndExtract(modifedSignedStr);
-    } catch (IllegalArgumentException e) {
-      assertTrue(e.getMessage().startsWith("Invalid sign, original = "));
-      return;
-    }
-    fail("Expected IllegalArgumentException checking signature");
+    assert(cs.verifyAndExtract(signedStr).equals(originalStr));
   }
 }

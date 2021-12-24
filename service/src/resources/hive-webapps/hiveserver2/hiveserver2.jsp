@@ -22,17 +22,16 @@
   import="org.apache.hadoop.hive.conf.HiveConf"
   import="org.apache.hadoop.hive.conf.HiveConf.ConfVars"
   import="org.apache.hive.common.util.HiveVersionInfo"
-  import="org.apache.hive.http.HttpServer"
   import="org.apache.hive.service.cli.operation.Operation"
   import="org.apache.hive.service.cli.operation.SQLOperation"
-  import="org.apache.hadoop.hive.ql.QueryInfo"
+  import="org.apache.hive.service.cli.operation.SQLOperationDisplay"
   import="org.apache.hive.service.cli.session.SessionManager"
   import="org.apache.hive.service.cli.session.HiveSession"
   import="javax.servlet.ServletContext"
   import="java.util.Collection"
   import="java.util.Date"
   import="java.util.List"
-  import="jodd.net.HtmlEncoder"
+  import="jodd.util.HtmlEncoder"
 %>
 
 <%
@@ -41,7 +40,6 @@ Configuration conf = (Configuration)ctx.getAttribute("hive.conf");
 long startcode = conf.getLong("startcode", System.currentTimeMillis());
 SessionManager sessionManager =
   (SessionManager)ctx.getAttribute("hive.sm");
-String remoteUser = request.getRemoteUser();
 %>
 
 <!--[if IE]>
@@ -79,7 +77,6 @@ String remoteUser = request.getRemoteUser();
                 <li><a href="/conf">Hive Configuration</a></li>
                 <li><a href="/stacks">Stack Trace</a></li>
                 <li><a href="/llap.html">Llap Daemons</a></li>
-                <li><a href="/logconf.jsp">Configure logging</a></li>
             </ul>
           </div><!--/.nav-collapse -->
         </div>
@@ -101,7 +98,7 @@ if (sessionManager != null) {
 
 <section>
 <h2>Active Sessions</h2>
-<table class="table table-striped">
+<table id="attributes_table" class="table table-striped">
     <tr>
         <th>User Name</th>
         <th>IP Address</th>
@@ -111,13 +108,7 @@ if (sessionManager != null) {
     </tr>
 <%
 Collection<HiveSession> hiveSessions = sessionManager.getSessions();
-int sessionCount = 0;
 for (HiveSession hiveSession: hiveSessions) {
-    // Permission check
-    if (!HttpServer.hasAccess(remoteUser, hiveSession.getUserName(), ctx, request)) {
-        continue;
-    }
-    sessionCount++;
 %>
     <tr>
         <td><%= hiveSession.getUserName() %></td>
@@ -130,14 +121,14 @@ for (HiveSession hiveSession: hiveSessions) {
 }
 %>
 <tr>
-  <td colspan="5">Total number of sessions: <%= sessionCount %></td>
+  <td colspan="5">Total number of sessions: <%= hiveSessions.size() %></td>
 </tr>
 </table>
 </section>
 
 <section>
 <h2>Open Queries</h2>
-<table class="table table-striped">
+<table id="attributes_table" class="table table-striped">
     <tr>
         <th>User Name</th>
         <th>Query</th>
@@ -150,22 +141,19 @@ for (HiveSession hiveSession: hiveSessions) {
     </tr>
     <%
       int queries = 0;
-      Collection<QueryInfo> operations = sessionManager.getOperationManager().getLiveQueryInfos();
-      for (QueryInfo operation : operations) {
-          if (!HttpServer.hasAccess(remoteUser, operation.getUserName(), ctx, request)) {
-              continue;
-          }
+      Collection<SQLOperationDisplay> operations = sessionManager.getOperationManager().getLiveSqlOperations();
+      for (SQLOperationDisplay operation : operations) {
           queries++;
     %>
     <tr>
         <td><%= operation.getUserName() %></td>
-        <td><%= HtmlEncoder.text(operation.getQueryDisplay() == null ? "Unknown" : operation.getQueryDisplay().getQueryString()) %></td>
+        <td><%= HtmlEncoder.strict(operation.getQueryDisplay() == null ? "Unknown" : operation.getQueryDisplay().getQueryString()) %></td>
         <td><%= operation.getExecutionEngine() %>
         <td><%= operation.getState() %></td>
         <td><%= new Date(operation.getBeginTime()) %></td>
         <td><%= operation.getElapsedTime()/1000 %></td>
         <td><%= operation.getRuntime() == null ? "Not finished" : operation.getRuntime()/1000 %></td>
-        <% String link = "/query_page.html?operationId=" + operation.getOperationId(); %>
+        <% String link = "/query_page?operationId=" + operation.getOperationId(); %>
         <td>  <a href= <%= link %>>Drilldown</a> </td>
     </tr>
 
@@ -181,7 +169,7 @@ for (HiveSession hiveSession: hiveSessions) {
 
 <section>
 <h2>Last Max <%= conf.get(ConfVars.HIVE_SERVER2_WEBUI_MAX_HISTORIC_QUERIES.varname) %> Closed Queries</h2>
-<table class="table table-striped">
+<table id="attributes_table" class="table table-striped">
     <tr>
         <th>User Name</th>
         <th>Query</th>
@@ -194,22 +182,19 @@ for (HiveSession hiveSession: hiveSessions) {
     </tr>
     <%
       queries = 0;
-      operations = sessionManager.getOperationManager().getHistoricalQueryInfos();
-      for (QueryInfo operation : operations) {
-          if (!HttpServer.hasAccess(remoteUser, operation.getUserName(), ctx, request)) {
-              continue;
-          }
+      operations = sessionManager.getOperationManager().getHistoricalSQLOperations();
+      for (SQLOperationDisplay operation : operations) {
           queries++;
     %>
     <tr>
         <td><%= operation.getUserName() %></td>
-        <td><%= HtmlEncoder.text(operation.getQueryDisplay() == null ? "Unknown" : operation.getQueryDisplay().getQueryString()) %></td>
+        <td><%= HtmlEncoder.strict(operation.getQueryDisplay() == null ? "Unknown" : operation.getQueryDisplay().getQueryString()) %></td>
         <td><%= operation.getExecutionEngine() %>
         <td><%= operation.getState() %></td>
         <td><%= operation.getElapsedTime()/1000 %></td>
         <td><%= operation.getEndTime() == null ? "In Progress" : new Date(operation.getEndTime()) %></td>
         <td><%= operation.getRuntime() == null ? "n/a" : operation.getRuntime()/1000 %></td>
-        <% String link = "/query_page.html?operationId=" + operation.getOperationId(); %>
+        <% String link = "/query_page?operationId=" + operation.getOperationId(); %>
         <td>  <a href= <%= link %>>Drilldown</a> </td>
     </tr>
 
@@ -228,7 +213,7 @@ for (HiveSession hiveSession: hiveSessions) {
 
     <section>
     <h2>Software Attributes</h2>
-    <table class="table table-striped">
+    <table id="attributes_table" class="table table-striped">
         <tr>
             <th>Attribute Name</th>
             <th>Value</th>

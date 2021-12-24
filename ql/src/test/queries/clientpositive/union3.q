@@ -1,4 +1,3 @@
---! qt:dataset:src
 set hive.explain.user=false;
 -- SORT_QUERY_RESULTS
 
@@ -21,9 +20,9 @@ FROM (
 
 
 
-CREATE TABLE union_out_n0 (id int);
+CREATE TABLE union_out (id int);
 
-insert overwrite table union_out_n0 
+insert overwrite table union_out 
 SELECT *
 FROM (
   SELECT 1 AS id
@@ -40,4 +39,4 @@ FROM (
   CLUSTER BY id
 ) a;
 
-select * from union_out_n0;
+select * from union_out;

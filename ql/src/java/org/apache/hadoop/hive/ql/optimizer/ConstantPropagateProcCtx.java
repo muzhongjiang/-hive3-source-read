@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -36,8 +36,10 @@ import org.apache.hadoop.hive.ql.exec.FilterOperator;
 import org.apache.hadoop.hive.ql.exec.JoinOperator;
 import org.apache.hadoop.hive.ql.exec.LimitOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.UnionOperator;
+import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
@@ -45,7 +47,7 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 /**
  * This class implements the processor context for Constant Propagate.
  *
- * ConstantPropagateProcCtx keeps track of propagated constants in a column-&gt;const map for each
+ * ConstantPropagateProcCtx keeps track of propagated constants in a column->const map for each
  * operator, enabling constants to be revolved across operators.
  */
 public class ConstantPropagateProcCtx implements NodeProcessorCtx {
@@ -134,7 +136,7 @@ public class ConstantPropagateProcCtx implements NodeProcessorCtx {
       return constants;
     }
 
-    List<ColumnInfo> signature = op.getSchema().getSignature();
+    ArrayList<ColumnInfo> signature = op.getSchema().getSignature();
     if (op instanceof LimitOperator || op instanceof FilterOperator) {
       // there should be only one parent.
       if (op.getParentOperators().size() == 1) {

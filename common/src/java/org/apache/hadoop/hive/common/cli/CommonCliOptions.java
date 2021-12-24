@@ -26,7 +26,6 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.hive.common.util.SuppressFBWarnings;
 import org.apache.logging.log4j.Level;
 
 /**
@@ -36,8 +35,8 @@ import org.apache.logging.log4j.Level;
  * all your own options or processing instructions), parse, and then use
  * the resulting information.
  * <p>
- * See org.apache.hadoop.hive.service.HiveServer or
- *     org.apache.hadoop.hive.metastore.HiveMetaStore
+ * See {@link org.apache.hadoop.hive.service.HiveServer} or
+ *     {@link org.apache.hadoop.hive.metastore.HiveMetaStore}
  *     for examples of use.
  *
  */
@@ -132,7 +131,6 @@ public class CommonCliOptions {
    * Parse the arguments.
    * @param args
    */
-  @SuppressFBWarnings(value = "DM_EXIT", justification = "Expected")
   public void parse(String[] args) {
     try {
       commandLine = new GnuParser().parse(OPTIONS, args);

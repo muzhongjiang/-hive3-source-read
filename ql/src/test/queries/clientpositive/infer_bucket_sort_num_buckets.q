@@ -1,10 +1,9 @@
---! qt:dataset:srcpart
 set hive.exec.infer.bucket.sort=true;
 set hive.merge.mapfiles=false;
 set hive.merge.mapredfiles=false;
 set mapred.reduce.tasks=2;
 
-CREATE TABLE test_table_n0 (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING);
+CREATE TABLE test_table (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING);
 
 -- Tests dynamic partitions where bucketing/sorting can be inferred, but not all reducers write
 -- all partitions.  The subquery produces rows as follows
@@ -19,20 +18,20 @@ CREATE TABLE test_table_n0 (key INT, value STRING) PARTITIONED BY (ds STRING, hr
 -- and the partition for 1 will get written in one reducer.  So hr=0 should be bucketed by key
 -- and hr=1 should not.
 
-EXPLAIN EXTENDED
-INSERT OVERWRITE TABLE test_table_n0 PARTITION (ds = '2008-04-08', hr)
+EXPLAIN
+INSERT OVERWRITE TABLE test_table PARTITION (ds = '2008-04-08', hr)
 SELECT key2, value, cast(hr as int) FROM
 (SELECT if ((key % 3) < 2, 0, 1) as key2, value, (key % 2) as hr
 FROM srcpart
 WHERE ds = '2008-04-08') a
 DISTRIBUTE BY key2;
 
-INSERT OVERWRITE TABLE test_table_n0 PARTITION (ds = '2008-04-08', hr)
+INSERT OVERWRITE TABLE test_table PARTITION (ds = '2008-04-08', hr)
 SELECT key2, value, cast(hr as int) FROM
 (SELECT if ((key % 3) < 2, 0, 1) as key2, value, (key % 3 % 2) as hr
 FROM srcpart
 WHERE ds = '2008-04-08') a
 DISTRIBUTE BY key2;
 
-DESCRIBE FORMATTED test_table_n0 PARTITION (ds='2008-04-08', hr='0');
-DESCRIBE FORMATTED test_table_n0 PARTITION (ds='2008-04-08', hr='1');
+DESCRIBE FORMATTED test_table PARTITION (ds='2008-04-08', hr='0');
+DESCRIBE FORMATTED test_table PARTITION (ds='2008-04-08', hr='1');

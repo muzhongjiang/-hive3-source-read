@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,31 +20,26 @@ package org.apache.hadoop.hive.ql.exec.vector.mapjoin.optimized;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.JoinUtil;
 import org.apache.hadoop.hive.ql.exec.persistence.BytesBytesMultiHashMap;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
-import org.apache.hadoop.hive.ql.exec.persistence.MatchTracker;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainerDirectAccess;
 import org.apache.hadoop.hive.ql.exec.persistence.ReusableGetAdaptorDirectAccess;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer.ReusableGetAdaptor;
-import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinBytesHashTable;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashTable;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashTableResult;
-import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinNonMatchedIterator;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
 
-/**
+/*
  * Root interface for a vector map join hash table (which could be a hash map, hash multi-set, or
  * hash set).
  */
-public abstract class VectorMapJoinOptimizedHashTable
-    implements VectorMapJoinHashTable, VectorMapJoinBytesHashTable {
+public abstract class VectorMapJoinOptimizedHashTable implements VectorMapJoinHashTable {
 
   private static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinOptimizedMultiKeyHashMap.class.getName());
 
@@ -59,26 +54,10 @@ public abstract class VectorMapJoinOptimizedHashTable
   }
 
   @Override
-  public VectorMapJoinNonMatchedIterator createNonMatchedIterator(MatchTracker matchTracker) {
-    throw new RuntimeException("Not implemented");
-  }
-
-  @Override
-  public int spillPartitionId() {
-    return adapatorDirectAccess.directSpillPartitionId();
-  }
-
-  @Override
   public void putRow(BytesWritable currentKey, BytesWritable currentValue)
       throws SerDeException, HiveException, IOException {
 
     putRowInternal(currentKey, currentValue);
-  }
-
-  @Override
-  public boolean containsLongKey(long currentKey) {
-    // Method only supported by FAST HashTable implementations
-    throw new RuntimeException("Not implemented");
   }
 
   protected void putRowInternal(BytesWritable key, BytesWritable value)
@@ -89,13 +68,13 @@ public abstract class VectorMapJoinOptimizedHashTable
 
   public JoinUtil.JoinResult doLookup(byte[] keyBytes, int keyOffset, int keyLength,
           BytesBytesMultiHashMap.Result bytesBytesMultiHashMapResult,
-          VectorMapJoinHashTableResult hashTableResult, MatchTracker matchTracker) {
+          VectorMapJoinHashTableResult hashTableResult) {
 
     hashTableResult.forget();
 
     JoinUtil.JoinResult joinResult =
             adapatorDirectAccess.setDirect(keyBytes, keyOffset, keyLength,
-                bytesBytesMultiHashMapResult, matchTracker);
+                bytesBytesMultiHashMapResult);
     if (joinResult == JoinUtil.JoinResult.SPILL) {
       hashTableResult.setSpillPartitionId(adapatorDirectAccess.directSpillPartitionId());
     }
@@ -116,18 +95,5 @@ public abstract class VectorMapJoinOptimizedHashTable
   @Override
   public int size() {
     return originalTableContainer.size();
-  }
-
-  @Override
-  public long getEstimatedMemorySize() {
-    long size = 0;
-    size += originalTableContainer == null ? 0 : originalTableContainer.getEstimatedMemorySize();
-    size += (2 * JavaDataModel.get().object());
-    return size;
-  }
-
-  @Override
-  public MatchTracker createMatchTracker() {
-    return adapatorDirectAccess.createMatchTracker();
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -40,8 +40,8 @@ public abstract class MultiValuedColumnVector extends ColumnVector {
    *
    * @param len Vector length
    */
-  public MultiValuedColumnVector(Type type, int len) {
-    super(type, len);
+  public MultiValuedColumnVector(int len) {
+    super(len);
     childCount = 0;
     offsets = new long[len];
     lengths = new long[len];
@@ -149,10 +149,6 @@ public abstract class MultiValuedColumnVector extends ColumnVector {
 
   @Override
   public void shallowCopyTo(ColumnVector otherCv) {
-    MultiValuedColumnVector other = (MultiValuedColumnVector)otherCv;
-    super.shallowCopyTo(other);
-    other.offsets = offsets;
-    other.lengths = lengths;
-    other.childCount = childCount;
+    throw new UnsupportedOperationException(); // Implement in future, if needed.
   }
 }

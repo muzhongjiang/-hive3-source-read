@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -26,13 +26,13 @@ import org.apache.logging.log4j.core.pattern.ArrayPatternConverter;
 import org.apache.logging.log4j.core.pattern.ConverterKeys;
 
 /**
- * FilePattern converter that converts %pid pattern to &lt;process-id&gt;@&lt;hostname&gt; information
+ * FilePattern converter that converts %pid pattern to <process-id>@<hostname> information
  * obtained at runtime.
  *
  * Example usage:
- * &lt;RollingFile name="Rolling-default" fileName="test.log" filePattern="test.log.%pid.gz"&gt;
+ * <RollingFile name="Rolling-default" fileName="test.log" filePattern="test.log.%pid.gz">
  *
- * Will generate output file with name containing &lt;process-id&gt;@&lt;hostname&gt; like below
+ * Will generate output file with name containing <process-id>@<hostname> like below
  * test.log.95232@localhost.gz
  */
 @Plugin(name = "PidFilePatternConverter", category = "FileConverter")

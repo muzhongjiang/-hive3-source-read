@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,17 +18,15 @@
 
 package org.apache.hadoop.hive.ql.hooks;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.gson.stream.JsonWriter;
 import org.apache.commons.collections.SetUtils;
 import org.apache.commons.io.output.StringBuilderWriter;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hive.common.ObjectPair;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.ql.QueryPlan;
@@ -48,7 +46,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -76,15 +73,7 @@ public class LineageLogger implements ExecuteWithHookContext {
 
   private static final String FORMAT_VERSION = "1.0";
 
-  /**
-   * An edge in lineage.
-   */
-  @VisibleForTesting
-  public static final class Edge {
-
-    /**
-     * The types of Edge.
-     */
+  final static class Edge {
     public static enum Type {
       PROJECTION, PREDICATE
     }
@@ -102,15 +91,7 @@ public class LineageLogger implements ExecuteWithHookContext {
     }
   }
 
-  /**
-   * A vertex in lineage.
-   */
-  @VisibleForTesting
-  public static final class Vertex {
-
-    /**
-     * A type in lineage.
-     */
+  final static class Vertex {
     public static enum Type {
       COLUMN, TABLE
     }
@@ -142,21 +123,6 @@ public class LineageLogger implements ExecuteWithHookContext {
       }
       Vertex vertex = (Vertex) obj;
       return label.equals(vertex.label) && type == vertex.type;
-    }
-
-    @VisibleForTesting
-    public Type getType() {
-      return type;
-    }
-
-    @VisibleForTesting
-    public String getLabel() {
-      return label;
-    }
-
-    @VisibleForTesting
-    public int getId() {
-      return id;
     }
   }
 
@@ -208,7 +174,7 @@ public class LineageLogger implements ExecuteWithHookContext {
 
         List<Edge> edges = getEdges(plan, index);
         Set<Vertex> vertices = getVertices(edges);
-        writeEdges(writer, edges, hookContext.getConf());
+        writeEdges(writer, edges);
         writeVertices(writer, vertices);
         writer.endObject();
         writer.close();
@@ -236,7 +202,7 @@ public class LineageLogger implements ExecuteWithHookContext {
   /**
    * Logger an error to console if available.
    */
-  private static void log(String error) {
+  private void log(String error) {
     LogHelper console = SessionState.getConsole();
     if (console != null) {
       console.printError(error);
@@ -247,21 +213,20 @@ public class LineageLogger implements ExecuteWithHookContext {
    * Based on the final select operator, find out all the target columns.
    * For each target column, find out its sources based on the dependency index.
    */
-  @VisibleForTesting
-  public static List<Edge> getEdges(QueryPlan plan, Index index) {
-    Map<String, Pair<SelectOperator, org.apache.hadoop.hive.ql.metadata.Table>> finalSelOps =
-        index.getFinalSelectOps();
+  private List<Edge> getEdges(QueryPlan plan, Index index) {
+    LinkedHashMap<String, ObjectPair<SelectOperator,
+      org.apache.hadoop.hive.ql.metadata.Table>> finalSelOps = index.getFinalSelectOps();
     Map<String, Vertex> vertexCache = new LinkedHashMap<String, Vertex>();
     List<Edge> edges = new ArrayList<Edge>();
-    for (Pair<SelectOperator,
+    for (ObjectPair<SelectOperator,
         org.apache.hadoop.hive.ql.metadata.Table> pair: finalSelOps.values()) {
       List<FieldSchema> fieldSchemas = plan.getResultSchema().getFieldSchemas();
-      SelectOperator finalSelOp = pair.getLeft();
-      org.apache.hadoop.hive.ql.metadata.Table t = pair.getRight();
+      SelectOperator finalSelOp = pair.getFirst();
+      org.apache.hadoop.hive.ql.metadata.Table t = pair.getSecond();
       String destTableName = null;
       List<String> colNames = null;
       if (t != null) {
-        destTableName = t.getFullyQualifiedName();
+        destTableName = t.getDbName() + "." + t.getTableName();
         fieldSchemas = t.getCols();
       } else {
         // Based on the plan outputs, find out the target table name and column names.
@@ -270,7 +235,7 @@ public class LineageLogger implements ExecuteWithHookContext {
           if (entityType == Entity.Type.TABLE
               || entityType == Entity.Type.PARTITION) {
             t = output.getTable();
-            destTableName = t.getFullyQualifiedName();
+            destTableName = t.getDbName() + "." + t.getTableName();
             List<FieldSchema> cols = t.getCols();
             if (cols != null && !cols.isEmpty()) {
               colNames = Utilities.getColumnNamesFromFieldSchema(cols);
@@ -326,7 +291,7 @@ public class LineageLogger implements ExecuteWithHookContext {
     return edges;
   }
 
-  private static void addEdge(Map<String, Vertex> vertexCache, List<Edge> edges,
+  private void addEdge(Map<String, Vertex> vertexCache, List<Edge> edges,
       Set<BaseColumnInfo> srcCols, Vertex target, String expr, Edge.Type type) {
     Set<Vertex> targets = new LinkedHashSet<Vertex>();
     targets.add(target);
@@ -338,7 +303,7 @@ public class LineageLogger implements ExecuteWithHookContext {
    * If found, add the more targets to this edge's target vertex list.
    * Otherwise, create a new edge and add to edge list.
    */
-  private static void addEdge(Map<String, Vertex> vertexCache, List<Edge> edges,
+  private void addEdge(Map<String, Vertex> vertexCache, List<Edge> edges,
       Set<BaseColumnInfo> srcCols, Set<Vertex> targets, String expr, Edge.Type type) {
     Set<Vertex> sources = createSourceVertices(vertexCache, srcCols);
     Edge edge = findSimilarEdgeBySources(edges, sources, expr, type);
@@ -353,7 +318,7 @@ public class LineageLogger implements ExecuteWithHookContext {
    * Convert a list of columns to a set of vertices.
    * Use cached vertices if possible.
    */
-  private static Set<Vertex> createSourceVertices(
+  private Set<Vertex> createSourceVertices(
       Map<String, Vertex> vertexCache, Collection<BaseColumnInfo> baseCols) {
     Set<Vertex> sources = new LinkedHashSet<Vertex>();
     if (baseCols != null && !baseCols.isEmpty()) {
@@ -364,7 +329,7 @@ public class LineageLogger implements ExecuteWithHookContext {
           continue;
         }
         Vertex.Type type = Vertex.Type.TABLE;
-        String tableName = Warehouse.getQualifiedName(table);
+        String tableName = table.getDbName() + "." + table.getTableName();
         FieldSchema fieldSchema = col.getColumn();
         String label = tableName;
         if (fieldSchema != null) {
@@ -380,7 +345,7 @@ public class LineageLogger implements ExecuteWithHookContext {
   /**
    * Find a vertex from a cache, or create one if not.
    */
-  private static Vertex getOrCreateVertex(
+  private Vertex getOrCreateVertex(
       Map<String, Vertex> vertices, String label, Vertex.Type type) {
     Vertex vertex = vertices.get(label);
     if (vertex == null) {
@@ -393,7 +358,7 @@ public class LineageLogger implements ExecuteWithHookContext {
   /**
    * Find an edge that has the same type, expression, and sources.
    */
-  private static Edge findSimilarEdgeBySources(
+  private Edge findSimilarEdgeBySources(
       List<Edge> edges, Set<Vertex> sources, String expr, Edge.Type type) {
     for (Edge edge: edges) {
       if (edge.type == type && StringUtils.equals(edge.expr, expr)
@@ -407,7 +372,7 @@ public class LineageLogger implements ExecuteWithHookContext {
   /**
    * Generate normalized name for a given target column.
    */
-  private static String getTargetFieldName(int fieldIndex,
+  private String getTargetFieldName(int fieldIndex,
       String destTableName, List<String> colNames, List<FieldSchema> fieldSchemas) {
     String fieldName = fieldSchemas.get(fieldIndex).getName();
     String[] parts = fieldName.split("\\.");
@@ -428,8 +393,7 @@ public class LineageLogger implements ExecuteWithHookContext {
    * Get all the vertices of all edges. Targets at first,
    * then sources. Assign id to each vertex.
    */
-  @VisibleForTesting
-  public static Set<Vertex> getVertices(List<Edge> edges) {
+  private Set<Vertex> getVertices(List<Edge> edges) {
     Set<Vertex> vertices = new LinkedHashSet<Vertex>();
     for (Edge edge: edges) {
       vertices.addAll(edge.targets);
@@ -450,8 +414,7 @@ public class LineageLogger implements ExecuteWithHookContext {
   /**
    * Write out an JSON array of edges.
    */
-  private void writeEdges(JsonWriter writer, List<Edge> edges, HiveConf conf)
-      throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException {
+  private void writeEdges(JsonWriter writer, List<Edge> edges) throws IOException {
     writer.name("edges");
     writer.beginArray();
     for (Edge edge: edges) {
@@ -469,7 +432,7 @@ public class LineageLogger implements ExecuteWithHookContext {
       }
       writer.endArray();
       if (edge.expr != null) {
-        writer.name("expression").value(HookUtils.redactLogString(conf, edge.expr));
+        writer.name("expression").value(edge.expr);
       }
       writer.name("edgeType").value(edge.type.name());
       writer.endObject();
@@ -498,7 +461,7 @@ public class LineageLogger implements ExecuteWithHookContext {
    */
   private String getQueryHash(String queryStr) {
     Hasher hasher = Hashing.md5().newHasher();
-    hasher.putBytes(queryStr.getBytes(Charset.defaultCharset()));
+    hasher.putString(queryStr);
     return hasher.hash().toString();
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,9 +21,8 @@ package org.apache.hadoop.hive.ql.exec;
 import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.hadoop.hive.common.LogUtils;
-import org.apache.hadoop.hive.ql.TaskQueue;
 import org.apache.hadoop.hive.ql.metadata.Hive;
+import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,9 +32,10 @@ import org.slf4j.LoggerFactory;
  **/
 
 public class TaskRunner extends Thread {
-  protected Task<?> tsk;
+  protected Task<? extends Serializable> tsk;
   protected TaskResult result;
   protected SessionState ss;
+  private OperationLog operationLog;
   private static AtomicLong taskCounter = new AtomicLong(0);
   private static ThreadLocal<Long> taskRunnerID = new ThreadLocal<Long>() {
     @Override
@@ -48,16 +48,13 @@ public class TaskRunner extends Thread {
 
   private static transient final Logger LOG = LoggerFactory.getLogger(TaskRunner.class);
 
-  private final TaskQueue taskQueue;
-
-  public TaskRunner(Task<?> tsk, TaskQueue taskQueue) {
+  public TaskRunner(Task<? extends Serializable> tsk, TaskResult result) {
     this.tsk = tsk;
-    this.result = new TaskResult();
-    this.ss = SessionState.get();
-    this.taskQueue = taskQueue;
+    this.result = result;
+    ss = SessionState.get();
   }
 
-  public Task<?> getTask() {
+  public Task<? extends Serializable> getTask() {
     return tsk;
   }
 
@@ -75,11 +72,10 @@ public class TaskRunner extends Thread {
 
   @Override
   public void run() {
-    LogUtils.registerLoggingContext(tsk.getConf());
     runner = Thread.currentThread();
     try {
+      OperationLog.setCurrentOperationLog(operationLog);
       SessionState.start(ss);
-      LogUtils.registerLoggingContext(tsk.conf);
       runSequential();
     } finally {
       try {
@@ -89,7 +85,6 @@ public class TaskRunner extends Thread {
       } catch (Exception e) {
         LOG.warn("Exception closing Metastore connection:" + e.getMessage());
       }
-      LogUtils.unregisterLoggingContext();
       runner = null;
       result.setRunning(false);
     }
@@ -102,7 +97,7 @@ public class TaskRunner extends Thread {
   public void runSequential() {
     int exitVal = -101;
     try {
-      exitVal = tsk.executeTask(ss == null ? null : ss.getHiveHistory());
+      exitVal = tsk.executeTask();
     } catch (Throwable t) {
       if (tsk.getException() == null) {
         tsk.setException(t);
@@ -110,7 +105,6 @@ public class TaskRunner extends Thread {
       LOG.error("Error in executeTask", t);
     }
     result.setExitVal(exitVal);
-    taskQueue.releaseRunnable();
     if (tsk.getException() != null) {
       result.setTaskError(tsk.getException());
     }
@@ -118,5 +112,9 @@ public class TaskRunner extends Thread {
 
   public static long getTaskRunnerID () {
     return taskRunnerID.get();
+  }
+
+  public void setOperationLog(OperationLog operationLog) {
+    this.operationLog = operationLog;
   }
 }

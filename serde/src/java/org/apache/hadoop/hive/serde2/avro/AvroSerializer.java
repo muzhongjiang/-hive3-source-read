@@ -17,29 +17,27 @@
  */
 package org.apache.hadoop.hive.serde2.avro;
 
-import java.time.ZoneOffset;
-import java.util.LinkedHashMap;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 
 import org.apache.avro.Schema;
 import org.apache.avro.Schema.Field;
 import org.apache.avro.Schema.Type;
+import org.apache.avro.generic.GenericArray;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericData.Fixed;
 import org.apache.avro.generic.GenericEnumSymbol;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.common.type.Date;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hadoop.hive.common.type.Timestamp;
-import org.apache.hadoop.hive.common.type.TimestampTZUtil;
-import org.apache.hadoop.hive.common.type.CalendarUtils;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -58,22 +56,13 @@ import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
 import org.apache.hadoop.io.Writable;
 
 class AvroSerializer {
-
   /**
    * The Schema to use when serializing Map keys.
    * Since we're sharing this across Serializer instances, it must be immutable;
    * any properties need to be added in a static initializer.
    */
   private static final Schema STRING_SCHEMA = Schema.create(Schema.Type.STRING);
-  private AvroGenericRecordWritable cache = new AvroGenericRecordWritable();
-  private boolean defaultProleptic;
-
-  AvroSerializer() {}
-
-  AvroSerializer(Configuration configuration) {
-    this.defaultProleptic = HiveConf.getBoolVar(
-        configuration, ConfVars.HIVE_AVRO_PROLEPTIC_GREGORIAN);
-  }
+  AvroGenericRecordWritable cache = new AvroGenericRecordWritable();
 
   // Hive is pretty simple (read: stupid) in writing out values via the serializer.
   // We're just going to go through, matching indices.  Hive formats normally
@@ -184,7 +173,7 @@ class AvroSerializer {
     List<? extends StructField> allStructFieldRefs = ssoi.getAllStructFieldRefs();
     List<Object> structFieldsDataAsList = ssoi.getStructFieldsDataAsList(o);
     GenericData.Record record = new GenericData.Record(schema);
-    List<TypeInfo> allStructFieldTypeInfos = typeInfo.getAllStructFieldTypeInfos();
+    ArrayList<TypeInfo> allStructFieldTypeInfos = typeInfo.getAllStructFieldTypeInfos();
 
     for(int i  = 0; i < size; i++) {
       Field field = schema.getFields().get(i);
@@ -221,16 +210,11 @@ class AvroSerializer {
       return vc.getValue();
     case DATE:
       Date date = ((DateObjectInspector)fieldOI).getPrimitiveJavaObject(structFieldData);
-      return defaultProleptic ? date.toEpochDay() :
-          CalendarUtils.convertDateToHybrid(date.toEpochDay());
+      return DateWritable.dateToDays(date);
     case TIMESTAMP:
       Timestamp timestamp =
         ((TimestampObjectInspector) fieldOI).getPrimitiveJavaObject(structFieldData);
-      long millis = defaultProleptic ? timestamp.toEpochMilli() :
-          CalendarUtils.convertTimeToHybrid(timestamp.toEpochMilli());
-      timestamp = TimestampTZUtil.convertTimestampToZone(
-          Timestamp.ofEpochMilli(millis), TimeZone.getDefault().toZoneId(), ZoneOffset.UTC);
-      return timestamp.toEpochMilli();
+      return timestamp.getTime();
     case UNKNOWN:
       throw new AvroSerdeException("Received UNKNOWN primitive category.");
     case VOID:
@@ -278,7 +262,7 @@ class AvroSerializer {
     Map<?,?> map = fieldOI.getMap(structFieldData);
     Schema valueType = schema.getValueType();
 
-    Map<Object, Object> deserialized = new LinkedHashMap<Object, Object>(fieldOI.getMapSize(structFieldData));
+    Map<Object, Object> deserialized = new HashMap<Object, Object>(fieldOI.getMapSize(structFieldData));
 
     for (Map.Entry<?, ?> entry : map.entrySet()) {
       deserialized.put(serialize(mapKeyTypeInfo, mapKeyObjectInspector, entry.getKey(), STRING_SCHEMA),

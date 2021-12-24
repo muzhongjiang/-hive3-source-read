@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,40 +18,39 @@
 
 package org.apache.hadoop.hive.ql.udf.generic;
 
-import org.apache.hadoop.hive.common.io.NonSyncByteArrayInputStream;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hadoop.hive.common.type.Timestamp;
-import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentLengthException;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentTypeException;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorInBloomFilterColDynamicValue;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.*;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
-import org.apache.hive.common.util.BloomKFilter;
+import org.apache.hive.common.util.BloomFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
+import java.sql.Timestamp;
 
 /**
  * GenericUDF to lookup a value in BloomFilter
  */
 @VectorizedExpressions({VectorInBloomFilterColDynamicValue.class})
-@Description(name = "in_bloom_filter")
 public class GenericUDFInBloomFilter extends GenericUDF {
+  private static final Logger LOG = LoggerFactory.getLogger(GenericUDFInBloomFilter.class);
 
   private transient ObjectInspector valObjectInspector;
   private transient ObjectInspector bloomFilterObjectInspector;
-  private transient BloomKFilter bloomFilter;
+  private transient BloomFilter bloomFilter;
   private transient boolean initializedBloomFilter;
   private transient byte[] scratchBuffer = new byte[HiveDecimal.SCRATCH_BUFFER_LEN_TO_BYTES];
 
@@ -96,17 +95,13 @@ public class GenericUDFInBloomFilter extends GenericUDF {
 
     if (!initializedBloomFilter) {
       // Setup the bloom filter once
-      InputStream in = null;
       try {
         BytesWritable bw = (BytesWritable) arguments[1].get();
         byte[] bytes = new byte[bw.getLength()];
         System.arraycopy(bw.getBytes(), 0, bytes, 0, bw.getLength());
-        in = new NonSyncByteArrayInputStream(bytes);
-        bloomFilter = BloomKFilter.deserialize(in);
+        bloomFilter = BloomFilter.deserialize(new ByteArrayInputStream(bytes));
       } catch ( IOException e) {
         throw new HiveException(e);
-      } finally {
-        IOUtils.closeStream(in);
       }
       initializedBloomFilter = true;
     }
@@ -148,13 +143,13 @@ public class GenericUDFInBloomFilter extends GenericUDF {
         int startIdx = vDecimal.toBytes(scratchBuffer);
         return bloomFilter.testBytes(scratchBuffer, startIdx, scratchBuffer.length - startIdx);
       case DATE:
-        DateWritableV2 vDate = ((DateObjectInspector) valObjectInspector).
+        DateWritable vDate = ((DateObjectInspector) valObjectInspector).
                 getPrimitiveWritableObject(arguments[0].get());
         return bloomFilter.testLong(vDate.getDays());
       case TIMESTAMP:
         Timestamp vTimeStamp = ((TimestampObjectInspector) valObjectInspector).
                 getPrimitiveJavaObject(arguments[0].get());
-        return bloomFilter.testLong(vTimeStamp.toEpochMilli());
+        return bloomFilter.testLong(vTimeStamp.getTime());
       case CHAR:
         Text vChar = ((HiveCharObjectInspector) valObjectInspector).
                 getPrimitiveWritableObject(arguments[0].get()).getStrippedValue();

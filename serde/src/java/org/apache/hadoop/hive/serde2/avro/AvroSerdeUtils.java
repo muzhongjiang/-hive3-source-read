@@ -68,8 +68,6 @@ public class AvroSerdeUtils {
     SCHEMA_NAME("avro.schema.name"),
     SCHEMA_DOC("avro.schema.doc"),
     AVRO_SERDE_SCHEMA("avro.serde.schema"),
-    AVRO_SERDE_TYPE("avro.serde.type"),
-    AVRO_SERDE_SKIP_BYTES("avro.serde.skip.bytes"),
     SCHEMA_RETRIEVER("avro.schema.retriever");
 
     private final String propName;
@@ -160,7 +158,11 @@ public class AvroSerdeUtils {
       fs = FileSystem.get(new URI(schemaFSUrl), conf);
     } catch (IOException ioe) {
       //return null only if the file system in schema is not recognized
-      LOG.debug("Failed to open file system for uri {} assuming it is not a FileSystem url", schemaFSUrl, ioe);
+      if (LOG.isDebugEnabled()) {
+        String msg = "Failed to open file system for uri " + schemaFSUrl + " assuming it is not a FileSystem url";
+        LOG.debug(msg, ioe);
+      }
+
       return null;
     }
     try {
@@ -203,25 +205,12 @@ public class AvroSerdeUtils {
   }
 
   /**
-   * If the union schema is a nullable union, get the schema for the non-nullable type.
-   * This method does no checking that the provided Schema is nullable. If the provided
-   * union schema is non-nullable, it simply returns the union schema
+   * In a nullable type, get the schema for the non-nullable type.  This method
+   * does no checking that the provides Schema is nullable.
    */
-  public static Schema getOtherTypeFromNullableType(Schema unionSchema) {
-    final List<Schema> types = unionSchema.getTypes();
-    if (types.size() == 2) { // most common scenario
-      if (types.get(0).getType() == Schema.Type.NULL) {
-        return types.get(1);
-      }
-      if (types.get(1).getType() == Schema.Type.NULL) {
-        return types.get(0);
-      }
-      // not a nullable union
-      return unionSchema;
-    }
-
-    final List<Schema> itemSchemas = new ArrayList<>();
-    for (Schema itemSchema : types) {
+  public static Schema getOtherTypeFromNullableType(Schema schema) {
+    List<Schema> itemSchemas = new ArrayList<>();
+    for (Schema itemSchema : schema.getTypes()) {
       if (!Schema.Type.NULL.equals(itemSchema.getType())) {
         itemSchemas.add(itemSchema);
       }

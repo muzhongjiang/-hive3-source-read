@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -72,7 +72,7 @@ public class UDFLog extends UDFMath {
     if (a.get() <= 0.0) {
       return null;
     } else {
-      result.set(StrictMath.log(a.get()));
+      result.set(Math.log(a.get()));
       return result;
     }
   }
@@ -81,7 +81,7 @@ public class UDFLog extends UDFMath {
     if (base <= 1.0 || input <= 0.0) {
       return null;
     }
-    result.set(StrictMath.log(input) / StrictMath.log(base));
+    result.set(Math.log(input) / Math.log(base));
     return result;
   }
 

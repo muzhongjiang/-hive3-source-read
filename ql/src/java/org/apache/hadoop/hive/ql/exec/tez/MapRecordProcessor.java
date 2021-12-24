@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.ql.exec.tez;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,11 +27,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.Callable;
 
 import org.apache.hadoop.hive.llap.LlapUtil;
-import org.apache.hadoop.hive.ql.plan.PartitionDesc;
-import org.apache.hadoop.hive.ql.plan.TableDesc;
-import org.apache.hadoop.hive.ql.txn.compactor.CompactorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -78,24 +77,21 @@ import org.apache.tez.runtime.library.api.KeyValueReader;
  * Just pump the records through the query plan.
  */
 public class MapRecordProcessor extends RecordProcessor {
-  private static final Logger LOG = LoggerFactory.getLogger(MapRecordProcessor.class);
-  private static final String MAP_PLAN_KEY = "__MAP_PLAN__";
+  public static final Logger l4j = LoggerFactory.getLogger(MapRecordProcessor.class);
+  protected static final String MAP_PLAN_KEY = "__MAP_PLAN__";
 
   private AbstractMapOperator mapOp;
-  private final List<AbstractMapOperator> mergeMapOpList = new ArrayList<>();
+  private final List<AbstractMapOperator> mergeMapOpList = new ArrayList<AbstractMapOperator>();
   private MapRecordSource[] sources;
-  private final Map<String, MultiMRInput> multiMRInputMap = new HashMap<>();
+  private final Map<String, MultiMRInput> multiMRInputMap = new HashMap<String, MultiMRInput>();
   private int position;
-  private MRInputLegacy legacyMRInput;
-  private MultiMRInput mainWorkMultiMRInput;
+  MRInputLegacy legacyMRInput;
+  MultiMRInput mainWorkMultiMRInput;
   private final ExecMapperContext execContext;
   private MapWork mapWork;
-  private List<MapWork> mergeWorkList;
-  private final List<String> cacheKeys = new ArrayList<>();
-  private final List<String> dynamicValueCacheKeys = new ArrayList<>();
-  private final ObjectCache cache, dynamicValueCache;
-  // is this part of the query-based compaction process
-  private final boolean isInCompaction;
+  List<MapWork> mergeWorkList;
+  List<String> cacheKeys, dynamicValueCacheKeys;
+  ObjectCache cache, dynamicValueCache;
 
   public MapRecordProcessor(final JobConf jconf, final ProcessorContext context) throws Exception {
     super(jconf, context);
@@ -104,24 +100,26 @@ public class MapRecordProcessor extends RecordProcessor {
       setLlapOfFragmentId(context);
     }
     cache = ObjectCacheFactory.getCache(jconf, queryId, true);
-    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
+    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false);
     execContext = new ExecMapperContext(jconf);
     execContext.setJc(jconf);
-    isInCompaction = CompactorUtil.COMPACTOR.equalsIgnoreCase(
-        HiveConf.getVar(jconf, HiveConf.ConfVars.SPLIT_GROUPING_MODE));
+    cacheKeys = new ArrayList<String>();
+    dynamicValueCacheKeys = new ArrayList<String>();
   }
 
   private void setLlapOfFragmentId(final ProcessorContext context) {
     // TODO: could we do this only if the OF is actually used?
     String attemptId = Converters.createTaskAttemptId(context).toString();
-    LOG.debug("Setting the LLAP fragment ID for OF to {}", attemptId);
+    if (l4j.isDebugEnabled()) {
+      l4j.debug("Setting the LLAP fragment ID for OF to " + attemptId);
+    }
     jconf.set(LlapOutputFormat.LLAP_OF_ID_KEY, attemptId);
   }
 
   @Override
   void init(MRTaskReporter mrReporter,
       Map<String, LogicalInput> inputs, Map<String, LogicalOutput> outputs) throws Exception {
-    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.TEZ_INIT_OPERATORS);
+    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.TEZ_INIT_OPERATORS);
     super.init(mrReporter, inputs, outputs);
     checkAbortCondition();
 
@@ -131,24 +129,18 @@ public class MapRecordProcessor extends RecordProcessor {
 
 
     // create map and fetch operators
-    if (!isInCompaction) {
-      mapWork = cache.retrieve(key, () -> Utilities.getMapWork(jconf));
-    } else {
-      // During query-based compaction, we don't want to retrieve old MapWork from the cache, we want a new mapper
-      // and new UDF validate_acid_sort_order instance for each bucket, otherwise validate_acid_sort_order will fail.
-      mapWork = Utilities.getMapWork(jconf);
-    }
+    mapWork = (MapWork) cache.retrieve(key, new Callable<Object>() {
+        @Override
+        public Object call() {
+          return Utilities.getMapWork(jconf);
+        }
+      });
     // TODO HIVE-14042. Cleanup may be required if exiting early.
     Utilities.setMapWork(jconf, mapWork);
 
-    for (PartitionDesc part : mapWork.getAliasToPartnInfo().values()) {
-      TableDesc tableDesc = part.getTableDesc();
-      Utilities.copyJobSecretToTableProperties(tableDesc);
-    }
-
     String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
     if (prefixes != null) {
-      mergeWorkList = new ArrayList<>();
+      mergeWorkList = new ArrayList<MapWork>();
 
       for (final String prefix : prefixes.split(",")) {
         if (prefix == null || prefix.isEmpty()) {
@@ -160,7 +152,13 @@ public class MapRecordProcessor extends RecordProcessor {
 
         checkAbortCondition();
         mergeWorkList.add(
-            (MapWork) cache.retrieve(key, () -> Utilities.getMergeWork(jconf, prefix)));
+            (MapWork) cache.retrieve(key,
+                new Callable<Object>() {
+                  @Override
+                  public Object call() {
+                    return Utilities.getMergeWork(jconf, prefix);
+                  }
+                }));
       }
     }
 
@@ -184,7 +182,7 @@ public class MapRecordProcessor extends RecordProcessor {
     createOutputMap();
     // Start all the Outputs.
     for (Entry<String, LogicalOutput> outputEntry : outputs.entrySet()) {
-      LOG.debug("Starting Output: " + outputEntry.getKey());
+      l4j.debug("Starting Output: " + outputEntry.getKey());
       outputEntry.getValue().start();
       ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
     }
@@ -228,25 +226,25 @@ public class MapRecordProcessor extends RecordProcessor {
           // initialize the merge operators first.
           if (mergeMapOp != null) {
             mergeMapOp.setConf(mergeMapWork);
-            LOG.info("Input name is {}", mergeMapWork.getName());
+            l4j.info("Input name is " + mergeMapWork.getName());
             jconf.set(Utilities.INPUT_NAME, mergeMapWork.getName());
             mergeMapOp.initialize(jconf, null);
             // if there are no files/partitions to read, we need to skip trying to read
             MultiMRInput multiMRInput = multiMRInputMap.get(mergeMapWork.getName());
             boolean skipRead = false;
             if (multiMRInput == null) {
-              LOG.info("Multi MR Input for work {} is null. Skipping read.", mergeMapWork.getName());
+              l4j.info("Multi MR Input for work " + mergeMapWork.getName() + " is null. Skipping read.");
               skipRead = true;
             } else {
               Collection<KeyValueReader> keyValueReaders = multiMRInput.getKeyValueReaders();
               if ((keyValueReaders == null) || (keyValueReaders.isEmpty())) {
-                LOG.info("Key value readers are null or empty and hence skipping read. "
-                    + "KeyValueReaders = {}", keyValueReaders);
+                l4j.info("Key value readers are null or empty and hence skipping read. "
+                    + "KeyValueReaders = " + keyValueReaders);
                 skipRead = true;
               }
             }
             if (skipRead) {
-              List<Operator<?>> children = new ArrayList<>();
+              List<Operator<?>> children = new ArrayList<Operator<?>>();
               children.addAll(mergeMapOp.getConf().getAliasToWork().values());
               // do the same thing as setChildren when there is nothing to read.
               // the setChildren method initializes the object inspector needed by the operators
@@ -281,19 +279,19 @@ public class MapRecordProcessor extends RecordProcessor {
 
       // initialize map operator
       mapOp.setConf(mapWork);
-      LOG.info("Main input name is " + mapWork.getName());
+      l4j.info("Main input name is " + mapWork.getName());
       jconf.set(Utilities.INPUT_NAME, mapWork.getName());
       mapOp.initialize(jconf, null);
       checkAbortCondition();
       mapOp.setChildren(jconf);
       mapOp.passExecContext(execContext);
-      LOG.info(mapOp.dump(0));
+      l4j.info(mapOp.dump(0));
 
       // set memory available for operators
       long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
       if (mapOp.getConf() != null) {
         mapOp.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-        LOG.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
+        l4j.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
       }
       OperatorUtils.setMemoryAvailable(mapOp.getChildOperators(), memoryAvailableToTask);
 
@@ -304,7 +302,12 @@ public class MapRecordProcessor extends RecordProcessor {
       String valueRegistryKey = DynamicValue.DYNAMIC_VALUE_REGISTRY_CACHE_KEY;
       // On LLAP dynamic value registry might already be cached.
       final DynamicValueRegistryTez registryTez = dynamicValueCache.retrieve(valueRegistryKey,
-          () -> new DynamicValueRegistryTez());
+          new Callable<DynamicValueRegistryTez>() {
+            @Override
+            public DynamicValueRegistryTez call() {
+              return new DynamicValueRegistryTez();
+            }
+          });
       dynamicValueCacheKeys.add(valueRegistryKey);
       RegistryConfTez registryConf = new RegistryConfTez(jconf, mapWork, processorContext, inputs);
       registryTez.init(registryConf);
@@ -312,7 +315,7 @@ public class MapRecordProcessor extends RecordProcessor {
       checkAbortCondition();
       initializeMapRecordSources();
       mapOp.initializeMapOperator(jconf);
-      if ((mergeMapOpList != null) && !mergeMapOpList.isEmpty()) {
+      if ((mergeMapOpList != null) && mergeMapOpList.isEmpty() == false) {
         for (AbstractMapOperator mergeMapOp : mergeMapOpList) {
           jconf.set(Utilities.INPUT_NAME, mergeMapOp.getConf().getName());
           // TODO HIVE-14042. abort handling: Handling of mergeMapOp
@@ -344,14 +347,14 @@ public class MapRecordProcessor extends RecordProcessor {
         // Don't create a new object if we are already out of memory
         throw (OutOfMemoryError) e;
       } else if (e instanceof InterruptedException) {
-        LOG.info("Hit an interrupt while initializing MapRecordProcessor. Message={}",
+        l4j.info("Hit an interrupt while initializing MapRecordProcessor. Message={}",
             e.getMessage());
         throw (InterruptedException) e;
       } else {
         throw new RuntimeException("Map operator initialization failed", e);
       }
     }
-    perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.TEZ_INIT_OPERATORS);
+    perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.TEZ_INIT_OPERATORS);
   }
 
   private void initializeMapRecordSources() throws Exception {
@@ -373,7 +376,7 @@ public class MapRecordProcessor extends RecordProcessor {
       String inputName = mapOp.getConf().getName();
       MultiMRInput multiMRInput = multiMRInputMap.get(inputName);
       Collection<KeyValueReader> kvReaders = multiMRInput.getKeyValueReaders();
-      LOG.debug("There are {} key-value readers for input {}", kvReaders.size(), inputName);
+      l4j.debug("There are " + kvReaders.size() + " key-value readers for input " + inputName);
       if (kvReaders.size() > 0) {
         reader = getKeyValueReader(kvReaders, mapOp);
         sources[tag].init(jconf, mapOp, reader);
@@ -382,8 +385,10 @@ public class MapRecordProcessor extends RecordProcessor {
     ((TezContext) MapredContext.get()).setRecordSources(sources);
   }
 
+  @SuppressWarnings("deprecation")
   private KeyValueReader getKeyValueReader(Collection<KeyValueReader> keyValueReaders,
-      AbstractMapOperator mapOp) throws Exception {
+      AbstractMapOperator mapOp)
+    throws Exception {
     List<KeyValueReader> kvReaderList = new ArrayList<KeyValueReader>(keyValueReaders);
     // this sets up the map operator contexts correctly
     mapOp.initializeContexts();
@@ -424,10 +429,10 @@ public class MapRecordProcessor extends RecordProcessor {
 
     // this will abort initializeOp()
     if (mapOp != null) {
-      LOG.info("Forwarding abort to mapOp: {} ", mapOp.getName());
+      l4j.info("Forwarding abort to mapOp: {} " + mapOp.getName());
       mapOp.abort();
     } else {
-      LOG.info("mapOp not setup yet. abort not being forwarded");
+      l4j.info("mapOp not setup yet. abort not being forwarded");
     }
   }
 
@@ -438,13 +443,13 @@ public class MapRecordProcessor extends RecordProcessor {
       setAborted(execContext.getIoCxt().getIOExceptions());
     }
 
-    if (cache != null) {
+    if (cache != null && cacheKeys != null) {
       for (String k: cacheKeys) {
         cache.release(k);
       }
     }
 
-    if (dynamicValueCache != null) {
+    if (dynamicValueCache != null && dynamicValueCacheKeys != null) {
       for (String k: dynamicValueCacheKeys) {
         dynamicValueCache.release(k);
       }
@@ -479,7 +484,7 @@ public class MapRecordProcessor extends RecordProcessor {
     } catch (Exception e) {
       if (!isAborted()) {
         // signal new failure to map-reduce
-        LOG.error("Hit error while closing operators - failing tree");
+        l4j.error("Hit error while closing operators - failing tree");
         throw new RuntimeException("Hive Runtime Error while closing operators", e);
       }
     } finally {
@@ -493,7 +498,7 @@ public class MapRecordProcessor extends RecordProcessor {
     MRInputLegacy theMRInput = null;
 
     // start all mr/multi-mr inputs
-    Set<Input> li = new HashSet<>();
+    Set<Input> li = new HashSet<Input>();
     for (LogicalInput inp: inputs.values()) {
       if (inp instanceof MRInputLegacy || inp instanceof MultiMRInput) {
         inp.start();
@@ -504,7 +509,7 @@ public class MapRecordProcessor extends RecordProcessor {
     // MultiMRInput may not. Fix once TEZ-3302 is resolved.
     processorContext.waitForAllInputsReady(li);
 
-    LOG.info("The input names are: {}", String.join(",", inputs.keySet()));
+    l4j.info("The input names are: " + Arrays.toString(inputs.keySet().toArray()));
     for (Entry<String, LogicalInput> inp : inputs.entrySet()) {
       if (inp.getValue() instanceof MRInputLegacy) {
         if (theMRInput != null) {

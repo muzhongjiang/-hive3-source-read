@@ -1,4 +1,3 @@
-set hive.stats.column.autogather=false;
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.stats.dbclass=fs;
@@ -40,6 +39,7 @@ select count(*), count(a), count(b), count(c), count(d) from stats_null;
 select count(*), count(a), count(b), count(c), count(d) from stats_null_part;
 
 drop table stats_null_part;
+set hive.exec.dynamic.partition.mode=nonstrict;
 CREATE TABLE stats_null_part(a double, b int, c STRING, d smallint) partitioned by (dt int) STORED AS TEXTFILE; 
 
 insert into table stats_null_part partition(dt) select a,b,c,d,b from temps_null ;

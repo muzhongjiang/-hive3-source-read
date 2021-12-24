@@ -1,1 +1,0 @@
-FAILED: SemanticException SHOW TABLES statement only allows equality filter on table_type value

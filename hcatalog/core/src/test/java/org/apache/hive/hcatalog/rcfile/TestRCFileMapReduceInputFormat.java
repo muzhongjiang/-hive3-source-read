@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,7 +24,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Properties;
 
-
+import junit.framework.TestCase;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -33,12 +33,12 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.io.RCFile;
 import org.apache.hadoop.hive.ql.io.RCFileOutputFormat;
 import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.columnar.BytesRefArrayWritable;
 import org.apache.hadoop.hive.serde2.columnar.BytesRefWritable;
 import org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
@@ -48,14 +48,12 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
 
 /**
  * TestRCFile.
  *
  */
-public class TestRCFileMapReduceInputFormat {
+public class TestRCFileMapReduceInputFormat extends TestCase {
 
   private static final Logger LOG = LoggerFactory.getLogger(TestRCFileMapReduceInputFormat.class);
 
@@ -79,7 +77,7 @@ public class TestRCFileMapReduceInputFormat {
       serDe = new ColumnarSerDe();
       // Create the SerDe
       tbl = createProperties();
-      serDe.initialize(conf, tbl, null);
+      SerDeUtils.initializeSerDe(serDe, conf, tbl, null);
     } catch (Exception e) {
     }
   }
@@ -116,6 +114,7 @@ public class TestRCFileMapReduceInputFormat {
       patialS.set(5, new BytesRefWritable("NULL".getBytes("UTF-8")));
       patialS.set(6, new BytesRefWritable("NULL".getBytes("UTF-8")));
       patialS.set(7, new BytesRefWritable("NULL".getBytes("UTF-8")));
+
     } catch (UnsupportedEncodingException e) {
     }
   }
@@ -174,7 +173,6 @@ public class TestRCFileMapReduceInputFormat {
   }
 
 
-  @Test
   public void testSynAndSplit() throws IOException, InterruptedException {
     splitBeforeSync();
     splitRightBeforeSync();
@@ -184,24 +182,24 @@ public class TestRCFileMapReduceInputFormat {
   }
 
   private void splitBeforeSync() throws IOException, InterruptedException {
-    writeThenReadByRecordReader(600, 10000, 2, 176840, null);
+    writeThenReadByRecordReader(600, 1000, 2, 17684, null);
   }
 
   private void splitRightBeforeSync() throws IOException, InterruptedException {
-    writeThenReadByRecordReader(500, 10000, 2, 177500, null);
+    writeThenReadByRecordReader(500, 1000, 2, 17750, null);
   }
 
   private void splitInMiddleOfSync() throws IOException, InterruptedException {
-    writeThenReadByRecordReader(500, 10000, 2, 177600, null);
+    writeThenReadByRecordReader(500, 1000, 2, 17760, null);
 
   }
 
   private void splitRightAfterSync() throws IOException, InterruptedException {
-    writeThenReadByRecordReader(500, 10000, 2, 177700, null);
+    writeThenReadByRecordReader(500, 1000, 2, 17770, null);
   }
 
   private void splitAfterSync() throws IOException, InterruptedException {
-    writeThenReadByRecordReader(500, 10000, 2, 199500, null);
+    writeThenReadByRecordReader(500, 1000, 2, 19950, null);
   }
 
   private void writeThenReadByRecordReader(int intervalRecordCount,
@@ -235,7 +233,7 @@ public class TestRCFileMapReduceInputFormat {
     HiveConf.setLongVar(context.getConfiguration(),
         HiveConf.ConfVars.MAPREDMAXSPLITSIZE, maxSplitSize);
     List<InputSplit> splits = inputFormat.getSplits(context);
-    assertEquals("splits length should be " + splitNumber, splitNumber, splits.size());
+    assertEquals("splits length should be " + splitNumber, splits.size(), splitNumber);
     int readCount = 0;
     for (int i = 0; i < splits.size(); i++) {
       TaskAttemptContext tac = ShimLoader.getHadoopShims().getHCatShim().createTaskAttemptContext(jonconf,

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -36,7 +36,6 @@ import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelFactories;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveFilter;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSemiJoin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,14 +77,7 @@ public abstract class HiveReduceExpressionsRule extends ReduceExpressionsRule {
    * {@link org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveJoin}.
    */
   public static final ReduceExpressionsRule JOIN_INSTANCE =
-      new JoinReduceExpressionsRule(HiveJoin.class, false, HiveRelFactories.HIVE_BUILDER);
-
-  /**
-   * Singleton rule that reduces constants inside a
-   * {@link org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSemiJoin}.
-   */
-  public static final ReduceExpressionsRule SEMIJOIN_INSTANCE =
-      new JoinReduceExpressionsRule(HiveSemiJoin.class, false, HiveRelFactories.HIVE_BUILDER);
+      new JoinReduceExpressionsRule(HiveJoin.class, HiveRelFactories.HIVE_BUILDER);
 
   //~ Constructors -----------------------------------------------------------
 
@@ -117,10 +109,10 @@ public abstract class HiveReduceExpressionsRule extends ReduceExpressionsRule {
           Lists.newArrayList(filter.getCondition());
       RexNode newConditionExp;
       boolean reduced;
-      final RelMetadataQuery mq = call.getMetadataQuery();
+      final RelMetadataQuery mq = RelMetadataQuery.instance();
       final RelOptPredicateList predicates =
           mq.getPulledUpPredicates(filter.getInput());
-      if (reduceExpressions(filter, expList, predicates, true, false)) {
+      if (reduceExpressions(filter, expList, predicates, true)) {
         assert expList.size() == 1;
         newConditionExp = expList.get(0);
         reduced = true;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,8 +19,9 @@
 package org.apache.hive.common.util;
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * BloomFilter is a probabilistic data structure for set membership check. BloomFilters are
@@ -71,15 +72,17 @@ public class BloomFilter {
 
   /**
    * A constructor to support rebuilding the BloomFilter from a serialized representation.
-   * @param bits - bits are used as such for bitset and are NOT copied, any changes to bits will affect bloom filter
-   * @param numFuncs - number of hash functions
+   * @param bits
+   * @param numBits
+   * @param numFuncs
    */
-  public BloomFilter(long[] bits, int numFuncs) {
+  public BloomFilter(List<Long> bits, int numBits, int numFuncs) {
     super();
-    // input long[] is set as such without copying, so any modification to the source will affect bloom filter
-    this.bitSet = new BitSet(bits);
-    this.numBits = bits.length * Long.SIZE;
-    this.numHashFunctions = numFuncs;
+    long[] copied = new long[bits.size()];
+    for (int i = 0; i < bits.size(); i++) copied[i] = bits.get(i);
+    bitSet = new BitSet(copied);
+    this.numBits = numBits;
+    numHashFunctions = numFuncs;
   }
 
   static int optimalNumOfHashFunctions(long n, long m) {
@@ -92,7 +95,7 @@ public class BloomFilter {
 
   public void add(byte[] val) {
     if (val == null) {
-      addBytes(null, -1, -1);
+      addBytes(val, -1, -1);
     } else {
       addBytes(val, 0, val.length);
     }
@@ -115,7 +118,7 @@ public class BloomFilter {
     int hash2 = (int) (hash64 >>> 32);
 
     for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = hash1 + ((i + 1) * hash2);
+      int combinedHash = hash1 + (i * hash2);
       // hashcode should be positive, flip all the bits if it's negative
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -129,7 +132,7 @@ public class BloomFilter {
     if (val == null) {
       add(null);
     } else {
-      add(val.getBytes(StandardCharsets.UTF_8));
+      add(val.getBytes());
     }
   }
 
@@ -143,7 +146,7 @@ public class BloomFilter {
 
   public boolean test(byte[] val) {
     if (val == null) {
-      return testBytes(null, -1, -1);
+      return testBytes(val, -1, -1);
     }
     return testBytes(val, 0, val.length);
   }
@@ -159,7 +162,7 @@ public class BloomFilter {
     int hash2 = (int) (hash64 >>> 32);
 
     for (int i = 1; i <= numHashFunctions; i++) {
-      int combinedHash = hash1 + ((i + 1) * hash2);
+      int combinedHash = hash1 + (i * hash2);
       // hashcode should be positive, flip all the bits if it's negative
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
@@ -176,7 +179,7 @@ public class BloomFilter {
     if (val == null) {
       return test(null);
     } else {
-      return test(val.getBytes(StandardCharsets.UTF_8));
+      return test(val.getBytes());
     }
   }
 
@@ -250,11 +253,11 @@ public class BloomFilter {
      * Serialized BloomFilter format:
      * 1 byte for the number of hash functions.
      * 1 big endian int(That is how OutputStream works) for the number of longs in the bitset
-     * big endian longs in the BloomFilter bitset
+     * big endina longs in the BloomFilter bitset
      */
     DataOutputStream dataOutputStream = new DataOutputStream(out);
     dataOutputStream.writeByte(bloomFilter.numHashFunctions);
-    dataOutputStream.writeInt(bloomFilter.getBitSet().length);
+    dataOutputStream.writeInt(bloomFilter.numBits);
     for (long value : bloomFilter.getBitSet()) {
       dataOutputStream.writeLong(value);
     }
@@ -275,12 +278,13 @@ public class BloomFilter {
     try {
       DataInputStream dataInputStream = new DataInputStream(in);
       int numHashFunc = dataInputStream.readByte();
-      int numLongs = dataInputStream.readInt();
-      long[] data = new long[numLongs];
-      for (int i = 0; i < numLongs; i++) {
-        data[i] = dataInputStream.readLong();
+      int numBits = dataInputStream.readInt();
+      int sz = (numBits/Long.SIZE);
+      List<Long> data = new ArrayList<Long>();
+      for (int i = 0; i < sz; i++) {
+        data.add(dataInputStream.readLong());
       }
-      return new BloomFilter(data, numHashFunc);
+      return new BloomFilter(data, numBits, numHashFunc);
     } catch (RuntimeException e) {
       IOException io = new IOException( "Unable to deserialize BloomFilter");
       io.initCause(e);
@@ -328,7 +332,7 @@ public class BloomFilter {
    * Bare metal bit set implementation. For performance reasons, this implementation does not check
    * for index bounds nor expand the bit set size if the specified index is greater than the size.
    */
-  static class BitSet {
+  public class BitSet {
     private final long[] data;
 
     public BitSet(long bits) {

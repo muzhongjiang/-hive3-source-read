@@ -38,11 +38,7 @@ select * from myinput1 a join myinput1 b on a.key<=>b.value AND a.value<=>b.key 
 
 -- outer joins
 SELECT * FROM myinput1 a LEFT OUTER JOIN myinput1 b ON a.key<=>b.value;
-
-EXPLAIN VECTORIZATION DETAIL DEBUG
 SELECT * FROM myinput1 a RIGHT OUTER JOIN myinput1 b ON a.key<=>b.value;
--- SELECT * FROM myinput1 a RIGHT OUTER JOIN myinput1 b ON a.key<=>b.value;
-
 SELECT * FROM myinput1 a FULL OUTER JOIN myinput1 b ON a.key<=>b.value;
 
 -- map joins
@@ -69,11 +65,7 @@ select * from myinput1 a join myinput1 b on a.key<=>b.value AND a.value<=>b.key 
 
 -- outer joins
 SELECT * FROM myinput1 a LEFT OUTER JOIN myinput1 b ON a.key<=>b.value;
-
-EXPLAIN VECTORIZATION DETAIL DEBUG
 SELECT * FROM myinput1 a RIGHT OUTER JOIN myinput1 b ON a.key<=>b.value;
--- SELECT * FROM myinput1 a RIGHT OUTER JOIN myinput1 b ON a.key<=>b.value;
-
 SELECT * FROM myinput1 a FULL OUTER JOIN myinput1 b ON a.key<=>b.value;
 
 -- map joins

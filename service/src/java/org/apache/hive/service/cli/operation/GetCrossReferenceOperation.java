@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,8 @@
 
 package org.apache.hive.service.cli.operation;
 
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -116,16 +117,11 @@ public class GetCrossReferenceOperation extends MetadataOperation {
     this.foreignSchemaName = foreignSchema;
     this.foreignTableName = foreignTable;
     this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
-    log.info("Starting GetCrossReferenceOperation with the following parameters:"
-        + " parentCatalogName={}, parentSchemaName={}, parentTableName={}, foreignCatalog={}, "
-        + "foreignSchema={}, foreignTable={}", parentCatalogName, parentSchemaName,
-        parentTableName, foreignCatalog, foreignSchema, foreignTable);
   }
 
   @Override
   public void runInternal() throws HiveSQLException {
     setState(OperationState.RUNNING);
-    log.info("Fetching cross reference metadata");
     try {
        IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
      ForeignKeysRequest fkReq = new ForeignKeysRequest(parentSchemaName, parentTableName, foreignSchemaName, foreignTableName);
@@ -134,35 +130,27 @@ public class GetCrossReferenceOperation extends MetadataOperation {
         return;
       }
       for (SQLForeignKey fk : fks) {
-        Object[] rowData = new Object[] {parentCatalogName,
-            fk.getPktable_db(), fk.getPktable_name(), fk.getPkcolumn_name(),
-            foreignCatalogName,
-            fk.getFktable_db(), fk.getFktable_name(), fk.getFkcolumn_name(),
-            fk.getKey_seq(), fk.getUpdate_rule(), fk.getDelete_rule(), fk.getFk_name(),
-            fk.getPk_name(), 0};
-        rowSet.addRow(rowData);
-        if (log.isDebugEnabled()) {
-          String debugMessage = getDebugMessage("cross reference", RESULT_SET_SCHEMA);
-          log.debug(debugMessage, rowData);
-        }
-      }
-      if (log.isDebugEnabled() && rowSet.numRows() == 0) {
-        log.debug("No cross reference metadata has been returned.");
+        rowSet.addRow(new Object[] {parentCatalogName,
+        fk.getPktable_db(), fk.getPktable_name(), fk.getPkcolumn_name(),
+        foreignCatalogName,
+        fk.getFktable_db(), fk.getFktable_name(), fk.getFkcolumn_name(),
+        fk.getKey_seq(), fk.getUpdate_rule(), fk.getDelete_rule(), fk.getFk_name(),
+        fk.getPk_name(), 0});
       }
       setState(OperationState.FINISHED);
-      log.info("Fetching cross reference metadata has been successfully finished");
     } catch (Exception e) {
       setState(OperationState.ERROR);
       throw new HiveSQLException(e);
     }
   }
 
+
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
   public TableSchema getResultSetSchema() throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     return RESULT_SET_SCHEMA;
   }
 
@@ -171,7 +159,7 @@ public class GetCrossReferenceOperation extends MetadataOperation {
    */
   @Override
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);

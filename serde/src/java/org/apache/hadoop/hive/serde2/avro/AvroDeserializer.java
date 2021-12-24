@@ -22,14 +22,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.rmi.server.UID;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 
 import org.apache.avro.Schema;
 import org.apache.avro.Schema.Type;
@@ -42,18 +41,13 @@ import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.EncoderFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.common.type.Date;
-import org.apache.hadoop.hive.common.type.Timestamp;
-import org.apache.hadoop.hive.common.type.TimestampTZUtil;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.common.type.CalendarUtils;
+import org.apache.avro.UnresolvedUnionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.StandardUnionObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
@@ -82,25 +76,6 @@ class AvroDeserializer {
    * record encoding.
    */
   private boolean warnedOnce = false;
-
-  /**
-   * Time zone in which file was written, which may be stored in metadata.
-   */
-  private ZoneId writerTimezone = null;
-
-  /**
-   * Whether the file was written using proleptic Gregorian or hybrid calendar.
-   */
-  private Boolean writerProleptic = null;
-
-  private Configuration configuration = null;
-
-  AvroDeserializer() {}
-
-  AvroDeserializer(Configuration configuration) {
-    this.configuration = configuration;
-  }
-
   /**
    * When encountering a record with an older schema than the one we're trying
    * to read, it is necessary to re-encode with a reader against the newer schema.
@@ -173,11 +148,9 @@ class AvroDeserializer {
     AvroGenericRecordWritable recordWritable = (AvroGenericRecordWritable) writable;
     GenericRecord r = recordWritable.getRecord();
     Schema fileSchema = recordWritable.getFileSchema();
-    writerTimezone = recordWritable.getWriterTimezone();
-    writerProleptic = recordWritable.getWriterProleptic();
 
-    UID recordReaderId = recordWritable.getRecordReaderID();
-    //If the record reader (from which the record is originated) is already seen and valid,
+   UID recordReaderId = recordWritable.getRecordReaderID();
+   //If the record reader (from which the record is originated) is already seen and valid,
     //no need to re-encode the record.
     if(!noEncodingNeeded.contains(recordReaderId)) {
       SchemaReEncoder reEncoder = null;
@@ -225,18 +198,11 @@ class AvroDeserializer {
 
   private Object worker(Object datum, Schema fileSchema, Schema recordSchema, TypeInfo columnType)
           throws AvroSerdeException {
-    if (datum == null) {
-      return null;
-    }
-
-    // Avro requires nullable types to be defined as unions of some type T
-    // and NULL. This is annoying and we're going to hide it from the user.
-
-    if (AvroSerdeUtils.isNullableType(recordSchema)) {
-      recordSchema = AvroSerdeUtils.getOtherTypeFromNullableType(recordSchema);
-    }
-    if (fileSchema != null && AvroSerdeUtils.isNullableType(fileSchema)) {
-      fileSchema = AvroSerdeUtils.getOtherTypeFromNullableType(fileSchema);
+    // Klaxon! Klaxon! Klaxon!
+    // Avro requires NULLable types to be defined as unions of some type T
+    // and NULL.  This is annoying and we're going to hide it from the user.
+    if(AvroSerdeUtils.isNullableType(recordSchema)) {
+      return deserializeNullableUnion(datum, fileSchema, recordSchema);
     }
 
     switch(columnType.getCategory()) {
@@ -317,85 +283,93 @@ class AvroDeserializer {
       str = datum.toString();
       HiveVarchar hvc = new HiveVarchar(str, maxLength);
       return hvc;
-    case DATE: {
+    case DATE:
       if (recordSchema.getType() != Type.INT) {
         throw new AvroSerdeException("Unexpected Avro schema for Date TypeInfo: " + recordSchema.getType());
       }
 
-      final boolean skipProlepticConversion;
-      if (writerProleptic != null) {
-        skipProlepticConversion = writerProleptic;
-      } else {
-        if (configuration != null) {
-          skipProlepticConversion = HiveConf.getBoolVar(
-              configuration, HiveConf.ConfVars.HIVE_AVRO_PROLEPTIC_GREGORIAN_DEFAULT);
-        } else {
-          skipProlepticConversion = HiveConf.ConfVars.HIVE_AVRO_PROLEPTIC_GREGORIAN_DEFAULT.defaultBoolVal;
-        }
-      }
-
-      return Date.ofEpochMilli(DateWritableV2.daysToMillis(
-          skipProlepticConversion ? (Integer) datum : CalendarUtils.convertDateToProleptic((Integer) datum)));
-    }
-    case TIMESTAMP: {
+      return new Date(DateWritable.daysToMillis((Integer)datum));
+    case TIMESTAMP:
       if (recordSchema.getType() != Type.LONG) {
         throw new AvroSerdeException(
-            "Unexpected Avro schema for Date TypeInfo: " + recordSchema.getType());
+          "Unexpected Avro schema for Date TypeInfo: " + recordSchema.getType());
       }
-      // If a time zone is found in file metadata (property name: writer.time.zone), convert the
-      // timestamp to that (writer) time zone in order to emulate time zone agnostic behavior.
-      // If not, then the file was written by an older version of hive, so we convert the timestamp
-      // to the server's (reader) time zone for backwards compatibility reasons - unless the
-      // session level configuration hive.avro.timestamp.skip.conversion is set to true, in which
-      // case we assume it was written by a time zone agnostic writer, so we don't convert it.
-      final boolean skipUTCConversion;
-      if (configuration != null) {
-        skipUTCConversion = HiveConf.getBoolVar(
-            configuration, HiveConf.ConfVars.HIVE_AVRO_TIMESTAMP_SKIP_CONVERSION);
-      } else {
-        skipUTCConversion = HiveConf.ConfVars.HIVE_AVRO_TIMESTAMP_SKIP_CONVERSION.defaultBoolVal;
-      }
-      boolean legacyConversion = false;
-      ZoneId convertToTimeZone;
-      if (writerTimezone != null) {
-        convertToTimeZone = writerTimezone;
-      } else if (skipUTCConversion) {
-        convertToTimeZone = ZoneOffset.UTC;
-      } else {
-        legacyConversion = configuration != null && HiveConf.getBoolVar(
-            configuration, HiveConf.ConfVars.HIVE_AVRO_TIMESTAMP_LEGACY_CONVERSION_ENABLED);
-        convertToTimeZone = TimeZone.getDefault().toZoneId();
-      }
-      final boolean skipProlepticConversion;
-      if (writerProleptic != null) {
-        skipProlepticConversion = writerProleptic;
-      } else {
-        if (configuration != null) {
-          skipProlepticConversion = HiveConf.getBoolVar(
-              configuration, HiveConf.ConfVars.HIVE_AVRO_PROLEPTIC_GREGORIAN_DEFAULT);
-        } else {
-          skipProlepticConversion = HiveConf.ConfVars.HIVE_AVRO_PROLEPTIC_GREGORIAN_DEFAULT.defaultBoolVal;
-        }
-      }
-      Timestamp timestamp = TimestampTZUtil.convertTimestampToZone(
-          Timestamp.ofEpochMilli((Long) datum), ZoneOffset.UTC, convertToTimeZone, legacyConversion);
-      if (!skipProlepticConversion) {
-        timestamp = Timestamp.ofEpochMilli(
-            CalendarUtils.convertTimeToProleptic(timestamp.toEpochMilli()));
-      }
-      return timestamp;
-    }
+      return new Timestamp((Long)datum);
     default:
       return datum;
     }
   }
 
+  /**
+   * Extract either a null or the correct type from a Nullable type.  This is
+   * horrible in that we rebuild the TypeInfo every time.
+   */
+  private Object deserializeNullableUnion(Object datum, Schema fileSchema, Schema recordSchema)
+                                            throws AvroSerdeException {
+    if (recordSchema.getTypes().size() == 2) {
+      // A type like [NULL, T]
+      return deserializeSingleItemNullableUnion(datum, fileSchema, recordSchema);
+    } else {
+      // Types like [NULL, T1, T2, ...]
+      if (datum == null) {
+        return null;
+      } else {
+        Schema newRecordSchema = AvroSerdeUtils.getOtherTypeFromNullableType(recordSchema);
+        return worker(datum, fileSchema, newRecordSchema,
+            SchemaToTypeInfo.generateTypeInfo(newRecordSchema, null));
+      }
+    }
+  }
+
+  private Object deserializeSingleItemNullableUnion(Object datum,
+                                                    Schema fileSchema,
+                                                    Schema recordSchema)
+      throws AvroSerdeException {
+    int tag = GenericData.get().resolveUnion(recordSchema, datum); // Determine index of value
+    Schema schema = recordSchema.getTypes().get(tag);
+    if (schema.getType().equals(Type.NULL)) {
+      return null;
+    }
+
+    Schema currentFileSchema = null;
+    if (fileSchema != null) {
+      if (fileSchema.getType() == Type.UNION) {
+        // The fileSchema may have the null value in a different position, so
+        // we need to get the correct tag
+        try {
+          tag = GenericData.get().resolveUnion(fileSchema, datum);
+          currentFileSchema = fileSchema.getTypes().get(tag);
+        } catch (UnresolvedUnionException e) {
+          if (LOG.isDebugEnabled()) {
+            String datumClazz = null;
+            if (datum != null) {
+              datumClazz = datum.getClass().getName();
+            }
+            String msg = "File schema union could not resolve union. fileSchema = " + fileSchema +
+              ", recordSchema = " + recordSchema + ", datum class = " + datumClazz + ": " + e;
+            LOG.debug(msg, e);
+          }
+          // This occurs when the datum type is different between
+          // the file and record schema. For example if datum is long
+          // and the field in the file schema is int. See HIVE-9462.
+          // in this case we will re-use the record schema as the file
+          // schema, Ultimately we need to clean this code up and will
+          // do as a follow-on to HIVE-9462.
+          currentFileSchema = schema;
+        }
+      } else {
+        currentFileSchema = fileSchema;
+      }
+    }
+    return worker(datum, currentFileSchema, schema,
+      SchemaToTypeInfo.generateTypeInfo(schema, null));
+  }
 
   private Object deserializeStruct(GenericData.Record datum, Schema fileSchema, StructTypeInfo columnType)
           throws AvroSerdeException {
     // No equivalent Java type for the backing structure, need to recurse and build a list
-    List<TypeInfo> innerFieldTypes = columnType.getAllStructFieldTypeInfos();
-    List<String> innerFieldNames = columnType.getAllStructFieldNames();
+    ArrayList<TypeInfo> innerFieldTypes = columnType.getAllStructFieldTypeInfos();
+    ArrayList<String> innerFieldNames = columnType.getAllStructFieldNames();
     List<Object> innerObjectRow = new ArrayList<Object>(innerFieldTypes.size());
 
     return workerBase(innerObjectRow, fileSchema, innerFieldNames, innerFieldTypes, datum);
@@ -403,7 +377,7 @@ class AvroDeserializer {
 
   private Object deserializeUnion(Object datum, Schema fileSchema, Schema recordSchema,
                                   UnionTypeInfo columnType) throws AvroSerdeException {
-    // Calculate tags individually since the schema can evolve and can have different tags. In worst case, both schemas are same
+    // Calculate tags individually since the schema can evolve and can have different tags. In worst case, both schemas are same 
     // and we would end up doing calculations twice to get the same tag
     int fsTag = GenericData.get().resolveUnion(fileSchema, datum); // Determine index of value from fileSchema
     int rsTag = GenericData.get().resolveUnion(recordSchema, datum); // Determine index of value from recordSchema

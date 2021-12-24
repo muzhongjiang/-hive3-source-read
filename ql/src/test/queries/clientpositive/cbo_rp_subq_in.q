@@ -1,7 +1,3 @@
---! qt:disabled:disabled for a along time - along with the other cbo_rb_subq tests
---! qt:dataset:src_cbo
---! qt:dataset:part
---! qt:dataset:lineitem
 set hive.mapred.mode=nonstrict;
 set hive.cbo.enable=true;
 set hive.cbo.returnpath.hiveop=true;

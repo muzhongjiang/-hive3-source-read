@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -69,7 +69,6 @@ public interface HiveHistory {
     TASK_NUM_MAPPERS,
     TASK_NUM_REDUCERS,
     ROWS_INSERTED,
-    SPARK_JOB_HANDLE_ID,
     SPARK_JOB_ID
   };
 
@@ -172,7 +171,7 @@ public interface HiveHistory {
    *
    * @param task
    */
-  public void startTask(String queryId, Task<?> task,
+  public void startTask(String queryId, Task<? extends Serializable> task,
       String taskName);
 
   /**
@@ -180,7 +179,7 @@ public interface HiveHistory {
    *
    * @param task
    */
-  public void endTask(String queryId, Task<?> task);
+  public void endTask(String queryId, Task<? extends Serializable> task);
 
   /**
    * Logs progress of a task if ConfVars.HIVE_LOG_INCREMENTAL_PLAN_PROGRESS is
@@ -188,7 +187,7 @@ public interface HiveHistory {
    *
    * @param task
    */
-  public void progressTask(String queryId, Task<?> task);
+  public void progressTask(String queryId, Task<? extends Serializable> task);
 
 
   /**

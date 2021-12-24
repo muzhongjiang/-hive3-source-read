@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,13 +19,10 @@
 
 package org.apache.hive.hcatalog.storagehandler;
 
-import java.util.Collection;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.Database;
-import org.apache.hadoop.hive.ql.hooks.ReadEntity;
-import org.apache.hadoop.hive.ql.hooks.WriteEntity;
 import org.apache.hadoop.hive.ql.metadata.AuthorizationException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
@@ -33,8 +30,6 @@ import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider;
 import org.apache.hadoop.hive.ql.security.authorization.HiveAuthorizationProvider;
 import org.apache.hadoop.hive.ql.security.authorization.Privilege;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAuthzPluginException;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePolicyProvider;
 
 /**
  * This class is a dummy implementation of HiveAuthorizationProvider to provide
@@ -80,8 +75,8 @@ class DummyHCatAuthProvider implements HiveAuthorizationProvider {
   * org.apache.hadoop.hive.ql.security.authorization.Privilege[])
   */
   @Override
-  public void authorizeDbLevelOperations(Privilege[] readRequiredPriv, Privilege[] writeRequiredPriv,
-      Collection<ReadEntity> inputs, Collection<WriteEntity> outputs) throws HiveException,
+  public void authorize(Privilege[] readRequiredPriv,
+              Privilege[] writeRequiredPriv) throws HiveException,
     AuthorizationException {
   }
 
@@ -144,11 +139,6 @@ class DummyHCatAuthProvider implements HiveAuthorizationProvider {
   public void authorize(Table table, Partition part, List<String> columns,
               Privilege[] readRequiredPriv, Privilege[] writeRequiredPriv)
     throws HiveException, AuthorizationException {
-  }
-
-  @Override
-  public HivePolicyProvider getHivePolicyProvider() throws HiveAuthzPluginException {
-    return null;
   }
 
 }

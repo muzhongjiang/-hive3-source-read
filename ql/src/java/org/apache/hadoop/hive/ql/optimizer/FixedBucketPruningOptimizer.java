@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,20 +23,21 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Stack;
-import java.util.stream.Collectors;
 
-import org.apache.hadoop.hive.common.type.Date;
-import org.apache.hadoop.hive.common.type.Timestamp;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.ql.exec.FilterOperator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
+import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.io.sarg.ConvertAstToSearchArg;
 import org.apache.hadoop.hive.ql.io.sarg.ExpressionTree;
 import org.apache.hadoop.hive.ql.io.sarg.ExpressionTree.Operator;
 import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.optimizer.PrunerOperatorFactory.FilterPruner;
@@ -45,7 +46,6 @@ import org.apache.hadoop.hive.ql.parse.ParseContext;
 import org.apache.hadoop.hive.ql.parse.PrunedPartitionList;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
-import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters.Converter;
@@ -62,13 +62,16 @@ import com.google.common.base.Preconditions;
  */
 public class FixedBucketPruningOptimizer extends Transform {
 
+  private static final Log LOG = LogFactory
+      .getLog(FixedBucketPruningOptimizer.class.getName());
+
   private final boolean compat;
 
   public FixedBucketPruningOptimizer(boolean compat) {
     this.compat = compat;
   }
 
-  public class NoopWalker implements SemanticNodeProcessor {
+  public class NoopWalker implements NodeProcessor {
     @Override
     public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx,
         Object... nodeOutputs) throws SemanticException {
@@ -77,34 +80,56 @@ public class FixedBucketPruningOptimizer extends Transform {
     }
   }
 
-  public static class BucketBitsetGenerator extends FilterPruner {
+  public class FixedBucketPartitionWalker extends FilterPruner {
 
     @Override
     protected void generatePredicate(NodeProcessorCtx procCtx,
-                                     FilterOperator fop, TableScanOperator top) throws SemanticException{
+        FilterOperator fop, TableScanOperator top) throws SemanticException,
+        UDFArgumentException {
       FixedBucketPruningOptimizerCtxt ctxt = ((FixedBucketPruningOptimizerCtxt) procCtx);
       Table tbl = top.getConf().getTableMetadata();
-      int numBuckets = tbl.getNumBuckets();
-      if (numBuckets <= 0 || tbl.getBucketCols().size() != 1) {
-        // bucketing isn't consistent or there are >1 bucket columns
-        // optimizer does not extract multiple column predicates for this
-        return;
-      }
-
-      if (tbl.isPartitioned()) {
-        // Make sure all the partitions have same bucket count.
-        PrunedPartitionList prunedPartList =
-            PartitionPruner.prune(top, ctxt.pctx, top.getConf().getAlias());
-        if (prunedPartList != null) {
-          for (Partition p : prunedPartList.getPartitions()) {
-            if (numBuckets != p.getBucketCount()) {
-              // disable feature
-              return;
+      if (tbl.getNumBuckets() > 0) {
+        final int nbuckets = tbl.getNumBuckets();
+        ctxt.setNumBuckets(nbuckets);
+        ctxt.setBucketCols(tbl.getBucketCols());
+        ctxt.setSchema(tbl.getFields());
+        if (tbl.isPartitioned()) {
+          // Run partition pruner to get partitions
+          ParseContext parseCtx = ctxt.pctx;
+          PrunedPartitionList prunedPartList;
+          try {
+            String alias = (String) parseCtx.getTopOps().keySet().toArray()[0];
+            prunedPartList = PartitionPruner.prune(top, parseCtx, alias);
+          } catch (HiveException e) {
+            throw new SemanticException(e.getMessage(), e);
+          }
+          if (prunedPartList != null) {
+            ctxt.setPartitions(prunedPartList);
+            for (Partition p : prunedPartList.getPartitions()) {
+              if (nbuckets != p.getBucketCount()) {
+                // disable feature
+                ctxt.setNumBuckets(-1);
+                break;
+              }
             }
           }
         }
       }
-      
+    }
+  }
+
+  public static class BucketBitsetGenerator extends FilterPruner {
+
+    @Override
+    protected void generatePredicate(NodeProcessorCtx procCtx,
+        FilterOperator fop, TableScanOperator top) throws SemanticException,
+        UDFArgumentException {
+      FixedBucketPruningOptimizerCtxt ctxt = ((FixedBucketPruningOptimizerCtxt) procCtx);
+      if (ctxt.getNumBuckets() <= 0 || ctxt.getBucketCols().size() != 1) {
+        // bucketing isn't consistent or there are >1 bucket columns
+        // optimizer does not extract multiple column predicates for this
+        return;
+      }
       ExprNodeGenericFuncDesc filter = top.getConf().getFilterExpr();
       if (filter == null) {
         return;
@@ -114,12 +139,11 @@ public class FixedBucketPruningOptimizer extends Transform {
       if (sarg == null) {
         return;
       }
-      final String bucketCol = tbl.getBucketCols().get(0);
+      final String bucketCol = ctxt.getBucketCols().get(0);
       StructField bucketField = null;
-      for (StructField fs : tbl.getFields()) {
+      for (StructField fs : ctxt.getSchema()) {
         if(fs.getFieldName().equals(bucketCol)) {
           bucketField = fs;
-          break;
         }
       }
       Preconditions.checkArgument(bucketField != null);
@@ -195,18 +219,12 @@ public class FixedBucketPruningOptimizer extends Transform {
             return;
           }
         }
-      } else if (expr.getOperator() == Operator.NOT) {
-        // TODO: think we can handle NOT IS_NULL?
-        return;
       }
       // invariant: bucket-col IN literals of type bucketField
-      BitSet bs = new BitSet(numBuckets);
+      BitSet bs = new BitSet(ctxt.getNumBuckets());
       bs.clear();
       PrimitiveObjectInspector bucketOI = (PrimitiveObjectInspector)bucketField.getFieldObjectInspector();
       PrimitiveObjectInspector constOI = PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector(bucketOI.getPrimitiveCategory());
-      // Fetch the bucketing version from table scan operator
-      int bucketingVersion = top.getConf().getTableMetadata().getBucketingVersion();
-
       for (Object literal: literals) {
         PrimitiveObjectInspector origOI = PrimitiveObjectInspectorFactory.getPrimitiveObjectInspectorFromClass(literal.getClass());
         Converter conv = ObjectInspectorConverters.getConverter(origOI, constOI);
@@ -215,51 +233,33 @@ public class FixedBucketPruningOptimizer extends Transform {
           return;
         }
         Object convCols[] = new Object[] {conv.convert(literal)};
-        int n = bucketingVersion == 2 ?
-            ObjectInspectorUtils.getBucketNumber(convCols, new ObjectInspector[]{constOI}, numBuckets) :
-            ObjectInspectorUtils.getBucketNumberOld(convCols, new ObjectInspector[]{constOI}, numBuckets);
+        int n = ObjectInspectorUtils.getBucketNumber(convCols, new ObjectInspector[]{constOI}, ctxt.getNumBuckets());
         bs.set(n);
-        if (bucketingVersion == 1 && ctxt.isCompat()) {
-          int h = ObjectInspectorUtils.getBucketHashCodeOld(convCols, new ObjectInspector[]{constOI});
+        if (ctxt.isCompat()) {
+          int h = ObjectInspectorUtils.getBucketHashCode(convCols, new ObjectInspector[]{constOI});
           // -ve hashcodes had conversion to positive done in different ways in the past
           // abs() is now obsolete and all inserts now use & Integer.MAX_VALUE 
           // the compat mode assumes that old data could've been loaded using the other conversion
-          n = ObjectInspectorUtils.getBucketNumber(Math.abs(h), numBuckets);
+          n = ObjectInspectorUtils.getBucketNumber(Math.abs(h), ctxt.getNumBuckets());
           bs.set(n);
         }
       }
-      if (bs.cardinality() < numBuckets) {
+      if (bs.cardinality() < ctxt.getNumBuckets()) {
         // there is a valid bucket pruning filter
         top.getConf().setIncludedBuckets(bs);
-        top.getConf().setNumBuckets(numBuckets);
+        top.getConf().setNumBuckets(ctxt.getNumBuckets());
       }
     }
 
     private boolean addLiteral(List<Object> literals, PredicateLeaf leaf) {
       switch (leaf.getOperator()) {
       case EQUALS:
-        return literals.add(
-            convertLiteral(leaf.getLiteral()));
+        return literals.add(leaf.getLiteral());
       case IN:
-        return literals.addAll(
-            leaf.getLiteralList().stream().map(l -> convertLiteral(l)).collect(Collectors.toList()));
+        return literals.addAll(leaf.getLiteralList());
       default:
         return false;
       }
-    }
-
-    private Object convertLiteral(Object o) {
-      // This is a bit hackish to fix mismatch between SARG and Hive types
-      // for Timestamp and Date. TODO: Move those types to storage-api.
-      if (o instanceof java.sql.Date) {
-        java.sql.Date sqlDate = (java.sql.Date)o;
-        return Date.ofEpochDay(
-            DateWritable.millisToDays(sqlDate.getTime()));
-      } else if (o instanceof java.sql.Timestamp) {
-        java.sql.Timestamp sqlTimestamp = (java.sql.Timestamp)o;
-        return Timestamp.ofEpochMilli(sqlTimestamp.getTime(), sqlTimestamp.getNanos());
-      }
-      return o;
     }
   }
 
@@ -321,9 +321,19 @@ public class FixedBucketPruningOptimizer extends Transform {
     FixedBucketPruningOptimizerCtxt opPartWalkerCtx = new FixedBucketPruningOptimizerCtxt(compat,
         pctx);
 
-    // walk operator tree to create expression tree for filter buckets
+    // Retrieve all partitions generated from partition pruner and partition
+    // column pruner
     PrunerUtils.walkOperatorTree(pctx, opPartWalkerCtx,
-        new BucketBitsetGenerator(), new NoopWalker());
+        new FixedBucketPartitionWalker(), new NoopWalker());
+
+    if (opPartWalkerCtx.getNumBuckets() < 0) {
+      // bail out
+      return pctx;
+    } else {
+      // walk operator tree to create expression tree for filter buckets
+      PrunerUtils.walkOperatorTree(pctx, opPartWalkerCtx,
+          new BucketBitsetGenerator(), new NoopWalker());
+    }
 
     return pctx;
   }

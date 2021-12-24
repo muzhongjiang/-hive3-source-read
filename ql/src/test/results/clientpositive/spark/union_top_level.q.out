@@ -5,8 +5,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
 union all
@@ -14,8 +12,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -33,10 +29,9 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 0.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -46,20 +41,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 3 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 1.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -69,20 +61,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 5 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 2.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -92,14 +81,11 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -120,7 +106,6 @@ STAGE PLANS:
                           output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
         Reducer 4 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -141,7 +126,6 @@ STAGE PLANS:
                           output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
         Reducer 6 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -198,15 +182,11 @@ select * from (select s1.key as k, s2.value as v from src s1 join src s2 on (s1.
 union all
 select * from (select s1.key as k, s2.value as v from src s1 join src s2 on (s1.key = s2.key) order by k limit 10)b
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select * from (select s1.key as k, s2.value as v from src s1 join src s2 on (s1.key = s2.key) order by k limit 10)a
 union all
 select * from (select s1.key as k, s2.value as v from src s1 join src s2 on (s1.key = s2.key) order by k limit 10)b
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -224,7 +204,6 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: s2
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -235,17 +214,14 @@ STAGE PLANS:
                       Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: string)
-            Execution mode: vectorized
         Map 4 
             Map Operator Tree:
                 TableScan
                   alias: s1
-                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -256,11 +232,9 @@ STAGE PLANS:
                       Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
-                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
-            Execution mode: vectorized
         Reducer 2 
             Reduce Operator Tree:
               Join Operator
@@ -277,13 +251,11 @@ STAGE PLANS:
                   Statistics: Num rows: 550 Data size: 5843 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col0 (type: string)
-                    null sort order: z
                     sort order: +
                     Statistics: Num rows: 550 Data size: 5843 Basic stats: COMPLETE Column stats: NONE
                     TopN Hash Memory Usage: 0.1
                     value expressions: _col1 (type: string)
         Reducer 3 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: string), VALUE._col0 (type: string)
@@ -300,7 +272,6 @@ STAGE PLANS:
                         output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                         serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
         Reducer 7 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: string), VALUE._col0 (type: string)
@@ -363,9 +334,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 PREHOOK: type: CREATETABLE_AS_SELECT
-PREHOOK: Input: default@src
-PREHOOK: Output: database:default
-PREHOOK: Output: default@union_top
 POSTHOOK: query: explain
 create table union_top as
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
@@ -374,9 +342,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 POSTHOOK: type: CREATETABLE_AS_SELECT
-POSTHOOK: Input: default@src
-POSTHOOK: Output: database:default
-POSTHOOK: Output: default@union_top
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -396,10 +361,9 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 0.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -409,20 +373,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 3 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 1.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -432,20 +393,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 5 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 2.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -455,14 +413,11 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -484,7 +439,6 @@ STAGE PLANS:
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.union_top
         Reducer 4 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -506,7 +460,6 @@ STAGE PLANS:
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.union_top
         Reducer 6 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -535,16 +488,16 @@ STAGE PLANS:
 #### A masked pattern was here ####
 
   Stage: Stage-3
-    Create Table
-      columns: key string, value int
-      name: default.union_top
-      input format: org.apache.hadoop.mapred.TextInputFormat
-      output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
-      serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+      Create Table Operator:
+        Create Table
+          columns: key string, value int
+          input format: org.apache.hadoop.mapred.TextInputFormat
+          output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
+          serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+          name: default.union_top
 
   Stage: Stage-2
-    Stats Work
-      Basic Stats Work:
+    Stats-Aggr Operator
 
 PREHOOK: query: create table union_top as
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
@@ -599,8 +552,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-PREHOOK: Output: default@union_top
 POSTHOOK: query: explain
 insert into table union_top
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
@@ -609,8 +560,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-POSTHOOK: Output: default@union_top
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -629,10 +578,9 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 0.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -642,20 +590,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 3 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 1.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -665,20 +610,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 5 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 2.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -688,14 +630,11 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -717,7 +656,6 @@ STAGE PLANS:
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.union_top
         Reducer 4 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -739,7 +677,6 @@ STAGE PLANS:
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.union_top
         Reducer 6 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -772,8 +709,7 @@ STAGE PLANS:
               name: default.union_top
 
   Stage: Stage-2
-    Stats Work
-      Basic Stats Work:
+    Stats-Aggr Operator
 
 PREHOOK: query: insert into table union_top
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
@@ -820,8 +756,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 PREHOOK: type: QUERY
-PREHOOK: Input: default@src
-PREHOOK: Output: default@union_top
 POSTHOOK: query: explain
 insert overwrite table union_top
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
@@ -830,8 +764,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-POSTHOOK: Output: default@union_top
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -850,10 +782,9 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 0.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 0.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -863,20 +794,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 3 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 1.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 1.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -886,20 +814,17 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Map 5 
             Map Operator Tree:
                 TableScan
                   alias: src
-                  filterExpr: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: ((UDFToDouble(key) % 3.0D) = 2.0D) (type: boolean)
+                    predicate: ((UDFToDouble(key) % 3.0) = 2.0) (type: boolean)
                     Statistics: Num rows: 250 Data size: 2656 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: string)
@@ -909,14 +834,11 @@ STAGE PLANS:
                         Number of rows: 3
                         Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                         Reduce Output Operator
-                          null sort order: 
                           sort order: 
                           Statistics: Num rows: 3 Data size: 30 Basic stats: COMPLETE Column stats: NONE
                           TopN Hash Memory Usage: 0.1
                           value expressions: _col0 (type: string)
-            Execution mode: vectorized
         Reducer 2 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -938,7 +860,6 @@ STAGE PLANS:
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.union_top
         Reducer 4 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -960,7 +881,6 @@ STAGE PLANS:
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.union_top
         Reducer 6 
-            Execution mode: vectorized
             Reduce Operator Tree:
               Select Operator
                 expressions: VALUE._col0 (type: string)
@@ -993,8 +913,7 @@ STAGE PLANS:
               name: default.union_top
 
   Stage: Stage-2
-    Stats Work
-      Basic Stats Work:
+    Stats-Aggr Operator
 
 PREHOOK: query: insert overwrite table union_top
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
@@ -1041,9 +960,6 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 PREHOOK: type: CREATEVIEW
-PREHOOK: Input: default@src
-PREHOOK: Output: database:default
-PREHOOK: Output: default@union_top_view
 POSTHOOK: query: explain
 create view union_top_view as
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
@@ -1052,27 +968,27 @@ select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
 POSTHOOK: type: CREATEVIEW
-POSTHOOK: Input: default@src
-POSTHOOK: Output: database:default
-POSTHOOK: Output: default@union_top_view
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
 
 STAGE PLANS:
   Stage: Stage-1
-    Create View
-      columns: key string, value int
-      expanded text: select `a`.`key`, `a`.`value` from (select `src`.`key`, 0 as `value` from `default`.`src` where `src`.`key` % 3 == 0 limit 3)`a`
+      Create View Operator:
+        Create View
+          or replace: false
+          columns: key string, value int
+          expanded text: select `a`.`key`, `a`.`value` from (select `src`.`key`, 0 as `value` from `default`.`src` where `src`.`key` % 3 == 0 limit 3)`a`
 union all
 select `b`.`key`, `b`.`value` from (select `src`.`key`, 1 as `value` from `default`.`src` where `src`.`key` % 3 == 1 limit 3)`b`
 union all
 select `c`.`key`, `c`.`value` from (select `src`.`key`, 2 as `value` from `default`.`src` where `src`.`key` % 3 == 2 limit 3)`c`
-      name: default.union_top_view
-      original text: select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
+          name: default.union_top_view
+          original text: select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a
 union all
 select * from (select key, 1 as value from src where key % 3 == 1 limit 3)b
 union all
 select * from (select key, 2 as value from src where key % 3 == 2 limit 3)c
+          rewrite enabled: false
 
 PREHOOK: query: create view union_top_view as
 select * from (select key, 0 as value from src where key % 3 == 0 limit 3)a

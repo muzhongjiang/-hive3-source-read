@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,6 +38,7 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
@@ -137,8 +138,8 @@ public class SkewJoinHandler {
 
       try {
         AbstractSerDe serializer = (AbstractSerDe) ReflectionUtils.newInstance(tblDesc.get(
-            alias).getSerDeClass(), null);
-        serializer.initialize(null, tblDesc.get(alias).getProperties(), null);
+            alias).getDeserializerClass(), null);
+        SerDeUtils.initializeSerDe(serializer, null, tblDesc.get(alias).getProperties(), null);
         tblSerializers.put((byte) i, serializer);
       } catch (SerDeException e) {
         LOG.error("Skewjoin will be disabled due to " + e.getMessage(), e);

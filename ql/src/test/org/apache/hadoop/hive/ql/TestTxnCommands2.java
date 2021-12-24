@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,11 +22,10 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,10 +34,9 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
-import org.apache.hadoop.hive.common.ValidTxnWriteIdList;
+import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.Metastore;
-import org.apache.hadoop.hive.metastore.MetastoreTaskThread;
+import org.apache.hadoop.hive.metastore.HouseKeeperService;
 import org.apache.hadoop.hive.metastore.api.CommitTxnRequest;
 import org.apache.hadoop.hive.metastore.api.CompactionRequest;
 import org.apache.hadoop.hive.metastore.api.CompactionType;
@@ -48,35 +46,31 @@ import org.apache.hadoop.hive.metastore.api.OpenTxnsResponse;
 import org.apache.hadoop.hive.metastore.api.ShowCompactRequest;
 import org.apache.hadoop.hive.metastore.api.ShowCompactResponse;
 import org.apache.hadoop.hive.metastore.api.ShowCompactResponseElement;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
-import org.apache.hadoop.hive.metastore.txn.AcidHouseKeeperService;
-import org.apache.hadoop.hive.metastore.utils.TestTxnDbUtil;
+import org.apache.hadoop.hive.metastore.txn.TxnDbUtil;
 import org.apache.hadoop.hive.metastore.txn.TxnStore;
 import org.apache.hadoop.hive.metastore.txn.TxnUtils;
-import org.apache.hadoop.hive.ql.io.AcidOutputFormat;
-import org.apache.hadoop.hive.ql.io.AcidUtils;
-import org.apache.hadoop.hive.ql.io.BucketCodec;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
-import org.apache.hadoop.hive.ql.lockmgr.HiveTxnManager;
-import org.apache.hadoop.hive.ql.lockmgr.TxnManagerFactory;
-import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
+import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hadoop.hive.metastore.txn.AcidOpenTxnsCounterService;
+import org.apache.hadoop.hive.ql.txn.AcidCompactionHistoryService;
+import org.apache.hadoop.hive.ql.txn.AcidOpenTxnsCounterService;
+import org.apache.hadoop.hive.ql.txn.compactor.Cleaner;
 import org.apache.hadoop.hive.ql.txn.compactor.Initiator;
-import org.apache.orc.OrcFile;
-import org.apache.orc.Reader;
-import org.apache.orc.TypeDescription;
+import org.apache.hadoop.hive.ql.txn.compactor.Worker;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * TODO: this should be merged with TestTxnCommands once that is checked in
+ * specifically the tests; the supporting code here is just a clone of TestTxnCommands
+ */
 public class TestTxnCommands2 {
   static final private Logger LOG = LoggerFactory.getLogger(TestTxnCommands2.class);
   protected static final String TEST_DATA_DIR = new File(System.getProperty("java.io.tmpdir") +
@@ -85,77 +79,49 @@ public class TestTxnCommands2 {
   ).getPath().replaceAll("\\\\", "/");
   protected static final String TEST_WAREHOUSE_DIR = TEST_DATA_DIR + "/warehouse";
   //bucket count for test tables; set it to 1 for easier debugging
-  static int BUCKET_COUNT = 2;
+  protected static int BUCKET_COUNT = 2;
   @Rule
   public TestName testName = new TestName();
 
   protected HiveConf hiveConf;
   protected Driver d;
-  private TxnStore txnHandler;
-  protected enum Table {
+  protected static enum Table {
     ACIDTBL("acidTbl"),
-    ACIDTBLPART("acidTblPart", "p"),
+    ACIDTBLPART("acidTblPart"),
     NONACIDORCTBL("nonAcidOrcTbl"),
-    NONACIDPART("nonAcidPart", "p"),
-    NONACIDPART2("nonAcidPart2", "p2"),
-    ACIDNESTEDPART("acidNestedPart", "p,q"),
-    MMTBL("mmTbl");
+    NONACIDPART("nonAcidPart"),
+    NONACIDPART2("nonAcidPart2"),
+    ACIDNESTEDPART("acidNestedPart");
 
     private final String name;
-    private final String partitionColumns;
     @Override
     public String toString() {
       return name;
     }
-    String getPartitionColumns() {
-      return partitionColumns;
-    }
     Table(String name) {
-      this(name, null);
-    }
-    Table(String name, String partitionColumns) {
       this.name = name;
-      this.partitionColumns = partitionColumns;
     }
   }
-  @Rule
-  public ExpectedException expectedException = ExpectedException.none();
 
   @Before
   public void setUp() throws Exception {
     setUpWithTableProperties("'transactional'='true'");
   }
 
-  void setUpWithTableProperties(String tableProperties) throws Exception {
+  protected void setUpWithTableProperties(String tableProperties) throws Exception {
     hiveConf = new HiveConf(this.getClass());
-    Path workDir = new Path(System.getProperty("test.tmp.dir",
-        "target" + File.separator + "test" + File.separator + "tmp"));
-    hiveConf.set("mapred.local.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "local");
-    hiveConf.set("mapred.system.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "system");
-    hiveConf.set("mapreduce.jobtracker.staging.root.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "staging");
-    hiveConf.set("mapred.temp.dir", workDir + File.separator + this.getClass().getSimpleName()
-        + File.separator + "mapred" + File.separator + "temp");
     hiveConf.set(HiveConf.ConfVars.PREEXECHOOKS.varname, "");
     hiveConf.set(HiveConf.ConfVars.POSTEXECHOOKS.varname, "");
     hiveConf.set(HiveConf.ConfVars.METASTOREWAREHOUSE.varname, TEST_WAREHOUSE_DIR);
+    hiveConf.setVar(HiveConf.ConfVars.HIVEMAPREDMODE, "nonstrict");
     hiveConf.setVar(HiveConf.ConfVars.HIVEINPUTFORMAT, HiveInputFormat.class.getName());
     hiveConf
         .setVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER,
             "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory");
     hiveConf.setBoolVar(HiveConf.ConfVars.MERGE_CARDINALITY_VIOLATION_CHECK, true);
-    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.MERGE_SPLIT_UPDATE, true);
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVESTATSCOLAUTOGATHER, false);
-    //TestTxnCommands2WithSplitUpdateAndVectorization has the vectorized version
-    //of these tests.
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, false);
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVEOPTIMIZEMETADATAQUERIES, false);
 
-    TestTxnDbUtil.setConfValues(hiveConf);
-    TestTxnDbUtil.prepDb(hiveConf);
-    txnHandler = TxnUtils.getTxnStore(hiveConf);
+    TxnDbUtil.setConfValues(hiveConf);
+    TxnDbUtil.prepDb(hiveConf);
     File f = new File(TEST_WAREHOUSE_DIR);
     if (f.exists()) {
       FileUtil.fullyDelete(f);
@@ -163,9 +129,8 @@ public class TestTxnCommands2 {
     if (!(new File(TEST_WAREHOUSE_DIR).mkdirs())) {
       throw new RuntimeException("Could not create " + TEST_WAREHOUSE_DIR);
     }
-    SessionState ss = SessionState.start(hiveConf);
-    ss.applyAuthorizationPolicy();
-    d = new Driver(new QueryState.Builder().withHiveConf(hiveConf).nonIsolated().build());
+    SessionState.start(new SessionState(hiveConf));
+    d = new Driver(hiveConf);
     d.setMaxRows(10000);
     dropTables();
     runStatementOnDriver("create table " + Table.ACIDTBL + "(a int, b int) clustered by (a) into " + BUCKET_COUNT + " buckets stored as orc TBLPROPERTIES (" + tableProperties + ")");
@@ -177,7 +142,6 @@ public class TestTxnCommands2 {
     runStatementOnDriver("create table " + Table.ACIDNESTEDPART +
       "(a int, b int) partitioned by (p int, q int) clustered by (a) into " + BUCKET_COUNT +
       " buckets stored as orc TBLPROPERTIES (" + tableProperties + ")");
-    runStatementOnDriver("create table " + Table.MMTBL + "(a int, b int) TBLPROPERTIES ('transactional'='true', 'transactional_properties'='insert_only')");
   }
 
   protected void dropTables() throws Exception {
@@ -190,11 +154,11 @@ public class TestTxnCommands2 {
     try {
       if (d != null) {
         dropTables();
-        d.close();
         d.destroy();
+        d.close();
         d = null;
       }
-      TestTxnDbUtil.cleanDb(hiveConf);
+      TxnDbUtil.cleanDb(hiveConf);
     } finally {
       FileUtils.deleteDirectory(new File(TEST_DATA_DIR));
     }
@@ -252,7 +216,14 @@ public class TestTxnCommands2 {
     List<String> rs0 = runStatementOnDriver(query);
     Assert.assertEquals("Read failed", 0, rs0.size());
     runStatementOnDriver("alter table " + Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
+    Worker t = new Worker();
+    t.setThreadId((int) t.getId());
+    t.setHiveConf(hiveConf);
+    AtomicBoolean stop = new AtomicBoolean();
+    AtomicBoolean looped = new AtomicBoolean();
+    stop.set(true);
+    t.init(stop, looped);
+    t.run();
     //now we have base_0001 file
     int[][] tableData2 = {{1, 7}, {5, 6}, {7, 8}, {9, 10}};
     runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData2));
@@ -292,7 +263,14 @@ public class TestTxnCommands2 {
     int[][] tableData = {{1,2}};
     runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData));
     runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
+    Worker t = new Worker();
+    t.setThreadId((int) t.getId());
+    t.setHiveConf(hiveConf);
+    AtomicBoolean stop = new AtomicBoolean();
+    AtomicBoolean looped = new AtomicBoolean();
+    stop.set(true);
+    t.init(stop, looped);
+    t.run();
     int[][] tableData2 = {{5,6}};
     runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData2));
     List<String> rs1 = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " where b > 0 order by a,b");
@@ -316,8 +294,8 @@ public class TestTxnCommands2 {
     // 1. Insert five rows to Non-ACID table.
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(1,2),(3,4),(5,6),(7,8),(9,10)");
 
-    // 2. Convert NONACIDORCTBL to ACID table.  //todo: remove trans_prop after HIVE-17089
-    runStatementOnDriver("alter table " + Table.NONACIDORCTBL + " SET TBLPROPERTIES ('transactional'='true', 'transactional_properties'='default')");
+    // 2. Convert NONACIDORCTBL to ACID table.
+    runStatementOnDriver("alter table " + Table.NONACIDORCTBL + " SET TBLPROPERTIES ('transactional'='true')");
     runStatementOnDriver("update " + Table.NONACIDORCTBL + " set b = b*2 where b in (4,10)");
     runStatementOnDriver("delete from " + Table.NONACIDORCTBL + " where a = 7");
 
@@ -327,6 +305,7 @@ public class TestTxnCommands2 {
     // 3. Perform a major compaction.
     runStatementOnDriver("alter table "+ Table.NONACIDORCTBL + " compact 'MAJOR'");
     runWorker(hiveConf);
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
     ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
     Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
@@ -339,10 +318,82 @@ public class TestTxnCommands2 {
     resultData = new int[][] {{3,8}, {5,6}, {9,20}};
     Assert.assertEquals(stringifyValues(resultData), rs);
   }
+
+  @Test
+  public void testBICompactedNoStripes() throws Exception {
+    hiveConf.set(HiveConf.ConfVars.HIVE_ORC_SPLIT_STRATEGY.varname, "BI");
+    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
+    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    int[][] resultData = new int[][] {{1,2}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
+    runStatementOnDriver("delete from " + Table.ACIDTBL);
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    Assert.assertEquals(0, rs.size());
+    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    resultData = new int[][] {{3,4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
+    runStatementOnDriver("delete from " + Table.ACIDTBL);
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    Assert.assertEquals(0, rs.size());
+
+    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
+    runWorker(hiveConf);
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
+    ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
+    Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
+    Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
+    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+
+    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    resultData = new int[][] {{3,4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
+    runStatementOnDriver("delete from " + Table.ACIDTBL);
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    Assert.assertEquals(0, rs.size());
+    hiveConf.set(HiveConf.ConfVars.HIVE_ORC_SPLIT_STRATEGY.varname, "HYBRID");
+  }
+
+  @Test
+  public void testETLCompactedNoStripes() throws Exception {
+    hiveConf.set(HiveConf.ConfVars.HIVE_ORC_SPLIT_STRATEGY.varname, "ETL");
+    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
+    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    int[][] resultData = new int[][] {{1,2}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
+    runStatementOnDriver("delete from " + Table.ACIDTBL);
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    Assert.assertEquals(0, rs.size());
+    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    resultData = new int[][] {{3,4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
+    runStatementOnDriver("delete from " + Table.ACIDTBL);
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    Assert.assertEquals(0, rs.size());
+
+    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
+    runWorker(hiveConf);
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
+    ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
+    Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
+    Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
+    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+
+    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    resultData = new int[][] {{3,4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
+    runStatementOnDriver("delete from " + Table.ACIDTBL);
+    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
+    Assert.assertEquals(0, rs.size());
+    hiveConf.set(HiveConf.ConfVars.HIVE_ORC_SPLIT_STRATEGY.varname, "HYBRID");
+  }
+
   /**
    * see HIVE-16177
    * See also {@link TestTxnCommands#testNonAcidToAcidConversion01()}
-   * {@link TestTxnNoBuckets#testCTAS()}
    */
   @Test
   public void testNonAcidToAcidConversion02() throws Exception {
@@ -353,8 +404,8 @@ public class TestTxnCommands2 {
     //create 1 row in a file 000001_0_copy2 (and empty 000000_0_copy2?)
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(1,6)");
 
-    //convert the table to Acid  //todo: remove trans_prop after HIVE-17089
-    runStatementOnDriver("alter table " + Table.NONACIDORCTBL + " SET TBLPROPERTIES ('transactional'='true', 'transactional_properties'='default')");
+    //convert the table to Acid
+    runStatementOnDriver("alter table " + Table.NONACIDORCTBL + " SET TBLPROPERTIES ('transactional'='true')");
     List<String> rs1 = runStatementOnDriver("describe "+ Table.NONACIDORCTBL);
     //create a some of delta directories
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(0,15),(1,16)");
@@ -367,34 +418,29 @@ public class TestTxnCommands2 {
     for(String s : rs) {
       LOG.warn(s);
     }
-    Assert.assertEquals(536870912, BucketCodec.V1.encode(new AcidOutputFormat.Options(hiveConf).bucket(0)));
-    Assert.assertEquals(536936448, BucketCodec.V1.encode(new AcidOutputFormat.Options(hiveConf).bucket(1)));
     /*
-     * All ROW__IDs are unique on read after conversion to acid
+     * All ROW__IDs are unique on read after conversion to acid 
      * ROW__IDs are exactly the same before and after compaction
-     * Also check the file name (only) after compaction for completeness
-     * Note: order of rows in a file ends up being the reverse of order in values clause (why?!)
+     * Also check the file name after compaction for completeness
      */
     String[][] expected = {
-        {"{\"writeid\":0,\"bucketid\":536936448,\"rowid\":2}\t0\t13",  "bucket_00001"},
-        {"{\"writeid\":10000001,\"bucketid\":536936448,\"rowid\":0}\t0\t15", "bucket_00001"},
-        {"{\"writeid\":10000003,\"bucketid\":536936448,\"rowid\":0}\t0\t17", "bucket_00001"},
-        {"{\"writeid\":10000002,\"bucketid\":536936448,\"rowid\":0}\t0\t120", "bucket_00001"},
-        {"{\"writeid\":0,\"bucketid\":536936448,\"rowid\":1}\t1\t2",   "bucket_00001"},
-        {"{\"writeid\":0,\"bucketid\":536936448,\"rowid\":5}\t1\t4",   "bucket_00001"},
-        {"{\"writeid\":0,\"bucketid\":536936448,\"rowid\":4}\t1\t5",   "bucket_00001"},
-        {"{\"writeid\":0,\"bucketid\":536936448,\"rowid\":6}\t1\t6",   "bucket_00001"},
-        {"{\"writeid\":10000001,\"bucketid\":536936448,\"rowid\":1}\t1\t16", "bucket_00001"}
+      {"{\"transactionid\":0,\"bucketid\":0,\"rowid\":0}\t0\t13",  "bucket_00000"},
+      {"{\"transactionid\":1,\"bucketid\":0,\"rowid\":0}\t0\t15", "bucket_00000"},
+      {"{\"transactionid\":3,\"bucketid\":0,\"rowid\":0}\t0\t17", "bucket_00000"},
+      {"{\"transactionid\":0,\"bucketid\":0,\"rowid\":1}\t0\t120", "bucket_00000"},
+      {"{\"transactionid\":0,\"bucketid\":1,\"rowid\":1}\t1\t2",   "bucket_00001"},
+      {"{\"transactionid\":0,\"bucketid\":1,\"rowid\":3}\t1\t4",   "bucket_00001"},
+      {"{\"transactionid\":0,\"bucketid\":1,\"rowid\":2}\t1\t5",   "bucket_00001"},
+      {"{\"transactionid\":0,\"bucketid\":1,\"rowid\":4}\t1\t6",   "bucket_00001"},
+      {"{\"transactionid\":1,\"bucketid\":1,\"rowid\":0}\t1\t16", "bucket_00001"}
     };
     Assert.assertEquals("Unexpected row count before compaction", expected.length, rs.size());
     for(int i = 0; i < expected.length; i++) {
-      Assert.assertTrue("Actual line " + i + " bc: " + rs.get(i) + "; expected " + expected[i][0],
-          rs.get(i).startsWith(expected[i][0]));
+      Assert.assertTrue("Actual line " + i + " bc: " + rs.get(i), rs.get(i).startsWith(expected[i][0]));
     }
     //run Compaction
     runStatementOnDriver("alter table "+ TestTxnCommands2.Table.NONACIDORCTBL +" compact 'major'");
     TestTxnCommands2.runWorker(hiveConf);
-    //TestTxnCommands2.runCleaner(hiveConf);
     rs = runStatementOnDriver("select ROW__ID, a, b, INPUT__FILE__NAME from " + Table.NONACIDORCTBL + " order by a,b");
     LOG.warn("after compact");
     for(String s : rs) {
@@ -407,20 +453,9 @@ public class TestTxnCommands2 {
     }
     //make sure they are the same before and after compaction
   }
+
   /**
-   * In current implementation of ACID, altering the value of transactional_properties or trying to
-   * set a value for previously unset value for an acid table will throw an exception.
-   * @throws Exception
-   */
-  @Test
-  public void testFailureOnAlteringTransactionalProperties() throws Exception {
-    expectedException.expect(RuntimeException.class);
-    expectedException.expectMessage("TBLPROPERTIES with 'transactional_properties' cannot be altered after the table is created");
-    runStatementOnDriver("create table acidTblLegacy (a int, b int) clustered by (a) into " + BUCKET_COUNT + " buckets stored as orc TBLPROPERTIES ('transactional'='true')");
-    runStatementOnDriver("alter table acidTblLegacy SET TBLPROPERTIES ('transactional_properties' = 'insert_only')");
-  }
-  /**
-   * Test the query correctness and directory layout for ACID table conversion
+   * Test the query correctness and directory layout after ACID table conversion and MAJOR compaction
    * 1. Insert a row to Non-ACID table
    * 2. Convert Non-ACID to ACID table
    * 3. Insert a row to ACID table
@@ -436,7 +471,7 @@ public class TestTxnCommands2 {
     // 1. Insert a row to Non-ACID table
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(1,2)");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // There should be 2 original bucket files in the location (000000_0 and 000001_0)
     Assert.assertEquals(BUCKET_COUNT, status.length);
     for (int i = 0; i < status.length; i++) {
@@ -452,7 +487,7 @@ public class TestTxnCommands2 {
     // 2. Convert NONACIDORCTBL to ACID table
     runStatementOnDriver("alter table " + Table.NONACIDORCTBL + " SET TBLPROPERTIES ('transactional'='true')");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // Everything should be same as before
     Assert.assertEquals(BUCKET_COUNT, status.length);
     for (int i = 0; i < status.length; i++) {
@@ -468,23 +503,24 @@ public class TestTxnCommands2 {
     // 3. Insert another row to newly-converted ACID table
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(3,4)");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // There should be 2 original bucket files (000000_0 and 000001_0), plus a new delta directory.
-    // The delta directory should also have only 1 bucket file (bucket_00001)
+    // The delta directory should also have 2 bucket files (bucket_00000 and bucket_00001)
     Assert.assertEquals(3, status.length);
     boolean sawNewDelta = false;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("delta_.*")) {
         sawNewDelta = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
-        Assert.assertEquals(1, buckets.length); // only one bucket file
-        Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_00000_0"));
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
+        Assert.assertEquals(BUCKET_COUNT, buckets.length);
+        Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_0000[01]"));
+        Assert.assertTrue(buckets[1].getPath().getName().matches("bucket_0000[01]"));
       } else {
         Assert.assertTrue(status[i].getPath().getName().matches("00000[01]_0"));
       }
     }
     Assert.assertTrue(sawNewDelta);
-    rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL + " order by a,b");
+    rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
     resultData = new int[][] {{1, 2}, {3, 4}};
     Assert.assertEquals(stringifyValues(resultData), rs);
     rs = runStatementOnDriver("select count(*) from " + Table.NONACIDORCTBL);
@@ -497,22 +533,22 @@ public class TestTxnCommands2 {
     // There should be 1 new directory: base_xxxxxxx.
     // Original bucket files and delta directory should stay until Cleaner kicks in.
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     Assert.assertEquals(4, status.length);
     boolean sawNewBase = false;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("base_.*")) {
         sawNewBase = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
-        Arrays.sort(buckets);
-        Assert.assertEquals(2, buckets.length);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
+        Assert.assertEquals(BUCKET_COUNT, buckets.length);
         Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_0000[01]"));
+        Assert.assertTrue(buckets[1].getPath().getName().matches("bucket_0000[01]"));
       }
     }
     Assert.assertTrue(sawNewBase);
     rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
-    resultData = new int[][] {{3, 4}, {1, 2}};
-    Assert.assertEquals(stringifyValuesNoSort(resultData), rs);
+    resultData = new int[][] {{1, 2}, {3, 4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
     rs = runStatementOnDriver("select count(*) from " + Table.NONACIDORCTBL);
     resultCount = 2;
     Assert.assertEquals(resultCount, Integer.parseInt(rs.get(0)));
@@ -520,13 +556,13 @@ public class TestTxnCommands2 {
     // 5. Let Cleaner delete obsolete files/dirs
     // Note, here we create a fake directory along with fake files as original directories/files
     String fakeFile0 = TEST_WAREHOUSE_DIR + "/" + (Table.NONACIDORCTBL).toString().toLowerCase() +
-      "/subdir/000000_0";
+        "/subdir/000000_0";
     String fakeFile1 = TEST_WAREHOUSE_DIR + "/" + (Table.NONACIDORCTBL).toString().toLowerCase() +
-      "/subdir/000000_1";
+        "/subdir/000000_1";
     fs.create(new Path(fakeFile0));
     fs.create(new Path(fakeFile1));
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // Before Cleaner, there should be 5 items:
     // 2 original files, 1 original directory, 1 base directory and 1 delta directory
     Assert.assertEquals(5, status.length);
@@ -534,23 +570,23 @@ public class TestTxnCommands2 {
     // There should be only 1 directory left: base_xxxxxxx.
     // Original bucket files and delta directory should have been cleaned up.
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     Assert.assertEquals(1, status.length);
     Assert.assertTrue(status[0].getPath().getName().matches("base_.*"));
-    FileStatus[] buckets = fs.listStatus(status[0].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    Arrays.sort(buckets);
-    Assert.assertEquals(2, buckets.length);
+    FileStatus[] buckets = fs.listStatus(status[0].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
+    Assert.assertEquals(BUCKET_COUNT, buckets.length);
     Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_0000[01]"));
+    Assert.assertTrue(buckets[1].getPath().getName().matches("bucket_0000[01]"));
     rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
-    resultData = new int[][] {{3, 4}, {1, 2}};
-    Assert.assertEquals(stringifyValuesNoSort(resultData), rs);
+    resultData = new int[][] {{1, 2}, {3, 4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
     rs = runStatementOnDriver("select count(*) from " + Table.NONACIDORCTBL);
     resultCount = 2;
     Assert.assertEquals(resultCount, Integer.parseInt(rs.get(0)));
   }
 
   /**
-   * Test the query correctness and directory layout for ACID table conversion
+   * Test the query correctness and directory layout after ACID table conversion and MAJOR compaction
    * 1. Insert a row to Non-ACID table
    * 2. Convert Non-ACID to ACID table
    * 3. Update the existing row in ACID table
@@ -566,7 +602,7 @@ public class TestTxnCommands2 {
     // 1. Insert a row to Non-ACID table
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(1,2)");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // There should be 2 original bucket files in the location (000000_0 and 000001_0)
     Assert.assertEquals(BUCKET_COUNT, status.length);
     for (int i = 0; i < status.length; i++) {
@@ -582,7 +618,7 @@ public class TestTxnCommands2 {
     // 2. Convert NONACIDORCTBL to ACID table
     runStatementOnDriver("alter table " + Table.NONACIDORCTBL + " SET TBLPROPERTIES ('transactional'='true')");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // Everything should be same as before
     Assert.assertEquals(BUCKET_COUNT, status.length);
     for (int i = 0; i < status.length; i++) {
@@ -598,32 +634,22 @@ public class TestTxnCommands2 {
     // 3. Update the existing row in newly-converted ACID table
     runStatementOnDriver("update " + Table.NONACIDORCTBL + " set b=3 where a=1");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 original bucket files (000000_0 and 000001_0), plus one delta directory
-    // and one delete_delta directory. When split-update is enabled, an update event is split into
-    // a combination of delete and insert, that generates the delete_delta directory.
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
+    // There should be 2 original bucket files (000000_0 and 000001_0), plus a new delta directory.
     // The delta directory should also have 2 bucket files (bucket_00000 and bucket_00001)
-    // and so should the delete_delta directory.
-    Assert.assertEquals(4, status.length);
+    Assert.assertEquals(3, status.length);
     boolean sawNewDelta = false;
-    boolean sawNewDeleteDelta = false;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("delta_.*")) {
         sawNewDelta = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
         Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
-        Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_0000[01]_0"));
-      } else if (status[i].getPath().getName().matches("delete_delta_.*")) {
-        sawNewDeleteDelta = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
-        Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
-        Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_0000[01_0]_0"));
+        Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_0000[01]"));
       } else {
         Assert.assertTrue(status[i].getPath().getName().matches("00000[01]_0"));
       }
     }
     Assert.assertTrue(sawNewDelta);
-    Assert.assertTrue(sawNewDeleteDelta);
     rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
     resultData = new int[][] {{1, 3}};
     Assert.assertEquals(stringifyValues(resultData), rs);
@@ -637,13 +663,13 @@ public class TestTxnCommands2 {
     // There should be 1 new directory: base_0000001.
     // Original bucket files and delta directory should stay until Cleaner kicks in.
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    Assert.assertEquals(5, status.length);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
+    Assert.assertEquals(4, status.length);
     boolean sawNewBase = false;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("base_.*")) {
         sawNewBase = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
         Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
         Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_00001"));
       }
@@ -658,18 +684,18 @@ public class TestTxnCommands2 {
 
     // 5. Let Cleaner delete obsolete files/dirs
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // Before Cleaner, there should be 5 items:
-    // 2 original files, 1 delta directory, 1 delete_delta directory and 1 base directory
-    Assert.assertEquals(5, status.length);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
+    // Before Cleaner, there should be 4 items:
+    // 2 original files, 1 delta directory and 1 base directory
+    Assert.assertEquals(4, status.length);
     runCleaner(hiveConf);
     // There should be only 1 directory left: base_0000001.
-    // Original bucket files, delta directory and delete_delta should have been cleaned up.
+    // Original bucket files and delta directory should have been cleaned up.
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     Assert.assertEquals(1, status.length);
     Assert.assertTrue(status[0].getPath().getName().matches("base_.*"));
-    FileStatus[] buckets = fs.listStatus(status[0].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+    FileStatus[] buckets = fs.listStatus(status[0].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
     Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
     Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_00001"));
     rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
@@ -681,7 +707,7 @@ public class TestTxnCommands2 {
   }
 
   /**
-   * Test the query correctness and directory layout for ACID table conversion
+   * Test the query correctness and directory layout after ACID table conversion and MAJOR compaction
    * 1. Insert a row to Non-ACID table
    * 2. Convert Non-ACID to ACID table
    * 3. Perform Major compaction
@@ -698,7 +724,7 @@ public class TestTxnCommands2 {
     // 1. Insert a row to Non-ACID table
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(1,2)");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // There should be 2 original bucket files in the location (000000_0 and 000001_0)
     Assert.assertEquals(BUCKET_COUNT, status.length);
     for (int i = 0; i < status.length; i++) {
@@ -714,7 +740,7 @@ public class TestTxnCommands2 {
     // 2. Convert NONACIDORCTBL to ACID table
     runStatementOnDriver("alter table " + Table.NONACIDORCTBL + " SET TBLPROPERTIES ('transactional'='true')");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // Everything should be same as before
     Assert.assertEquals(BUCKET_COUNT, status.length);
     for (int i = 0; i < status.length; i++) {
@@ -733,16 +759,14 @@ public class TestTxnCommands2 {
     // There should be 1 new directory: base_-9223372036854775808
     // Original bucket files should stay until Cleaner kicks in.
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     Assert.assertEquals(3, status.length);
     boolean sawNewBase = false;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("base_.*")) {
-        //should be base_-9223372036854775808_v0000021 but 21 is a txn id not write id so it makes
-        //the tests fragile
-        Assert.assertTrue(status[i].getPath().getName().startsWith("base_-9223372036854775808_v0000021"));
+        Assert.assertEquals("base_-9223372036854775808", status[i].getPath().getName());
         sawNewBase = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
         Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
         Assert.assertEquals("bucket_00001", buckets[0].getPath().getName());
       }
@@ -759,42 +783,32 @@ public class TestTxnCommands2 {
     runStatementOnDriver("update " + Table.NONACIDORCTBL + " set b=3 where a=1");
     runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(3,4)");
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     Arrays.sort(status);  // make sure delta_0000001_0000001_0000 appears before delta_0000002_0000002_0000
     // There should be 2 original bucket files (000000_0 and 000001_0), a base directory,
-    // plus two new delta directories and one delete_delta directory that would be created due to
-    // the update statement (remember split-update U=D+I)!
-    Assert.assertEquals(6, status.length);
+    // plus two new delta directories
+    Assert.assertEquals(5, status.length);
     int numDelta = 0;
-    int numDeleteDelta = 0;
     sawNewBase = false;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("delta_.*")) {
         numDelta++;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
         Arrays.sort(buckets);
         if (numDelta == 1) {
-          Assert.assertEquals("delta_10000001_10000001_0000", status[i].getPath().getName());
+          Assert.assertEquals("delta_0000001_0000001_0000", status[i].getPath().getName());
           Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
-          Assert.assertEquals("bucket_00001_0", buckets[0].getPath().getName());
+          Assert.assertEquals("bucket_00001", buckets[0].getPath().getName());
         } else if (numDelta == 2) {
-          Assert.assertEquals("delta_10000002_10000002_0000", status[i].getPath().getName());
-          Assert.assertEquals(1, buckets.length);
-          Assert.assertEquals("bucket_00000_0", buckets[0].getPath().getName());
-        }
-      } else if (status[i].getPath().getName().matches("delete_delta_.*")) {
-        numDeleteDelta++;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
-        Arrays.sort(buckets);
-        if (numDeleteDelta == 1) {
-          Assert.assertEquals("delete_delta_10000001_10000001_0000", status[i].getPath().getName());
-          Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
-          Assert.assertEquals("bucket_00001_0", buckets[0].getPath().getName());
+          Assert.assertEquals("delta_0000002_0000002_0000", status[i].getPath().getName());
+          Assert.assertEquals(BUCKET_COUNT, buckets.length);
+          Assert.assertEquals("bucket_00000", buckets[0].getPath().getName());
+          Assert.assertEquals("bucket_00001", buckets[1].getPath().getName());
         }
       } else if (status[i].getPath().getName().matches("base_.*")) {
-        Assert.assertTrue("base_-9223372036854775808", status[i].getPath().getName().startsWith("base_-9223372036854775808_v0000021"));//_v0000021
+        Assert.assertEquals("base_-9223372036854775808", status[i].getPath().getName());
         sawNewBase = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
         Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
         Assert.assertEquals("bucket_00001", buckets[0].getPath().getName());
       } else {
@@ -802,9 +816,7 @@ public class TestTxnCommands2 {
       }
     }
     Assert.assertEquals(2, numDelta);
-    Assert.assertEquals(1, numDeleteDelta);
     Assert.assertTrue(sawNewBase);
-
     rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
     resultData = new int[][] {{1, 3}, {3, 4}};
     Assert.assertEquals(stringifyValues(resultData), rs);
@@ -816,68 +828,77 @@ public class TestTxnCommands2 {
     runStatementOnDriver("alter table "+ Table.NONACIDORCTBL + " compact 'MAJOR'");
     runWorker(hiveConf);
     // There should be 1 new base directory: base_0000001
-    // Original bucket files, delta directories, delete_delta directories and the
-    // previous base directory should stay until Cleaner kicks in.
+    // Original bucket files, delta directories and the previous base directory should stay until Cleaner kicks in.
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     Arrays.sort(status);
-    Assert.assertEquals(7, status.length);
+    Assert.assertEquals(6, status.length);
     int numBase = 0;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("base_.*")) {
         numBase++;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
         Arrays.sort(buckets);
         if (numBase == 1) {
-          Assert.assertEquals("base_-9223372036854775808_v0000021", status[i].getPath().getName());
+          Assert.assertEquals("base_-9223372036854775808", status[i].getPath().getName());
           Assert.assertEquals(BUCKET_COUNT - 1, buckets.length);
           Assert.assertEquals("bucket_00001", buckets[0].getPath().getName());
         } else if (numBase == 2) {
           // The new base dir now has two bucket files, since the delta dir has two bucket files
-          Assert.assertEquals("base_10000002_v0000028", status[i].getPath().getName());
-          Assert.assertEquals(2, buckets.length);
+          Assert.assertEquals("base_0000002", status[i].getPath().getName());
+          Assert.assertEquals(BUCKET_COUNT, buckets.length);
           Assert.assertEquals("bucket_00000", buckets[0].getPath().getName());
+          Assert.assertEquals("bucket_00001", buckets[1].getPath().getName());
         }
       }
     }
     Assert.assertEquals(2, numBase);
     rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
-    resultData = new int[][] {{3, 4}, {1, 3}};
-    Assert.assertEquals(stringifyValuesNoSort(resultData), rs);
+    resultData = new int[][] {{1, 3}, {3, 4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
     rs = runStatementOnDriver("select count(*) from " + Table.NONACIDORCTBL);
     resultCount = 2;
     Assert.assertEquals(resultCount, Integer.parseInt(rs.get(0)));
 
     // 6. Let Cleaner delete obsolete files/dirs
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     // Before Cleaner, there should be 6 items:
-    // 2 original files, 2 delta directories, 1 delete_delta directory and 2 base directories
-    Assert.assertEquals(7, status.length);
+    // 2 original files, 2 delta directories and 2 base directories
+    Assert.assertEquals(6, status.length);
     runCleaner(hiveConf);
     // There should be only 1 directory left: base_0000001.
     // Original bucket files, delta directories and previous base directory should have been cleaned up.
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-      (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        (Table.NONACIDORCTBL).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
     Assert.assertEquals(1, status.length);
-    Assert.assertEquals("base_10000002_v0000028", status[0].getPath().getName());
-    FileStatus[] buckets = fs.listStatus(status[0].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+    Assert.assertEquals("base_0000002", status[0].getPath().getName());
+    FileStatus[] buckets = fs.listStatus(status[0].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
     Arrays.sort(buckets);
-    Assert.assertEquals(2, buckets.length);
+    Assert.assertEquals(BUCKET_COUNT, buckets.length);
     Assert.assertEquals("bucket_00000", buckets[0].getPath().getName());
+    Assert.assertEquals("bucket_00001", buckets[1].getPath().getName());
     rs = runStatementOnDriver("select a,b from " + Table.NONACIDORCTBL);
-    resultData = new int[][] {{3, 4}, {1, 3}};
-    Assert.assertEquals(stringifyValuesNoSort(resultData), rs);
+    resultData = new int[][] {{1, 3}, {3, 4}};
+    Assert.assertEquals(stringifyValues(resultData), rs);
     rs = runStatementOnDriver("select count(*) from " + Table.NONACIDORCTBL);
     resultCount = 2;
     Assert.assertEquals(resultCount, Integer.parseInt(rs.get(0)));
   }
+
+
+
   @Test
   public void testValidTxnsBookkeeping() throws Exception {
     // 1. Run a query against a non-ACID table, and we shouldn't have txn logged in conf
     runStatementOnDriver("select * from " + Table.NONACIDORCTBL);
-    String value = hiveConf.get(ValidTxnWriteIdList.VALID_TABLES_WRITEIDS_KEY);
+    String value = hiveConf.get(ValidTxnList.VALID_TXNS_KEY);
     Assert.assertNull("The entry should be null for query that doesn't involve ACID tables", value);
+
+    // 2. Run a query against an ACID table, and we should have txn logged in conf
+    runStatementOnDriver("select * from " + Table.ACIDTBL);
+    value = hiveConf.get(ValidTxnList.VALID_TXNS_KEY);
+    Assert.assertNotNull("The entry shouldn't be null for query that involves ACID tables", value);
   }
 
   @Test
@@ -886,14 +907,10 @@ public class TestTxnCommands2 {
     int[][] tableData = {{1,2},{3,3}};
     runStatementOnDriver("insert into " + Table.ACIDTBL + " " + makeValuesClause(tableData));
     int[][] tableData2 = {{5,3}};
-    //this will cause next txn to be marked aborted but the data is still written to disk
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
     runStatementOnDriver("insert into " + Table.ACIDTBL + " " + makeValuesClause(tableData2));
-    assert hiveConf.get(ValidTxnWriteIdList.VALID_TABLES_WRITEIDS_KEY) == null : "previous txn should've cleaned it";
-    //so now if HIVEFETCHTASKCONVERSION were to use a stale value, it would use a
-    //ValidWriteIdList with HWM=MAX_LONG, i.e. include the data for aborted txn
+    hiveConf.set(ValidTxnList.VALID_TXNS_KEY, "0:");
     List<String> rs = runStatementOnDriver("select * from " + Table.ACIDTBL);
-    Assert.assertEquals("Extra data", 2, rs.size());
+    Assert.assertEquals("Missing data", 3, rs.size());
   }
   @Test
   public void testUpdateMixedCase() throws Exception {
@@ -934,34 +951,17 @@ public class TestTxnCommands2 {
     int[][] tableData = {{1,2},{3,4},{5,6}};
     runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p=1) (a,b) " + makeValuesClause(tableData));
     runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p=2) (a,b) " + makeValuesClause(tableData));
-    CompactionRequest request = new CompactionRequest("default", Table.ACIDTBLPART.name(), CompactionType.MAJOR);
-    request.setPartitionname("p=1");
-    txnHandler.compact(request);
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
+    txnHandler.compact(new CompactionRequest("default", Table.ACIDTBLPART.name(), CompactionType.MAJOR));
     runWorker(hiveConf);
     runCleaner(hiveConf);
     runStatementOnDriver("update " + Table.ACIDTBLPART + " set b = b + 1 where a = 3");
-    txnHandler.compact(request);
+    txnHandler.compact(new CompactionRequest("default", Table.ACIDTBLPART.toString(), CompactionType.MAJOR));
     runWorker(hiveConf);
     runCleaner(hiveConf);
     List<String> rs = runStatementOnDriver("select p,a,b from " + Table.ACIDTBLPART + " order by p, a, b");
     int[][] expectedData = {{1,1,2},{1,3,5},{1,5,6},{2,1,2},{2,3,5},{2,5,6}};
     Assert.assertEquals("Update " + Table.ACIDTBLPART + " didn't match:", stringifyValues(expectedData), rs);
-  }
-
-  /**
-   * https://issues.apache.org/jira/browse/HIVE-17391
-   */
-  @Test
-  public void testEmptyInTblproperties() throws Exception {
-    runStatementOnDriver("create table t1 " + "(a int, b int) stored as orc TBLPROPERTIES ('serialization.null.format'='', 'transactional'='true')");
-    runStatementOnDriver("insert into t1 " + "(a,b) values(1,7),(3,7)");
-    runStatementOnDriver("update t1" + " set b = -2 where a = 1");
-    runStatementOnDriver("alter table t1 " + " compact 'MAJOR'");
-    runWorker(hiveConf);
-    ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
-    Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
-    Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
-    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
   }
 
   /**
@@ -1002,7 +1002,7 @@ public class TestTxnCommands2 {
     //insert overwrite not supported for ACID tables
   }
   private static void checkCompactionState(CompactionsByState expected, CompactionsByState actual) {
-    Assert.assertEquals(TxnStore.DID_NOT_INITIATE_RESPONSE, expected.didNotInitiate, actual.didNotInitiate);
+    Assert.assertEquals(TxnStore.ATTEMPTED_RESPONSE, expected.attempted, actual.attempted);
     Assert.assertEquals(TxnStore.FAILED_RESPONSE, expected.failed, actual.failed);
     Assert.assertEquals(TxnStore.INITIATED_RESPONSE, expected.initiated, actual.initiated);
     Assert.assertEquals(TxnStore.CLEANING_RESPONSE, expected.readyToClean, actual.readyToClean);
@@ -1031,9 +1031,9 @@ public class TestTxnCommands2 {
       runStatementOnDriver("insert into " + tblName + " values(" + (i + 1) + ", 'foo'),(" + (i + 2) + ", 'bar'),(" + (i + 3) + ", 'baz')");
     }
     hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILCOMPACTION, true);
-    MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_INITIATOR_ON, true);
 
-    int numFailedCompactions = MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_INITIATOR_FAILED_THRESHOLD);
+    int numFailedCompactions = hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_INITIATOR_FAILED_THRESHOLD);
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
     AtomicBoolean stop = new AtomicBoolean(true);
     //create failed compactions
     for(int i = 0; i < numFailedCompactions; i++) {
@@ -1041,66 +1041,60 @@ public class TestTxnCommands2 {
       txnHandler.compact(new CompactionRequest("default", tblName, CompactionType.MINOR));
       runWorker(hiveConf);
     }
-    //this should not schedule a new compaction due to prior failures, but will create 'did not initiate' entry
+    //this should not schedule a new compaction due to prior failures, but will create Attempted entry
     Initiator init = new Initiator();
     init.setThreadId((int)init.getId());
-    init.setConf(hiveConf);
-    init.init(stop);
+    init.setHiveConf(hiveConf);
+    init.init(stop, new AtomicBoolean());
     init.run();
-    int numDidNotInitiateCompactions = 1;
-    checkCompactionState(new CompactionsByState(numDidNotInitiateCompactions,numFailedCompactions,0,0,0,0,numFailedCompactions + numDidNotInitiateCompactions), countCompacts(txnHandler));
+    int numAttemptedCompactions = 1;
+    checkCompactionState(new CompactionsByState(numAttemptedCompactions,numFailedCompactions,0,0,0,0,numFailedCompactions + numAttemptedCompactions), countCompacts(txnHandler));
 
-    MetastoreConf.setTimeVar(hiveConf, MetastoreConf.ConfVars.ACID_HOUSEKEEPER_SERVICE_INTERVAL, 10,
-        TimeUnit.MILLISECONDS);
-    MetastoreTaskThread houseKeeper = new AcidHouseKeeperService();
-    houseKeeper.setConf(hiveConf);
-    houseKeeper.run();
-    checkCompactionState(new CompactionsByState(numDidNotInitiateCompactions,numFailedCompactions,0,0,0,0,numFailedCompactions + numDidNotInitiateCompactions), countCompacts(txnHandler));
+    hiveConf.setTimeVar(HiveConf.ConfVars.COMPACTOR_HISTORY_REAPER_INTERVAL, 10, TimeUnit.MILLISECONDS);
+    AcidCompactionHistoryService compactionHistoryService = new AcidCompactionHistoryService();
+    runHouseKeeperService(compactionHistoryService, hiveConf);//should not remove anything from history
+    checkCompactionState(new CompactionsByState(numAttemptedCompactions,numFailedCompactions,0,0,0,0,numFailedCompactions + numAttemptedCompactions), countCompacts(txnHandler));
 
     txnHandler.compact(new CompactionRequest("default", tblName, CompactionType.MAJOR));
     runWorker(hiveConf);//will fail
     txnHandler.compact(new CompactionRequest("default", tblName, CompactionType.MINOR));
     runWorker(hiveConf);//will fail
     init.run();
-    numDidNotInitiateCompactions++;
+    numAttemptedCompactions++;
     init.run();
-    numDidNotInitiateCompactions++;
-    checkCompactionState(new CompactionsByState(numDidNotInitiateCompactions,numFailedCompactions + 2,0,0,0,0,numFailedCompactions + 2 + numDidNotInitiateCompactions), countCompacts(txnHandler));
+    numAttemptedCompactions++;
+    checkCompactionState(new CompactionsByState(numAttemptedCompactions,numFailedCompactions + 2,0,0,0,0,numFailedCompactions + 2 + numAttemptedCompactions), countCompacts(txnHandler));
 
-    houseKeeper.run();
+    runHouseKeeperService(compactionHistoryService, hiveConf);//should remove history so that we have
     //COMPACTOR_HISTORY_RETENTION_FAILED failed compacts left (and no other since we only have failed ones here)
     checkCompactionState(new CompactionsByState(
-      MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE),
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED),0,0,0,0, 
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) + MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE)),
-        countCompacts(txnHandler));
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED),
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED),0,0,0,0,
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) + hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED)), countCompacts(txnHandler));
 
     hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILCOMPACTION, false);
     txnHandler.compact(new CompactionRequest("default", tblName, CompactionType.MINOR));
     //at this point "show compactions" should have (COMPACTOR_HISTORY_RETENTION_FAILED) failed + 1 initiated (explicitly by user)
     checkCompactionState(new CompactionsByState(
-      MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE),
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED),1,0,0,0,
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) +
-                MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE) + 1),
-        countCompacts(txnHandler));
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED),
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED),1,0,0,0,
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) +
+        hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED)+ 1), countCompacts(txnHandler));
 
     runWorker(hiveConf);//will succeed and transition to Initiated->Working->Ready for Cleaning
     checkCompactionState(new CompactionsByState(
-      MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE),
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED),0,1,0,0,
-        MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) +
-        MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE) + 1),
-        countCompacts(txnHandler));
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED),
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED),0,1,0,0,
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) +
+        hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED)+ 1), countCompacts(txnHandler));
 
     runCleaner(hiveConf); // transition to Success state
-    houseKeeper.run();
+    runHouseKeeperService(compactionHistoryService, hiveConf);//should not purge anything as all items within retention sizes
     checkCompactionState(new CompactionsByState(
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE),
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED), 0, 0, 1, 0,
-            MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) + MetastoreConf
-                .getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_HISTORY_RETENTION_DID_NOT_INITIATE) + 1),
-        countCompacts(txnHandler));
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED),
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED),0,0,1,0,
+      hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_FAILED) +
+        hiveConf.getIntVar(HiveConf.ConfVars.COMPACTOR_HISTORY_RETENTION_ATTEMPTED)+ 1), countCompacts(txnHandler));
   }
 
   /**
@@ -1147,7 +1141,7 @@ public class TestTxnCommands2 {
   }
 
   private static class CompactionsByState {
-    private int didNotInitiate;
+    private int attempted;
     private int failed;
     private int initiated;
     private int readyToClean;
@@ -1157,8 +1151,8 @@ public class TestTxnCommands2 {
     CompactionsByState() {
       this(0,0,0,0,0,0,0);
     }
-    CompactionsByState(int didNotInitiate, int failed, int initiated, int readyToClean, int succeeded, int working, int total) {
-      this.didNotInitiate = didNotInitiate;
+    CompactionsByState(int attempted, int failed, int initiated, int readyToClean, int succeeded, int working, int total) {
+      this.attempted = attempted;
       this.failed = failed;
       this.initiated = initiated;
       this.readyToClean = readyToClean;
@@ -1187,8 +1181,8 @@ public class TestTxnCommands2 {
       else if(TxnStore.WORKING_RESPONSE.equals(compact.getState())) {
         compactionsByState.working++;
       }
-      else if(TxnStore.DID_NOT_INITIATE_RESPONSE.equals(compact.getState())) {
-        compactionsByState.didNotInitiate++;
+      else if(TxnStore.ATTEMPTED_RESPONSE.equals(compact.getState())) {
+        compactionsByState.attempted++;
       }
       else {
         throw new IllegalStateException("Unexpected state: " + compact.getState());
@@ -1196,15 +1190,45 @@ public class TestTxnCommands2 {
     }
     return compactionsByState;
   }
-  public static void runWorker(HiveConf hiveConf) throws Exception {
-    TxnCommandsBaseForTests.runWorker(hiveConf);
+  public static void runWorker(HiveConf hiveConf) throws MetaException {
+    AtomicBoolean stop = new AtomicBoolean(true);
+    Worker t = new Worker();
+    t.setThreadId((int) t.getId());
+    t.setHiveConf(hiveConf);
+    AtomicBoolean looped = new AtomicBoolean();
+    t.init(stop, looped);
+    t.run();
   }
-  public static void runCleaner(HiveConf hiveConf) throws Exception {
-    TxnCommandsBaseForTests.runCleaner(hiveConf);
+  public static void runCleaner(HiveConf hiveConf) throws MetaException {
+    AtomicBoolean stop = new AtomicBoolean(true);
+    Cleaner t = new Cleaner();
+    t.setThreadId((int) t.getId());
+    t.setHiveConf(hiveConf);
+    AtomicBoolean looped = new AtomicBoolean();
+    t.init(stop, looped);
+    t.run();
   }
-  public static void runInitiator(HiveConf hiveConf) throws Exception {
-    TxnCommandsBaseForTests.runInitiator(hiveConf);
+
+  public static void runHouseKeeperService(HouseKeeperService houseKeeperService, HiveConf conf) throws Exception {
+    int lastCount = houseKeeperService.getIsAliveCounter();
+    houseKeeperService.start(conf);
+    int maxIter = 10;
+    int iterCount = 0;
+    while(houseKeeperService.getIsAliveCounter() <= lastCount) {
+      if(iterCount++ >= maxIter) {
+        //prevent test hangs
+        throw new IllegalStateException("HouseKeeper didn't run after " + (iterCount - 1) + " waits");
+      }
+      try {
+        Thread.sleep(100);//make sure it has run at least once
+      }
+      catch(InterruptedException ex) {
+        //...
+      }
+    }
+    houseKeeperService.stop();
   }
+
   /**
    * HIVE-12352 has details
    * @throws Exception
@@ -1214,7 +1238,7 @@ public class TestTxnCommands2 {
     writeBetweenWorkerAndCleanerForVariousTblProperties("'transactional'='true'");
   }
 
-  private void writeBetweenWorkerAndCleanerForVariousTblProperties(String tblProperties) throws Exception {
+  protected void writeBetweenWorkerAndCleanerForVariousTblProperties(String tblProperties) throws Exception {
     String tblName = "hive12352";
     runStatementOnDriver("drop table if exists " + tblName);
     runStatementOnDriver("CREATE TABLE " + tblName + "(a INT, b STRING) " +
@@ -1226,8 +1250,15 @@ public class TestTxnCommands2 {
     runStatementOnDriver("update " + tblName + " set b = 'blah' where a = 3");
 
     //run Worker to execute compaction
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
     txnHandler.compact(new CompactionRequest("default", tblName, CompactionType.MINOR));
-    runWorker(hiveConf);
+    Worker t = new Worker();
+    t.setThreadId((int) t.getId());
+    t.setHiveConf(hiveConf);
+    AtomicBoolean stop = new AtomicBoolean(true);
+    AtomicBoolean looped = new AtomicBoolean();
+    t.init(stop, looped);
+    t.run();
 
     //delete something, but make sure txn is rolled back
     hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
@@ -1241,23 +1272,21 @@ public class TestTxnCommands2 {
     Assert.assertEquals("", expected,
       runStatementOnDriver("select a,b from " + tblName + " order by a"));
 
-    runCleaner(hiveConf);
+    //run Cleaner
+    Cleaner c = new Cleaner();
+    c.setThreadId((int)c.getId());
+    c.setHiveConf(hiveConf);
+    c.init(stop, new AtomicBoolean());
+    c.run();
 
-    FileSystem fs = FileSystem.get(hiveConf);
-    FileStatus[] status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" + tblName.toLowerCase()),
-        FileUtils.HIDDEN_FILES_PATH_FILTER);
-    Set<String> expectedDeltas = new HashSet<>();
-    expectedDeltas.add("delete_delta_0000001_0000002_v0000019");
-    expectedDeltas.add("delta_0000001_0000002_v0000019");
-    Set<String> actualDeltas = new HashSet<>();
-    for(FileStatus file : status) {
-      actualDeltas.add(file.getPath().getName());
-    }
-    Assert.assertEquals(expectedDeltas, actualDeltas);
+    //this seems odd, but we wan to make sure that to run CompactionTxnHandler.cleanEmptyAbortedTxns()
+    Initiator i = new Initiator();
+    i.setThreadId((int)i.getId());
+    i.setHiveConf(hiveConf);
+    i.init(stop, new AtomicBoolean());
+    i.run();
 
-    //this seems odd, but we want to make sure that run CompactionTxnHandler.cleanEmptyAbortedTxns()
-    runInitiator(hiveConf);
-    //and check that aborted delete operation didn't become committed
+    //check that aborted operation didn't become committed
     Assert.assertEquals("", expected,
       runStatementOnDriver("select a,b from " + tblName + " order by a"));
   }
@@ -1285,11 +1314,11 @@ public class TestTxnCommands2 {
   public void testOpenTxnsCounter() throws Exception {
     hiveConf.setIntVar(HiveConf.ConfVars.HIVE_MAX_OPEN_TXNS, 3);
     hiveConf.setTimeVar(HiveConf.ConfVars.HIVE_COUNT_OPEN_TXNS_INTERVAL, 10, TimeUnit.MILLISECONDS);
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
     OpenTxnsResponse openTxnsResponse = txnHandler.openTxns(new OpenTxnRequest(3, "me", "localhost"));
 
     AcidOpenTxnsCounterService openTxnsCounterService = new AcidOpenTxnsCounterService();
-    openTxnsCounterService.setConf(hiveConf);
-    openTxnsCounterService.run();  // will update current number of open txns to 3
+    runHouseKeeperService(openTxnsCounterService, hiveConf);  // will update current number of open txns to 3
 
     MetaException exception = null;
     // This should fail once it finds out the threshold has been reached
@@ -1306,7 +1335,7 @@ public class TestTxnCommands2 {
     for (long txnid : openTxnsResponse.getTxn_ids()) {
       txnHandler.commitTxn(new CommitTxnRequest(txnid));
     }
-    openTxnsCounterService.run();  // will update current number of open txns back to 0
+    runHouseKeeperService(openTxnsCounterService, hiveConf);  // will update current number of open txns back to 0
     exception = null;
     try {
       txnHandler.openTxns(new OpenTxnRequest(1, "him", "localhost"));
@@ -1321,16 +1350,23 @@ public class TestTxnCommands2 {
     int[][] tableData = {{1,2},{3,4}};
     runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData));
     runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
+    Worker t = new Worker();
+    t.setThreadId((int) t.getId());
+    t.setHiveConf(hiveConf);
+    AtomicBoolean stop = new AtomicBoolean();
+    AtomicBoolean looped = new AtomicBoolean();
+    stop.set(true);
+    t.init(stop, looped);
+    t.run();
     runStatementOnDriver("delete from " + Table.ACIDTBL + " where b = 4");
     runStatementOnDriver("update " + Table.ACIDTBL + " set b = -2 where b = 2");
     runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MINOR'");
-    runWorker(hiveConf);
+    t.run();
+    TxnStore txnHandler = TxnUtils.getTxnStore(hiveConf);
     ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
     Assert.assertEquals("Unexpected number of compactions in history", 2, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
-    Assert.assertEquals("Unexpected 1 compaction state", TxnStore.SUCCEEDED_RESPONSE,
-        resp.getCompacts().get(1).getState());
+    Assert.assertEquals("Unexpected 1 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(1).getState());
   }
 
   /**
@@ -1386,21 +1422,19 @@ public class TestTxnCommands2 {
     // now compact and see if compaction still preserves the data correctness
     runStatementOnDriver("alter table "+ tblName + " compact 'MAJOR'");
     runWorker(hiveConf);
-    // create a low water mark aborted transaction and clean the older ones
-    createAbortLowWaterMark();
     runCleaner(hiveConf); // Cleaner would remove the obsolete files.
 
     // Verify that there is now only 1 new directory: base_xxxxxxx and the rest have have been cleaned.
     FileSystem fs = FileSystem.get(hiveConf);
     FileStatus[] status;
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" + tblName.toString().toLowerCase()),
-        FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileUtils.STAGING_DIR_PATH_FILTER);
     Assert.assertEquals(1, status.length);
     boolean sawNewBase = false;
     for (int i = 0; i < status.length; i++) {
       if (status[i].getPath().getName().matches("base_.*")) {
         sawNewBase = true;
-        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
+        FileStatus[] buckets = fs.listStatus(status[i].getPath(), FileUtils.STAGING_DIR_PATH_FILTER);
         Assert.assertEquals(numBuckets, buckets.length);
         Assert.assertTrue(buckets[0].getPath().getName().matches("bucket_00000"));
       }
@@ -1409,14 +1443,6 @@ public class TestTxnCommands2 {
 
     rs = runStatementOnDriver("select * from " + tblName + " order by a");
     Assert.assertEquals(Arrays.asList(expectedResult), rs);
-  }
-
-  protected void createAbortLowWaterMark() throws Exception{
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("select * from " + Table.ACIDTBL);
-    // wait for metastore.txn.opentxn.timeout
-    Thread.sleep(1000);
-    runInitiator(hiveConf);
   }
 
   @Test
@@ -1472,7 +1498,7 @@ public class TestTxnCommands2 {
     List<String> r = runStatementOnDriver("select a,b from " + Table.ACIDTBLPART + " order by a,b");
     int[][] targetVals = {{2,1},{4,3},{5,6},{7,8}};
     Assert.assertEquals(stringifyValues(targetVals), r);
-    //currently multi-insert doesn't allow same table/partition in > 1 output branch
+    //currently multi-insrt doesn't allow same table/partition in > 1 output branch
     String s = "from " + Table.ACIDTBLPART + "  target right outer join " +
       Table.NONACIDPART2 + " source on target.a = source.a2 " +
       " INSERT INTO TABLE " + Table.ACIDTBLPART + " PARTITION(p='even') select source.a2, source.b2 where source.a2=target.a " +
@@ -1526,7 +1552,7 @@ public class TestTxnCommands2 {
     runStatementOnDriver("insert into " + Table.ACIDTBL + " " + makeValuesClause(vals));
     List<String> r = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
     Assert.assertEquals(stringifyValues(vals), r);
-    String query = "merge into " + Table.ACIDTBL +
+    String query = "merge into " + Table.ACIDTBL + 
       " using " + Table.NONACIDPART2 + " source ON " + Table.ACIDTBL + ".a = a2 and b + 1 = source.b2 + 1 " +
       "WHEN MATCHED THEN UPDATE set b = source.b2 " +
       "WHEN NOT MATCHED THEN INSERT VALUES(source.a2, source.b2)";
@@ -1547,13 +1573,12 @@ public class TestTxnCommands2 {
     String query = "merge into " + Table.ACIDTBL +
       " t using " + Table.NONACIDPART2 + " s ON t.a = s.a2 " +
       "WHEN MATCHED AND t.b between 1 and 3 THEN UPDATE set b = s.b2 " +
-      "WHEN NOT MATCHED and s.b2 >= 8 THEN INSERT VALUES(s.a2, s.b2)";
+      "WHEN NOT MATCHED and s.b2 >= 11 THEN INSERT VALUES(s.a2, s.b2)";
     runStatementOnDriver(query);
 
     r = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
-    int[][] rExpected = {{2,2},{4,3},{5,6},{7,8},{8,8},{11,11}};
+    int[][] rExpected = {{2,2},{4,3},{5,6},{7,8},{11,11}};
     Assert.assertEquals(stringifyValues(rExpected), r);
-    assertUniqueID(Table.ACIDTBL);
   }
 
   /**
@@ -1581,7 +1606,6 @@ public class TestTxnCommands2 {
     r = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
     int[][] rExpected = {{2,2},{4,44},{5,5},{7,8},{11,11}};
     Assert.assertEquals(stringifyValues(rExpected), r);
-    assertUniqueID(Table.ACIDTBL);
   }
 
   /**
@@ -1608,33 +1632,27 @@ public class TestTxnCommands2 {
     int[][] rExpected = {{7,8},{11,11}};
     Assert.assertEquals(stringifyValues(rExpected), r);
   }
+  /**
+   * https://hortonworks.jira.com/browse/BUG-66580
+   * @throws Exception
+   */
+  @Ignore
   @Test
   public void testMultiInsert() throws Exception {
+    runStatementOnDriver("create table if not exists  srcpart (a int, b int, c int) " +
+      "partitioned by (z int) clustered by (a) into 2 buckets " +
+      "stored as orc tblproperties('transactional'='true')");
     runStatementOnDriver("create temporary table if not exists data1 (x int)");
-    runStatementOnDriver("insert into data1 values (1),(2),(1)");
-    d.destroy();
-    d = new Driver(hiveConf);
+//    runStatementOnDriver("create temporary table if not exists data2 (x int)");
 
-    runStatementOnDriver(" from data1 " +
-      "insert into " + Table.ACIDTBLPART + " partition(p) select 0, 0, 'p' || x  "
-      +
-      "insert into " + Table.ACIDTBLPART + " partition(p='p1') select 0, 1");
-    /**
-     * Using {@link BucketCodec.V0} the output
-     * is missing 1 of the (p1,0,1) rows because they have the same ROW__ID and only differ by
-     * StatementId so {@link org.apache.hadoop.hive.ql.io.orc.OrcRawRecordMerger} skips one.
-     * With split update (and V0), the data is read correctly (insert deltas are now the base) but we still
-     * should get duplicate ROW__IDs.
-     */
-    List<String> r = runStatementOnDriver("select p,a,b from " + Table.ACIDTBLPART + " order by p, a, b");
-    Assert.assertEquals("[p1\t0\t0, p1\t0\t0, p1\t0\t1, p1\t0\t1, p1\t0\t1, p2\t0\t0]", r.toString());
-    assertUniqueID(Table.ACIDTBLPART);
-    /**
-     * this delete + select covers VectorizedOrcAcidRowBatchReader
-     */
-    runStatementOnDriver("delete from " + Table.ACIDTBLPART);
-    r = runStatementOnDriver("select p,a,b from " + Table.ACIDTBLPART + " order by p, a, b");
-    Assert.assertEquals("[]", r.toString());
+    runStatementOnDriver("insert into data1 values (1),(2),(3)");
+//    runStatementOnDriver("insert into data2 values (4),(5),(6)");
+    d.destroy();
+    hiveConf.setVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE, "nonstrict");
+    d = new Driver(hiveConf);
+    List<String> r = runStatementOnDriver(" from data1 " +
+      "insert into srcpart partition(z) select 0,0,1,x  " +
+      "insert into srcpart partition(z=1) select 0,0,1");
   }
   /**
    * Investigating DP and WriteEntity, etc
@@ -1644,11 +1662,12 @@ public class TestTxnCommands2 {
   @Ignore
   public void testDynamicPartitions() throws Exception {
     d.destroy();
+    hiveConf.setVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE, "nonstrict");
     //In DbTxnManager.acquireLocks() we have
     // 1 ReadEntity: default@values__tmp__table__1
     // 1 WriteEntity: default@acidtblpart Type=TABLE WriteType=INSERT isDP=false
     runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p1'),(2,2,'p1'),(3,3,'p1'),(4,4,'p2')");
-
+    
     List<String> r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
     Assert.assertEquals("4", r1.get(0));
     //In DbTxnManager.acquireLocks() we have
@@ -1656,12 +1675,12 @@ public class TestTxnCommands2 {
     // 1 WriteEntity: default@acidtblpart Type=TABLE WriteType=INSERT isDP=false
     //todo: side note on the above: LockRequestBuilder combines the both default@acidtblpart entries to 1
     runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) select * from " + Table.ACIDTBLPART + " where p='p1'");
-
+    
     //In DbTxnManager.acquireLocks() we have
     // 2 ReadEntity: [default@acidtblpart@p=p1, default@acidtblpart]
     // 1 WriteEntity: default@acidtblpart@p=p2 Type=PARTITION WriteType=INSERT isDP=false
     runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p2') select a,b from " + Table.ACIDTBLPART + " where p='p1'");
-
+    
     //In UpdateDeleteSemanticAnalyzer, after super analyze
     // 3 ReadEntity: [default@acidtblpart, default@acidtblpart@p=p1, default@acidtblpart@p=p2]
     // 1 WriteEntity: [default@acidtblpart TABLE/INSERT]
@@ -1671,7 +1690,7 @@ public class TestTxnCommands2 {
     //todo: Why acquire per partition locks - if you have many partitions that's hugely inefficient.
     //could acquire 1 table level Shared_write intead
     runStatementOnDriver("update " + Table.ACIDTBLPART + " set b = 1");
-
+    
     //In UpdateDeleteSemanticAnalyzer, after super analyze
     // Read [default@acidtblpart, default@acidtblpart@p=p1]
     // Write default@acidtblpart TABLE/INSERT
@@ -1685,6 +1704,7 @@ public class TestTxnCommands2 {
   @Test
   public void testDynamicPartitionsMerge() throws Exception {
     d.destroy();
+    hiveConf.setVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE, "nonstrict");
     runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p1'),(2,2,'p1'),(3,3,'p1'),(4,4,'p2')");
 
     List<String> r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
@@ -1698,8 +1718,6 @@ public class TestTxnCommands2 {
     r1 = runStatementOnDriver("select p,a,b from " + Table.ACIDTBLPART + " order by p, a, b");
     String result= r1.toString();
     Assert.assertEquals("[new part\t5\t5, new part\t11\t11, p1\t1\t1, p1\t2\t15, p1\t3\t3, p2\t4\t44]", result);
-    //note: inserts go into 'new part'... so this won't fail
-    assertUniqueID(Table.ACIDTBLPART);
   }
   /**
    * Using nested partitions and thus DummyPartition
@@ -1708,6 +1726,7 @@ public class TestTxnCommands2 {
   @Test
   public void testDynamicPartitionsMerge2() throws Exception {
     d.destroy();
+    hiveConf.setVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE, "nonstrict");
     int[][] targetVals = {{1,1,1},{2,2,2},{3,3,1},{4,4,2}};
     runStatementOnDriver("insert into " + Table.ACIDNESTEDPART + " partition(p=1,q) " + makeValuesClause(targetVals));
 
@@ -1721,8 +1740,6 @@ public class TestTxnCommands2 {
       "when not matched then insert values(s.a, s.b, 3,4)");
     r1 = runStatementOnDriver("select p,q,a,b from " + Table.ACIDNESTEDPART + " order by p,q, a, b");
     Assert.assertEquals(stringifyValues(new int[][] {{1,1,1,1},{1,1,3,3},{1,2,2,15},{1,2,4,44},{3,4,5,5},{3,4,11,11}}), r1);
-    //insert of merge lands in part (3,4) - no updates land there
-    assertUniqueID(Table.ACIDNESTEDPART);
   }
   @Ignore("Covered elsewhere")
   @Test
@@ -1759,1087 +1776,14 @@ public class TestTxnCommands2 {
     Assert.assertEquals(stringifyValues(rExpected), r);
   }
 
-  @Test
-  public void testBucketCodec() throws Exception {
-    d.destroy();
-    //insert data in "legacy" format
-    hiveConf.setIntVar(HiveConf.ConfVars.TESTMODE_BUCKET_CODEC_VERSION, 0);
-    d = new Driver(hiveConf);
-
-    int[][] targetVals = {{2,1},{4,3},{5,6},{7,8}};
-    runStatementOnDriver("insert into " + Table.ACIDTBL + " " + makeValuesClause(targetVals));
-
-    d.destroy();
-    hiveConf.setIntVar(HiveConf.ConfVars.TESTMODE_BUCKET_CODEC_VERSION, 1);
-    d = new Driver(hiveConf);
-    //do some operations with new format
-    runStatementOnDriver("update " + Table.ACIDTBL + " set b=11 where a in (5,7)");
-    runStatementOnDriver("insert into " + Table.ACIDTBL + " values(11,11)");
-    runStatementOnDriver("delete from " + Table.ACIDTBL + " where a = 7");
-
-    //make sure we get the right data back before/after compactions
-    List<String> r = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
-    int[][] rExpected = {{2,1},{4,3},{5,11},{11,11}};
-    Assert.assertEquals(stringifyValues(rExpected), r);
-
-    runStatementOnDriver("ALTER TABLE " + Table.ACIDTBL + " COMPACT 'MINOR'");
-    runWorker(hiveConf);
-
-    r = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
-    Assert.assertEquals(stringifyValues(rExpected), r);
-
-    runStatementOnDriver("ALTER TABLE " + Table.ACIDTBL + " COMPACT 'MAJOR'");
-    runWorker(hiveConf);
-
-    r = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a,b");
-    Assert.assertEquals(stringifyValues(rExpected), r);
-  }
-  /**
-   * Test the scenario when IOW comes in before a MAJOR compaction happens
-   * @throws Exception
-   */
-  @Test
-  public void testInsertOverwrite1() throws Exception {
-    FileSystem fs = FileSystem.get(hiveConf);
-    FileStatus[] status;
-
-    // 1. Insert two rows to an ACID table
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 delta dirs in the location
-    Assert.assertEquals(2, status.length);
-    for (int i = 0; i < status.length; i++) {
-      Assert.assertTrue(status[i].getPath().getName().matches("delta_.*"));
-    }
-
-    // 2. INSERT OVERWRITE
-    // Prepare data for the source table
-    runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(5,6),(7,8)");
-    // Insert overwrite ACID table from source table
-    runStatementOnDriver("insert overwrite table " + Table.ACIDTBL + " select a,b from " + Table.NONACIDORCTBL);
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 delta dirs, plus a base dir in the location
-    Assert.assertEquals(3, status.length);
-    boolean sawBase = false;
-    String baseDir = "";
-    int deltaCount = 0;
-    for (int i = 0; i < status.length; i++) {
-      String dirName = status[i].getPath().getName();
-      if (dirName.matches("delta_.*")) {
-        deltaCount++;
-      } else {
-        sawBase = true;
-        baseDir = dirName;
-        Assert.assertTrue(baseDir.matches("base_.*"));
-      }
-    }
-    Assert.assertEquals(2, deltaCount);
-    Assert.assertTrue(sawBase);
-    // Verify query result
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    int [][] resultData = new int[][] {{5,6},{7,8}};
-    Assert.assertEquals(stringifyValues(resultData), rs);
-
-    // 3. Perform a major compaction. Nothing should change. Both deltas and base dirs should have the same name.
-    // Re-verify directory layout and query result by using the same logic as above
-    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 delta dirs, plus a base dir in the location
-    Assert.assertEquals(3, status.length);
-    sawBase = false;
-    deltaCount = 0;
-    for (int i = 0; i < status.length; i++) {
-      String dirName = status[i].getPath().getName();
-      if (dirName.matches("delta_.*")) {
-        deltaCount++;
-      } else {
-        sawBase = true;
-        Assert.assertTrue(dirName.matches("base_.*"));
-        Assert.assertEquals(baseDir, dirName);
-      }
-    }
-    Assert.assertEquals(2, deltaCount);
-    Assert.assertTrue(sawBase);
-    // Verify query result
-    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData), rs);
-
-    // 4. Run Cleaner. It should remove the 2 delta dirs.
-    runCleaner(hiveConf);
-    // There should be only 1 directory left: base_xxxxxxx.
-    // The delta dirs should have been cleaned up.
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    Assert.assertEquals(1, status.length);
-    Assert.assertTrue(status[0].getPath().getName().matches("base_.*"));
-    Assert.assertEquals(baseDir, status[0].getPath().getName());
-    // Verify query result
-    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData), rs);
-  }
-
-  /**
-   * Test the scenario when IOW comes in after a MAJOR compaction happens
-   * @throws Exception
-   */
-  @Test
-  public void testInsertOverwrite2() throws Exception {
-    FileSystem fs = FileSystem.get(hiveConf);
-    FileStatus[] status;
-
-    // 1. Insert two rows to an ACID table
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 delta dirs in the location
-    Assert.assertEquals(2, status.length);
-    for (int i = 0; i < status.length; i++) {
-      Assert.assertTrue(status[i].getPath().getName().matches("delta_.*"));
-    }
-
-    // 2. Perform a major compaction. There should be an extra base dir now.
-    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 delta dirs, plus a base dir in the location
-    Assert.assertEquals(3, status.length);
-    boolean sawBase = false;
-    int deltaCount = 0;
-    for (int i = 0; i < status.length; i++) {
-      String dirName = status[i].getPath().getName();
-      if (dirName.matches("delta_.*")) {
-        deltaCount++;
-      } else {
-        sawBase = true;
-        Assert.assertTrue(dirName.matches("base_.*"));
-      }
-    }
-    Assert.assertEquals(2, deltaCount);
-    Assert.assertTrue(sawBase);
-    // Verify query result
-    int [][] resultData = new int[][] {{1,2},{3,4}};
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData), rs);
-
-    // 3. INSERT OVERWRITE
-    // Prepare data for the source table
-    runStatementOnDriver("insert into " + Table.NONACIDORCTBL + "(a,b) values(5,6),(7,8)");
-    // Insert overwrite ACID table from source table
-    runStatementOnDriver("insert overwrite table " + Table.ACIDTBL + " select a,b from " + Table.NONACIDORCTBL);
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 delta dirs, plus 2 base dirs in the location
-    Assert.assertEquals(4, status.length);
-    int baseCount = 0;
-    deltaCount = 0;
-    for (int i = 0; i < status.length; i++) {
-      String dirName = status[i].getPath().getName();
-      if (dirName.matches("delta_.*")) {
-        deltaCount++;
-      } else {
-        baseCount++;
-      }
-    }
-    Assert.assertEquals(2, deltaCount);
-    Assert.assertEquals(2, baseCount);
-    // Verify query result
-    resultData = new int[][] {{5,6},{7,8}};
-    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData), rs);
-
-    // 4. Perform another major compaction. Nothing should change. Both deltas and  both base dirs
-    // should have the same name.
-    // Re-verify directory layout and query result by using the same logic as above
-    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    // There should be 2 delta dirs, plus 2 base dirs in the location
-    Assert.assertEquals(4, status.length);
-    baseCount = 0;
-    deltaCount = 0;
-    for (int i = 0; i < status.length; i++) {
-      String dirName = status[i].getPath().getName();
-      if (dirName.matches("delta_.*")) {
-        deltaCount++;
-      } else {
-        Assert.assertTrue(dirName.matches("base_.*"));
-        baseCount++;
-      }
-    }
-    Assert.assertEquals(2, deltaCount);
-    Assert.assertEquals(2, baseCount);
-    // Verify query result
-    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData), rs);
-
-    // 5. Run Cleaner. It should remove the 2 delta dirs and 1 old base dir.
-    runCleaner(hiveConf);
-    // There should be only 1 directory left: base_xxxxxxx.
-    // The delta dirs should have been cleaned up.
-    status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
-        (Table.ACIDTBL).toString().toLowerCase()), FileUtils.HIDDEN_FILES_PATH_FILTER);
-    Assert.assertEquals(1, status.length);
-    Assert.assertTrue(status[0].getPath().getName().matches("base_.*"));
-    // Verify query result
-    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData), rs);
-  }
-
-  /**
-   * Create a table with schema evolution, and verify that no data is lost during (MR major)
-   * compaction.
-   *
-   * @throws Exception if a query fails
-   */
-  @Test
-  public void testSchemaEvolutionCompaction() throws Exception {
-    String tblName = "schemaevolutioncompaction";
-    runStatementOnDriver("drop table if exists " + tblName);
-    runStatementOnDriver("CREATE TABLE " + tblName + "(a INT) " +
-        " PARTITIONED BY(part string)" +
-        " STORED AS ORC TBLPROPERTIES ('transactional'='true')");
-
-    // First INSERT round.
-    runStatementOnDriver("insert into " + tblName + " partition (part='aa') values (1)");
-
-    // ALTER TABLE ... ADD COLUMNS
-    runStatementOnDriver("ALTER TABLE " + tblName + " ADD COLUMNS(b int)");
-
-    // Second INSERT round.
-    runStatementOnDriver("insert into " + tblName + " partition (part='aa') values (2, 2000)");
-
-    // Validate data
-    List<String> res = runStatementOnDriver("SELECT * FROM " + tblName + " ORDER BY a");
-    Assert.assertEquals(2, res.size());
-    Assert.assertEquals("1\tNULL\taa", res.get(0));
-    Assert.assertEquals("2\t2000\taa", res.get(1));
-
-    // Compact
-    CompactionRequest compactionRequest =
-        new CompactionRequest("default", tblName, CompactionType.MAJOR);
-    compactionRequest.setPartitionname("part=aa");
-    txnHandler.compact(compactionRequest);
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    // Verify successful compaction
-    List<ShowCompactResponseElement> compacts =
-        txnHandler.showCompact(new ShowCompactRequest()).getCompacts();
-    Assert.assertEquals(1, compacts.size());
-    Assert.assertEquals(TxnStore.SUCCEEDED_RESPONSE, compacts.get(0).getState());
-
-    // Validate data after compaction
-    res = runStatementOnDriver("SELECT * FROM " + tblName + " ORDER BY a");
-    Assert.assertEquals(2, res.size());
-    Assert.assertEquals("1\tNULL\taa", res.get(0));
-    Assert.assertEquals("2\t2000\taa", res.get(1));
-  }
-
-  /**
-   * Test cleaner for TXN_TO_WRITE_ID table.
-   * @throws Exception
-   */
-  @Test
-  public void testCleanerForTxnToWriteId() throws Exception {
-    int[][] tableData1 = {{1, 2}};
-    int[][] tableData2 = {{2, 3}};
-    int[][] tableData3 = {{3, 4}};
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData1));
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData2));
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData3));
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p=1) (a,b) " + makeValuesClause(tableData1));
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p=2) (a,b) " + makeValuesClause(tableData2));
-
-    // All inserts are committed and hence would expect in TXN_TO_WRITE_ID, 3 entries for acidTbl
-    // and 2 entries for acidTblPart as each insert would have allocated a writeid.
-    String acidTblWhereClause = " where t2w_database = " + quoteString("default")
-            + " and t2w_table = " + quoteString(Table.ACIDTBL.name().toLowerCase());
-    String acidTblPartWhereClause = " where t2w_database = " + quoteString("default")
-            + " and t2w_table = " + quoteString(Table.ACIDTBLPART.name().toLowerCase());
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID" + acidTblWhereClause),
-            3, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID" + acidTblWhereClause));
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID" + acidTblPartWhereClause),
-            2, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID" + acidTblPartWhereClause));
-
-    txnHandler.compact(new CompactionRequest("default", Table.ACIDTBL.name().toLowerCase(), CompactionType.MAJOR));
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-    txnHandler.cleanTxnToWriteIdTable();
-
-    // After compaction/cleanup, all entries from TXN_TO_WRITE_ID should be cleaned up as all txns are committed.
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID"),
-            0, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID"));
-
-    // Following sequence of commit-abort-open-abort-commit.
-    int[][] tableData4 = {{4, 5}};
-    int[][] tableData5 = {{5, 6}};
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p=3) (a,b) " + makeValuesClause(tableData3));
-
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " +  Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData4));
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-
-    // Keep an open txn which refers to the aborted txn.
-    Context ctx = new Context(hiveConf);
-    HiveTxnManager txnMgr = TxnManagerFactory.getTxnManagerFactory().getTxnManager(hiveConf);
-    txnMgr.openTxn(ctx, "u1");
-    txnMgr.getValidTxns();
-
-    // Start an INSERT statement transaction and roll back this transaction.
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " +  Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData5));
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-
-    runStatementOnDriver("insert into " +  Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData5));
-
-    // We would expect 4 entries in TXN_TO_WRITE_ID as each insert would have allocated a writeid
-    // including aborted one.
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID" + acidTblWhereClause),
-            3, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID" + acidTblWhereClause));
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID" + acidTblPartWhereClause),
-            1, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID" + acidTblPartWhereClause));
-
-    // The entry relevant to aborted txns shouldn't be removed from TXN_TO_WRITE_ID as
-    // aborted txn would be removed from TXNS only after the compaction. Also, committed txn > open txn is retained.
-    // As open txn doesn't allocate writeid, the 2 entries for aborted and committed should be retained.
-    txnHandler.cleanEmptyAbortedAndCommittedTxns();
-    txnHandler.cleanTxnToWriteIdTable();
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID" + acidTblWhereClause),
-            3, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID" + acidTblWhereClause));
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID" + acidTblPartWhereClause),
-            0, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID" + acidTblPartWhereClause));
-
-    // The cleaner after the compaction will not run, since the open txnId < compaction commit txnId
-    // Since aborted txns data/metadata was not removed, all data in TXN_TO_WRITE_ID should remain
-    txnHandler.compact(new CompactionRequest("default", Table.ACIDTBL.name().toLowerCase(), CompactionType.MAJOR));
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-    txnHandler.cleanEmptyAbortedAndCommittedTxns();
-    txnHandler.cleanTxnToWriteIdTable();
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID"),
-            3, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID"));
-
-    // Commit the open txn, which lets the cleanup on TXN_TO_WRITE_ID.
-    txnMgr.commitTxn();
-    txnMgr.openTxn(ctx, "u1");
-    txnMgr.getValidTxns();
-    // The txn opened after the compaction commit should not effect the Cleaner
-    runCleaner(hiveConf);
-    txnHandler.cleanEmptyAbortedAndCommittedTxns();
-    txnHandler.cleanTxnToWriteIdTable();
-
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_TO_WRITE_ID"),
-            0, TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_TO_WRITE_ID"));
-  }
-
-  @Test
-  public void testMmTableAbortWithCompaction() throws Exception {
-    // 1. Insert some rows into MM table
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(1,2)");
-    // There should be 1 delta directory
-    int [][] resultData1 =  new int[][] {{1,2}};
-    verifyDeltaDirAndResult(1, Table.MMTBL.toString(), "", resultData1);
-    List<String> r1 = runStatementOnDriver("select count(*) from " + Table.MMTBL);
-    Assert.assertEquals("1", r1.get(0));
-
-    // 2. Let a transaction be aborted
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(3,4)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-    // There should be 1 delta and 1 base directory. The base one is the aborted one.
-    verifyDeltaDirAndResult(2, Table.MMTBL.toString(), "", resultData1);
-
-    r1 = runStatementOnDriver("select count(*) from " + Table.MMTBL);
-    Assert.assertEquals("1", r1.get(0));
-
-    // Verify query result
-    int [][] resultData2 = new int[][] {{1,2}, {5,6}};
-
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(5,6)");
-    verifyDeltaDirAndResult(3, Table.MMTBL.toString(), "", resultData2);
-    r1 = runStatementOnDriver("select count(*) from " + Table.MMTBL);
-    Assert.assertEquals("2", r1.get(0));
-
-    // 4. Perform a MINOR compaction, expectation is it should remove aborted base dir
-    runStatementOnDriver("alter table "+ Table.MMTBL + " compact 'MINOR'");
-    // The worker should remove the subdir for aborted transaction
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(3, Table.MMTBL.toString(), "", resultData2);
-    verifyBaseDir(0, Table.MMTBL.toString(), "");
-    // 5. Run Cleaner. Shouldn't impact anything.
-    runCleaner(hiveConf);
-    // 6. Run initiator remove aborted entry from TXNS table
-    runInitiator(hiveConf);
-
-    // Verify query result
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.MMTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData2), rs);
-
-    int [][] resultData3 = new int[][] {{1,2}, {5,6}, {7,8}};
-    // 7. add few more rows
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(7,8)");
-    // 8. add one more aborted delta
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(9,10)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-
-    // 9. Perform a MAJOR compaction, expectation is it should remove aborted base dir
-    runStatementOnDriver("alter table "+ Table.MMTBL + " compact 'MAJOR'");
-    verifyDeltaDirAndResult(3, Table.MMTBL.toString(), "", resultData3);
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(2, Table.MMTBL.toString(), "", resultData3);
-    verifyBaseDir(1, Table.MMTBL.toString(), "");
-    runCleaner(hiveConf);
-    verifyDeltaDirAndResult(0, Table.MMTBL.toString(), "", resultData3);
-    verifyBaseDir(1, Table.MMTBL.toString(), "");
-    runInitiator(hiveConf);
-    verifyDeltaDirAndResult(0, Table.MMTBL.toString(), "", resultData3);
-    verifyBaseDir(1, Table.MMTBL.toString(), "");
-
-    // Verify query result
-    rs = runStatementOnDriver("select a,b from " + Table.MMTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData3), rs);
-  }
-
-  @Test
-  public void testMmTableAbortWithCompactionNoCleanup() throws Exception {
-    // 1. Insert some rows into MM table
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(5,6)");
-    // There should be 1 delta directory
-    int [][] resultData1 =  new int[][] {{1,2}, {5,6}};
-    verifyDeltaDirAndResult(2, Table.MMTBL.toString(), "", resultData1);
-    List<String> r1 = runStatementOnDriver("select count(*) from " + Table.MMTBL);
-    Assert.assertEquals("2", r1.get(0));
-
-    // 2. Let a transaction be aborted
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.MMTBL + " values(3,4)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-    // There should be 1 delta and 1 base directory. The base one is the aborted one.
-    verifyDeltaDirAndResult(3, Table.MMTBL.toString(), "", resultData1);
-    r1 = runStatementOnDriver("select count(*) from " + Table.MMTBL);
-    Assert.assertEquals("2", r1.get(0));
-
-    // 3. Perform a MINOR compaction, expectation is it should remove aborted base dir
-    runStatementOnDriver("alter table "+ Table.MMTBL + " compact 'MINOR'");
-    // The worker should remove the subdir for aborted transaction
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(3, Table.MMTBL.toString(), "", resultData1);
-    verifyBaseDir(0, Table.MMTBL.toString(), "");
-    // Verify query result
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.MMTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData1), rs);
-
-    int [][] resultData3 = new int[][] {{1,2}, {5,6}, {7,8}};
-    // 4. add few more rows
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(7,8)");
-    // 5. add one more aborted delta
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.MMTBL + "(a,b) values(9,10)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-    verifyDeltaDirAndResult(5, Table.MMTBL.toString(), "", resultData3);
-
-    // 6. Perform a MAJOR compaction, expectation is it should remove aborted delta dir
-    runStatementOnDriver("alter table "+ Table.MMTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(4, Table.MMTBL.toString(), "", resultData3);
-    verifyBaseDir(1, Table.MMTBL.toString(), "");
-
-    // 7. Run one more Major compaction this should not have any affect
-    runStatementOnDriver("alter table "+ Table.MMTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(4, Table.MMTBL.toString(), "", resultData3);
-    verifyBaseDir(1, Table.MMTBL.toString(), "");
-
-    runCleaner(hiveConf);
-
-    // Verify query result
-    rs = runStatementOnDriver("select a,b from " + Table.MMTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData3), rs);
-  }
-
-  @Test
-  public void testDynPartInsertWithAborts() throws Exception {
-    int[][] resultData = new int[][]{{1, 1}, {2, 2}};
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p1'),(2,2,'p1')");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-
-    // forcing a txn to abort before addDynamicPartitions
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, true);
-    runStatementOnDriverWithAbort("insert into " + Table.ACIDTBLPART + " partition(p) values(3,3,'p1'),(4,4,'p1')");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, false);
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-
-    int count = TestTxnDbUtil
-        .countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS where TC_OPERATION_TYPE='i'");
-    // We should have 1 row corresponding to the aborted transaction
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_COMPONENTS"), 1, count);
-
-    hiveConf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, 0, TimeUnit.MILLISECONDS);
-    runInitiator(hiveConf);
-
-    count = TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from COMPACTION_QUEUE");
-    // Only one job is added to the queue per table. This job corresponds to all the entries for a particular table
-    // with rows in TXN_COMPONENTS
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from COMPACTION_QUEUE"), 1, count);
-
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-  }
-
-  @Test
-  public void testDynPartInsertWithMultiPartitionAborts() throws Exception {
-    int [][] resultData = new int[][] {{1,1}, {2,2}};
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p1'),(2,2,'p1')");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p2'),(2,2,'p2')");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p2", resultData);
-    List<String> r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-
-    // forcing a txn to abort before addDynamicPartitions
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, true);
-    runStatementOnDriverWithAbort("insert into " + Table.ACIDTBLPART + " partition(p) values(3,3,'p1'),(4,4,'p1')");
-    runStatementOnDriverWithAbort("insert into " + Table.ACIDTBLPART + " partition(p) values(3,3,'p2'),(4,4,'p2')");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, false);
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p2", resultData);
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-
-    int count = TestTxnDbUtil
-        .countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS where TC_OPERATION_TYPE='i'");
-    // We should have 2 rows corresponding to the two aborted transactions
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_COMPONENTS"), 2, count);
-
-    hiveConf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, 0, TimeUnit.MILLISECONDS);
-    runInitiator(hiveConf);
-
-    count = TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from COMPACTION_QUEUE");
-    // Only one job is added to the queue per table. This job corresponds to all the entries for a particular table
-    // with rows in TXN_COMPONENTS
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from COMPACTION_QUEUE"), 1, count);
-
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p2", resultData);
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-  }
-
-  @Test
-  public void testDynPartIOWWithAborts() throws Exception {
-    int [][] resultData = new int[][] {{1,1}, {2,2}};
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p1'),(2,2,'p1')");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-
-    // forcing a txn to abort before addDynamicPartitions
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, true);
-    runStatementOnDriverWithAbort("insert overwrite table " + Table.ACIDTBLPART + " partition(p) values(3,3,'p1'),(4,4,'p1')");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, false);
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyBaseDir(1, Table.ACIDTBLPART.toString(), "p=p1");
-
-    int count = TestTxnDbUtil
-        .countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS where TC_OPERATION_TYPE='u'");
-    // We should have 1 row corresponding to the aborted transaction
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_COMPONENTS"), 1, count);
-
-    hiveConf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, 0, TimeUnit.MILLISECONDS);
-    runInitiator(hiveConf);
-
-    count = TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from COMPACTION_QUEUE");
-    // Only one job is added to the queue per table. This job corresponds to all the entries for a particular table
-    // with rows in TXN_COMPONENTS
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from COMPACTION_QUEUE"), 1, count);
-
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyBaseDir(0, Table.ACIDTBLPART.toString(), "p=p1");
-  }
-
-  @Test
-  public void testDynPartIOWWithMultiPartitionAborts() throws Exception {
-    int [][] resultData = new int[][] {{1,1}, {2,2}};
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p1'),(2,2,'p1')");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p2'),(2,2,'p2')");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p2", resultData);
-    List<String> r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-
-    // forcing a txn to abort before addDynamicPartitions
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, true);
-    runStatementOnDriverWithAbort("insert overwrite table " + Table.ACIDTBLPART + " partition(p) values(3,3,'p1'),(4,4,'p1')");
-    runStatementOnDriverWithAbort("insert overwrite table " + Table.ACIDTBLPART + " partition(p) values(3,3,'p2'),(4,4,'p2')");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, false);
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyBaseDir(1, Table.ACIDTBLPART.toString(), "p=p1");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p2", resultData);
-    verifyBaseDir(1, Table.ACIDTBLPART.toString(), "p=p2");
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-
-    int count = TestTxnDbUtil
-        .countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS where TC_OPERATION_TYPE='u'");
-    // We should have two rows corresponding to the two aborted transactions
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_COMPONENTS"), 2, count);
-
-    hiveConf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, 0, TimeUnit.MILLISECONDS);
-    runInitiator(hiveConf);
-
-    count = TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from COMPACTION_QUEUE");
-    // Only one job is added to the queue per table. This job corresponds to all the entries for a particular table
-    // with rows in TXN_COMPONENTS
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from COMPACTION_QUEUE"), 1, count);
-
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyBaseDir(0, Table.ACIDTBLPART.toString(), "p=p1");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p2", resultData);
-    verifyBaseDir(0, Table.ACIDTBLPART.toString(), "p=p2");
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("4", r1.get(0));
-  }
-
-  @Test
-  public void testDynPartUpdateWithAborts() throws Exception {
-    int[][] resultData1 = new int[][]{{1, 2}, {3, 4}};
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values (1,2,'p1')");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values (3,4,'p1')");
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-
-    // forcing a txn to abort before addDynamicPartitions
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, true);
-    runStatementOnDriverWithAbort("update " + Table.ACIDTBLPART + " set b=a+2 where a<5");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, false);
-    verifyDeltaDirAndResult(3, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-    verifyDeleteDeltaDir(1, Table.ACIDTBLPART.toString(), "p=p1");
-
-    int count = TestTxnDbUtil
-        .countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS where TC_OPERATION_TYPE='u'");
-    // We should have 1 row corresponding to the aborted transaction
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_COMPONENTS"), 1, count);
-
-    hiveConf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, 0, TimeUnit.MILLISECONDS);
-    runInitiator(hiveConf);
-
-    count = TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from COMPACTION_QUEUE");
-    // Only one job is added to the queue per table. This job corresponds to all the entries for a particular table
-    // with rows in TXN_COMPONENTS
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from COMPACTION_QUEUE"), 1, count);
-
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-    verifyDeleteDeltaDir(0, Table.ACIDTBLPART.toString(), "p=p1");
-  }
-
-  @Test
-  public void testDynPartMergeWithAborts() throws Exception {
-    int [][] resultData = new int[][] {{1,1}, {2,2}};
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p) values(1,1,'p1'),(2,2,'p1')");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    List<String> r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("2", r1.get(0));
-
-    int[][] sourceVals = {{2,15},{4,44},{5,5},{11,11}};
-    runStatementOnDriver("insert into " + TestTxnCommands2.Table.NONACIDORCTBL + " " + TestTxnCommands2.makeValuesClause(sourceVals));
-
-    // forcing a txn to abort before addDynamicPartitions
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, true);
-    runStatementOnDriverWithAbort("merge into " + Table.ACIDTBLPART + " using " + TestTxnCommands2.Table.NONACIDORCTBL +
-      " as s ON " + Table.ACIDTBLPART + ".a = s.a " +
-      "when matched then update set b = s.b " +
-      "when not matched then insert values(s.a, s.b, 'newpart')");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEFAILLOADDYNAMICPARTITION, false);
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyDeleteDeltaDir(1, Table.ACIDTBLPART.toString(), "p=p1");
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=newpart", resultData);
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("2", r1.get(0));
-
-    int count = TestTxnDbUtil
-        .countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS where TC_OPERATION_TYPE='u'");
-    // We should have 1 row corresponding to the aborted transaction
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from TXN_COMPONENTS"), 1, count);
-
-    hiveConf.setTimeVar(HiveConf.ConfVars.HIVE_COMPACTOR_ABORTEDTXN_TIME_THRESHOLD, 0, TimeUnit.MILLISECONDS);
-    runInitiator(hiveConf);
-
-    count = TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from COMPACTION_QUEUE");
-    // Only one job is added to the queue per table. This job corresponds to all the entries for a particular table
-    // with rows in TXN_COMPONENTS
-    Assert.assertEquals(TestTxnDbUtil.queryToString(hiveConf, "select * from COMPACTION_QUEUE"), 1, count);
-
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("2", r1.get(0));
-
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    verifyDeltaDirAndResult(1, Table.ACIDTBLPART.toString(), "p=p1", resultData);
-    verifyDeleteDeltaDir(0, Table.ACIDTBLPART.toString(), "p=p1");
-    verifyDeltaDirAndResult(0, Table.ACIDTBLPART.toString(), "p=newpart", resultData);
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBLPART);
-    Assert.assertEquals("2", r1.get(0));
-  }
-
-  @Test
-  public void testFullACIDAbortWithMinorMajorCompaction() throws Exception {
-    // 1. Insert some rows into acid table
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
-    // There should be 1 delta directory
-    int [][] resultData1 =  new int[][] {{1,2}};
-    verifyDeltaDirAndResult(1, Table.ACIDTBL.toString(), "", resultData1);
-    List<String> r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBL);
-    Assert.assertEquals("1", r1.get(0));
-
-    // 2. Let a transaction be aborted
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-    // There should be 2 delta directories.
-    verifyDeltaDirAndResult(2, Table.ACIDTBL.toString(), "", resultData1);
-
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBL);
-    Assert.assertEquals("1", r1.get(0));
-
-    // Verify query result
-    int [][] resultData2 = new int[][] {{1,2}, {5,6}};
-    // 3. insert few more rows in acid table
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(5,6)");
-    verifyDeltaDirAndResult(3, Table.ACIDTBL.toString(), "", resultData2);
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBL);
-    Assert.assertEquals("2", r1.get(0));
-
-    // 4. Perform a MINOR compaction
-    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MINOR'");
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(4, Table.ACIDTBL.toString(), "", resultData2);
-    verifyBaseDir(0, Table.ACIDTBL.toString(), "");
-    // 5. Run Cleaner, should remove compacted deltas including aborted ones.
-    runCleaner(hiveConf);
-    verifyDeltaDirAndResult(1, Table.ACIDTBL.toString(), "", resultData2);
-
-    // Verify query result
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData2), rs);
-
-    int [][] resultData3 = new int[][] {{1,2}, {5,6}, {7,8}, {9,10}};
-    // 6. add few more rows
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(7,8)");
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(9,10)");
-    // 7. add one more aborted delta
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(11,12)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-
-    // 8. Perform a MAJOR compaction
-    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    verifyDeltaDirAndResult(4, Table.ACIDTBL.toString(), "", resultData3);
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(4, Table.ACIDTBL.toString(), "", resultData3);
-    verifyBaseDir(1, Table.ACIDTBL.toString(), "");
-    // The cleaner should remove compacted deltas including aborted ones.
-    runCleaner(hiveConf);
-    verifyDeltaDirAndResult(0, Table.ACIDTBL.toString(), "", resultData3);
-    verifyBaseDir(1, Table.ACIDTBL.toString(), "");
-
-    // Verify query result
-    rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData3), rs);
-  }
-
-  @Test
-  public void testFullACIDAbortWithMajorCompaction() throws Exception {
-    // 1. Insert some rows into acid table
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
-    // There should be 2 delta directories
-    int [][] resultData1 =  new int[][] {{1,2}, {3,4}};
-    verifyDeltaDirAndResult(2, Table.ACIDTBL.toString(), "", resultData1);
-    List<String> r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBL);
-    Assert.assertEquals("2", r1.get(0));
-
-    // 2. Let a transaction be aborted
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(5,6)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-    // There should be 2 delta and 1 base directory. The base one is the aborted one.
-    verifyDeltaDirAndResult(3, Table.ACIDTBL.toString(), "", resultData1);
-    r1 = runStatementOnDriver("select count(*) from " + Table.ACIDTBL);
-    Assert.assertEquals("2", r1.get(0));
-
-    // 3.Perform a MAJOR compaction
-    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
-
-    verifyDeltaDirAndResult(3, Table.ACIDTBL.toString(), "", resultData1);
-    verifyBaseDir(1, Table.ACIDTBL.toString(), "");
-    // 4. Run Cleaner, should remove compacted deltas including aborted ones.
-    runCleaner(hiveConf);
-    verifyDeltaDirAndResult(0, Table.ACIDTBL.toString(), "", resultData1);
-    verifyBaseDir(1, Table.ACIDTBL.toString(), "");
-
-    // Verify query result
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData1), rs);
-  }
-
-  @Test
-  public void testFullACIDAbortWithCompactionNoCleanup() throws Exception {
-    // 1. Insert some rows into acid table
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
-    // There should be 2 delta directories
-    int [][] resultData1 =  new int[][] {{1,2}, {3,4}};
-    verifyDeltaDirAndResult(2, Table.ACIDTBL.toString(), "", resultData1);
-
-    // 2. abort one txns
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(5,6)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-    verifyDeltaDirAndResult(3, Table.ACIDTBL.toString(), "", resultData1);
-
-    // 3. Perform a MAJOR compaction.
-    runStatementOnDriver("alter table "+ Table.ACIDTBL + " compact 'MAJOR'");
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(3, Table.ACIDTBL.toString(), "", resultData1);
-    verifyBaseDir(1, Table.ACIDTBL.toString(), "");
-
-    // Verify query result
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBL + " order by a");
-    Assert.assertEquals(stringifyValues(resultData1), rs);
-  }
-
-  @Test
-  public void testFullACIDAbortWithManyPartitions() throws Exception {
-    // 1. Insert some rows into acid table
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p1') (a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p2') (a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p3') (a,b) values(1,2)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p1') (a,b) values(3,4)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p2') (a,b) values(3,4)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p3') (a,b) values(3,4)");
-    // There should be 2 delta directories in each partition
-    int [][] resultData1 =  new int[][] {{1,2}, {3,4}};
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p2", resultData1);
-    verifyDeltaDirAndResult(2, Table.ACIDTBLPART.toString(), "p=p3", resultData1);
-
-    // 2. abort two txns in each partition
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, true);
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p1') (a,b) values(5,6)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p2') (a,b) values(5,6)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p3') (a,b) values(5,6)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p1') (a,b) values(5,6)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p2') (a,b) values(5,6)");
-    runStatementOnDriver("insert into " + Table.ACIDTBLPART + " partition(p='p3') (a,b) values(5,6)");
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVETESTMODEROLLBACKTXN, false);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p2", resultData1);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p3", resultData1);
-
-    // We should have total six rows corresponding to the above six aborted transactions
-    Assert.assertEquals(TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS"), 6);
-    runCleaner(hiveConf);
-    Assert.assertEquals(TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS"), 6);
-
-    // 3.1 Perform a MAJOR compaction on p='p1'.
-    runStatementOnDriver("alter table "+ Table.ACIDTBLPART + " partition(p='p1') compact 'MAJOR'");
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p2", resultData1);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p3", resultData1);
-    verifyBaseDir(1, Table.ACIDTBLPART.toString(), "p=p1");
-    // The cleaner should remove compacted deltas including aborted ones.
-    runCleaner(hiveConf);
-    Assert.assertEquals(TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS"), 4);
-
-    // 3.2 Perform a MAJOR compaction on p='p2'.
-    runStatementOnDriver("alter table "+ Table.ACIDTBLPART + " partition(p='p2') compact 'MAJOR'");
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(0, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p2", resultData1);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p3", resultData1);
-    verifyBaseDir(1, Table.ACIDTBLPART.toString(), "p=p2");
-    // The cleaner should remove compacted deltas including aborted ones.
-    runCleaner(hiveConf);
-    Assert.assertEquals(TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS"), 2);
-
-    // 3.3 Perform a MAJOR compaction on p='p3'.
-    runStatementOnDriver("alter table "+ Table.ACIDTBLPART + " partition(p='p3') compact 'MAJOR'");
-    runWorker(hiveConf);
-    verifyDeltaDirAndResult(0, Table.ACIDTBLPART.toString(), "p=p1", resultData1);
-    verifyDeltaDirAndResult(0, Table.ACIDTBLPART.toString(), "p=p2", resultData1);
-    verifyDeltaDirAndResult(4, Table.ACIDTBLPART.toString(), "p=p3", resultData1);
-    verifyBaseDir(1, Table.ACIDTBLPART.toString(), "p=p3");
-    // The cleaner should remove compacted deltas including aborted ones.
-    runCleaner(hiveConf);
-    verifyDeltaDirAndResult(0, Table.ACIDTBLPART.toString(), "p=p3", resultData1);
-    Assert.assertEquals(TestTxnDbUtil.countQueryAgent(hiveConf, "select count(*) from TXN_COMPONENTS"), 0);
-
-    // 4. Verify query result
-    int [][] resultData2 =  new int[][] {{1,2},{1,2},{1,2},{3,4},{3,4},{3,4}};
-    List<String> rs = runStatementOnDriver("select a,b from " + Table.ACIDTBLPART + " order by a");
-    Assert.assertEquals(stringifyValues(resultData2), rs);
-  }
-
-  private void verifyDeleteDeltaDir(int expectedDeltas, String tblName, String partName) throws Exception {
-    verifyDir(expectedDeltas, tblName, partName, "delete_delta_.*");
-  }
-
-  private void verifyBaseDir(int expectedDeltas, String tblName, String partName) throws Exception {
-    verifyDir(expectedDeltas, tblName, partName, "base_.*");
-  }
-
-  private void verifyDir(int expectedDeltas, String tblName, String partName, String pattern) throws Exception {
-    Path warehouse = new Path(TEST_WAREHOUSE_DIR);
-    tblName = tblName.toLowerCase();
-
-    FileSystem fs = FileSystem.get(warehouse.toUri(), hiveConf);
-    FileStatus[] status = fs.listStatus(new Path(warehouse, tblName + "/" + partName),
-        FileUtils.HIDDEN_FILES_PATH_FILTER);
-
-    int sawDeltaTimes = 0;
-    for (int i = 0; i < status.length; i++) {
-      if (status[i].getPath().getName().matches(pattern)) {
-        sawDeltaTimes++;
-      }
-    }
-    Assert.assertEquals(expectedDeltas, sawDeltaTimes);
-  }
-
-  private void verifyDeltaDirAndResult(int expectedDeltas, String tblName, String partName, int [][] resultData) throws Exception {
-    verifyDir(expectedDeltas, tblName, partName, "delta_.*");
-    if (partName.equals("p=newpart")) return;
-
-    List<String> rs = runStatementOnDriver("select a,b from " + tblName + (partName.isEmpty() ?
-      "" : " where p='" + partName.substring(2) + "'") + " order by a");
-    Assert.assertEquals(stringifyValues(resultData), rs);
-  }
-
-  @Test
-  public void testAcidOrcWritePreservesFieldNames() throws Exception {
-    // with vectorization
-    String tableName = "acidorcwritefieldnames";
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, true);
-    runStatementOnDriver("DROP TABLE IF EXISTS " + tableName);
-    runStatementOnDriver("CREATE TABLE " + tableName + " (a INT, b STRING) CLUSTERED BY (a) INTO " + BUCKET_COUNT + " BUCKETS STORED AS ORC TBLPROPERTIES ('transactional'='true')");
-    runStatementOnDriver("INSERT INTO " + tableName + " VALUES (1, 'foo'), (2, 'bar')");
-
-    tableName = "acidorcwritefieldnames_complex";
-    runStatementOnDriver("DROP TABLE IF EXISTS " + tableName);
-    runStatementOnDriver("CREATE TABLE " + tableName + " (a INT, b STRING, s STRUCT<c:int, si:STRUCT<d:double," +
-      "e:float>>) CLUSTERED BY (a) INTO " + BUCKET_COUNT +
-      " BUCKETS STORED AS ORC TBLPROPERTIES ('transactional'='true')");
-    runStatementOnDriver("INSERT INTO " + tableName + " select a, b, named_struct('c',10,'si'," +
-      "named_struct('d',cast(1.0 as double),'e',cast(2.0 as float))) from acidorcwritefieldnames");
-
-    FileSystem fs = FileSystem.get(hiveConf);
-    FileStatus[] fileStatuses = fs.globStatus(new Path(TEST_WAREHOUSE_DIR + "/" + tableName + "/" + AcidUtils.DELTA_PREFIX + "*/" + AcidUtils.BUCKET_PREFIX + "*"));
-    Assert.assertEquals(BUCKET_COUNT, fileStatuses.length);
-
-    OrcFile.ReaderOptions readerOptions = OrcFile.readerOptions(hiveConf);
-    for (FileStatus fileStatus : fileStatuses) {
-      Reader r = OrcFile.createReader(fileStatus.getPath(), readerOptions);
-      TypeDescription rowSchema = r.getSchema().getChildren().get(5);
-      Assert.assertEquals("struct<a:int,b:string,s:struct<c:int,si:struct<d:double,e:float>>>", rowSchema.toString());
-    }
-
-    // without vectorization
-    tableName = "acidorcwritefieldnames";
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, false);
-    runStatementOnDriver("DROP TABLE IF EXISTS " + tableName);
-    runStatementOnDriver("CREATE TABLE " + tableName + " (a INT, b STRING) CLUSTERED BY (a) INTO " + BUCKET_COUNT + " BUCKETS STORED AS ORC TBLPROPERTIES ('transactional'='true')");
-    runStatementOnDriver("INSERT INTO " + tableName + " VALUES (1, 'foo'), (2, 'bar')");
-
-    tableName = "acidorcwritefieldnames_complex";
-    runStatementOnDriver("DROP TABLE IF EXISTS " + tableName);
-    runStatementOnDriver("CREATE TABLE " + tableName + " (a INT, b STRING, s STRUCT<c:int, si:STRUCT<d:double," +
-      "e:float>>) CLUSTERED BY (a) INTO " + BUCKET_COUNT +
-      " BUCKETS STORED AS ORC TBLPROPERTIES ('transactional'='true')");
-    runStatementOnDriver("INSERT INTO " + tableName + " select a, b, named_struct('c',10,'si'," +
-      "named_struct('d',cast(1.0 as double),'e',cast(2.0 as float))) from acidorcwritefieldnames");
-
-    fs = FileSystem.get(hiveConf);
-    fileStatuses = fs.globStatus(new Path(TEST_WAREHOUSE_DIR + "/" + tableName + "/" + AcidUtils.DELTA_PREFIX + "*/" + AcidUtils.BUCKET_PREFIX + "*"));
-    Assert.assertEquals(BUCKET_COUNT, fileStatuses.length);
-
-    readerOptions = OrcFile.readerOptions(hiveConf);
-    for (FileStatus fileStatus : fileStatuses) {
-      Reader r = OrcFile.createReader(fileStatus.getPath(), readerOptions);
-      TypeDescription rowSchema = r.getSchema().getChildren().get(5);
-      Assert.assertEquals("struct<a:int,b:string,s:struct<c:int,si:struct<d:double,e:float>>>", rowSchema.toString());
-    }
-    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, true);
-  }
-
   /**
    * takes raw data and turns it into a string as if from Driver.getResults()
    * sorts rows in dictionary order
    */
   static List<String> stringifyValues(int[][] rowsIn) {
-    return TxnCommandsBaseForTests.stringifyValues(rowsIn);
-  }
-
-  /**
-   * This tests that delete_delta_x_y dirs will be not produced during minor compaction if no input delete events.
-   * See HIVE-20941.
-   * @throws Exception
-   */
-  @Test
-  public void testDeleteEventsCompaction() throws Exception {
-    int[][] tableData1 = {{1, 2}};
-    int[][] tableData2 = {{2, 3}};
-    int[][] tableData3 = {{3, 4}};
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData1));
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData2));
-    runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) " + makeValuesClause(tableData3));
-
-    txnHandler.compact(new CompactionRequest("default", Table.ACIDTBL.name().toLowerCase(), CompactionType.MINOR));
-    runWorker(hiveConf);
-    runCleaner(hiveConf);
-
-    FileSystem fs = FileSystem.get(hiveConf);
-    FileStatus[] fileStatuses = fs.globStatus(new Path(TEST_WAREHOUSE_DIR + "/" + Table.ACIDTBL.name().toLowerCase() + "/*"));
-    for(FileStatus fileStatus : fileStatuses) {
-      Assert.assertFalse(fileStatus.getPath().getName().startsWith(AcidUtils.DELETE_DELTA_PREFIX));
-    }
-  }
-
-  /**
-   * takes raw data and turns it into a string as if from Driver.getResults()
-   * sorts rows in dictionary order
-   */
-  static List<String> stringifyValuesNoSort(int[][] rowsIn) {
     assert rowsIn.length > 0;
     int[][] rows = rowsIn.clone();
+    Arrays.sort(rows, new RowComp());
     List<String> rs = new ArrayList<String>();
     for(int[] row : rows) {
       assert row.length > 0;
@@ -2852,10 +1796,22 @@ public class TestTxnCommands2 {
     }
     return rs;
   }
-
-  static String makeValuesClause(int[][] rows) {
+  private static final class RowComp implements Comparator<int[]> {
+    @Override
+    public int compare(int[] row1, int[] row2) {
+      assert row1 != null && row2 != null && row1.length == row2.length;
+      for(int i = 0; i < row1.length; i++) {
+        int comp = Integer.compare(row1[i], row2[i]);
+        if(comp != 0) {
+          return comp;
+        }
+      }
+      return 0;
+    }
+  }
+  String makeValuesClause(int[][] rows) {
     assert rows.length > 0;
-    StringBuilder sb = new StringBuilder(" values");
+    StringBuilder sb = new StringBuilder("values");
     for(int[] row : rows) {
       assert row.length > 0;
       if(row.length > 1) {
@@ -2874,43 +1830,14 @@ public class TestTxnCommands2 {
     return sb.toString();
   }
 
-  private void runStatementOnDriverWithAbort(String stmt) {
+  protected List<String> runStatementOnDriver(String stmt) throws Exception {
     LOG.info("+runStatementOnDriver(" + stmt + ")");
-    try {
-      d.run(stmt);
-    } catch (CommandProcessorException e) {
+    CommandProcessorResponse cpr = d.run(stmt);
+    if(cpr.getResponseCode() != 0) {
+      throw new RuntimeException(stmt + " failed: " + cpr);
     }
-  }
-
-  private List<String> runStatementOnDriver(String stmt) throws Exception {
-    LOG.info("+runStatementOnDriver(" + stmt + ")");
-    try {
-      d.run(stmt);
-    } catch (CommandProcessorException e) {
-      throw new RuntimeException(stmt + " failed: " + e);
-    }
-    List<String> rs = new ArrayList<>();
+    List<String> rs = new ArrayList<String>();
     d.getResults(rs);
     return rs;
-  }
-
-  final void assertUniqueID(Table table) throws Exception {
-    String partCols = table.getPartitionColumns();
-    //check to make sure there are no duplicate ROW__IDs - HIVE-16832
-    StringBuilder sb = new StringBuilder("select ");
-    if(partCols != null && partCols.length() > 0) {
-      sb.append(partCols).append(",");
-    }
-    sb.append(" ROW__ID, count(*) from ").append(table).append(" group by ");
-    if(partCols != null && partCols.length() > 0) {
-      sb.append(partCols).append(",");
-    }
-    sb.append("ROW__ID having count(*) > 1");
-    List<String> r = runStatementOnDriver(sb.toString());
-    Assert.assertTrue("Duplicate ROW__ID: " + r.toString(),r.size() == 0);
-  }
-
-  static String quoteString(String input) {
-    return "'" + input + "'";
   }
 }

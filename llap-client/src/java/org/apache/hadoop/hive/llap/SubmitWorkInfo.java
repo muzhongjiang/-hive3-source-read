@@ -41,10 +41,9 @@ public class SubmitWorkInfo implements Writable {
   private int vertexParallelism;
 
   public SubmitWorkInfo(ApplicationId fakeAppId, long creationTime,
-      int vertexParallelism, byte[] vertexSpec, byte[] vertexSpecSignature,
-      Token<JobTokenIdentifier> token) {
+      int vertexParallelism, byte[] vertexSpec, byte[] vertexSpecSignature) {
     this.fakeAppId = fakeAppId;
-    this.token = token;
+    this.token = createJobToken();
     this.creationTime = creationTime;
     this.vertexSpec = vertexSpec;
     this.vertexSpecSignature = vertexSpecSignature;
@@ -125,6 +124,17 @@ public class SubmitWorkInfo implements Writable {
     SubmitWorkInfo submitWorkInfo = new SubmitWorkInfo();
     submitWorkInfo.readFields(dib);
     return submitWorkInfo;
+  }
+
+
+  private Token<JobTokenIdentifier> createJobToken() {
+    String tokenIdentifier = fakeAppId.toString();
+    JobTokenIdentifier identifier = new JobTokenIdentifier(new Text(
+        tokenIdentifier));
+    Token<JobTokenIdentifier> sessionToken = new Token<JobTokenIdentifier>(identifier,
+        new JobTokenSecretManager());
+    sessionToken.setService(identifier.getJobId());
+    return sessionToken;
   }
 
   public byte[] getVertexBinary() {

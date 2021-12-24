@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,63 +37,21 @@ public abstract class VectorMapJoinFastBytesHashSet
 
   private static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinFastBytesHashSet.class);
 
-  private VectorMapJoinFastBytesHashSetStore hashSetStore;
-
   @Override
   public VectorMapJoinHashSetResult createHashSetResult() {
-    return new VectorMapJoinFastBytesHashSetStore.HashSetResult();
+    return new VectorMapJoinFastHashSet.HashSetResult();
   }
 
-  public void add(byte[] keyBytes, int keyStart, int keyLength, BytesWritable currentValue) {
+  @Override
+  public void assignSlot(int slot, byte[] keyBytes, int keyStart, int keyLength,
+          long hashCode, boolean isNewKey, BytesWritable currentValue) {
 
-    if (checkResize()) {
-      expandAndRehash();
-    }
-
-    long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    int intHashCode = (int) hashCode;
-    int slot = (intHashCode & logicalHashBucketMask);
-    long probeSlot = slot;
-    int i = 0;
-    boolean isNewKey;
-    long refWord;
-    final long partialHashCode =
-        VectorMapJoinFastBytesHashKeyRef.extractPartialHashCode(hashCode);
-    while (true) {
-      refWord = slots[slot];
-      if (refWord == 0) {
-        isNewKey = true;
-        break;
-      }
-      if (VectorMapJoinFastBytesHashKeyRef.getPartialHashCodeFromRefWord(refWord) ==
-              partialHashCode &&
-          VectorMapJoinFastBytesHashKeyRef.equalKey(
-              refWord, keyBytes, keyStart, keyLength, writeBuffers, unsafeReadPos)) {
-        isNewKey = false;
-        break;
-      }
-      ++metricPutConflict;
-      // Some other key (collision) - keep probing.
-      probeSlot += (++i);
-      slot = (int) (probeSlot & logicalHashBucketMask);
-    }
-
-    if (largestNumberOfSteps < i) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Probed " + i + " slots (the longest so far) to find space");
-      }
-      largestNumberOfSteps = i;
-      // debugDumpKeyProbe(keyOffset, keyLength, hashCode, slot);
-    }
-
+    int tripleIndex = 3 * slot;
     if (isNewKey) {
-      slots[slot] =
-          hashSetStore.add(
-              partialHashCode, keyBytes, keyStart, keyLength);
-      keysAssigned++;
-    } else {
-
-      // Key already exists -- do nothing.
+      // First entry.
+      slotTriples[tripleIndex] = keyStore.add(keyBytes, keyStart, keyLength);
+      slotTriples[tripleIndex + 1] = hashCode;
+      slotTriples[tripleIndex + 2] = 1;    // Existence
     }
   }
 
@@ -101,71 +59,29 @@ public abstract class VectorMapJoinFastBytesHashSet
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
           VectorMapJoinHashSetResult hashSetResult) {
 
-    VectorMapJoinFastBytesHashSetStore.HashSetResult fastHashSetResult =
-        (VectorMapJoinFastBytesHashSetStore.HashSetResult) hashSetResult;
+    VectorMapJoinFastHashSet.HashSetResult optimizedHashSetResult =
+        (VectorMapJoinFastHashSet.HashSetResult) hashSetResult;
 
-    fastHashSetResult.forget();
+    optimizedHashSetResult.forget();
 
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-
-    doHashSetContains(
-        keyBytes, keyStart, keyLength, hashCode, fastHashSetResult);
-
-    return fastHashSetResult.joinResult();
-  }
-
-  protected final void doHashSetContains(
-      byte[] keyBytes, int keyStart, int keyLength, long hashCode,
-      VectorMapJoinFastBytesHashSetStore.HashSetResult fastHashSetResult) {
-
-    int intHashCode = (int) hashCode;
-    int slot = (intHashCode & logicalHashBucketMask);
-    long probeSlot = slot;
-    int i = 0;
-    final long partialHashCode =
-        VectorMapJoinFastBytesHashKeyRef.extractPartialHashCode(hashCode);
-    while (true) {
-      final long refWord = slots[slot];
-      if (refWord == 0) {
-
-        // Given that we do not delete, an empty slot means no match.
-        return;
-      } else if (
-          VectorMapJoinFastBytesHashKeyRef.getPartialHashCodeFromRefWord(refWord) ==
-              partialHashCode) {
-
-        // Finally, verify the key bytes match and implicitly remember the set existence in
-        // fastHashSetResult.
-        fastHashSetResult.setKey(hashSetStore, refWord);
-        if (fastHashSetResult.equalKey(keyBytes, keyStart, keyLength)) {
-          fastHashSetResult.setContains();
-          return;
-        }
-      }
-      // Some other key (collision) - keep probing.
-      probeSlot += (++i);
-      if (i > largestNumberOfSteps) {
-        // We know we never went that far when we were inserting.
-        return;
-      }
-      slot = (int) (probeSlot & logicalHashBucketMask);
+    long existance = findReadSlot(keyBytes, keyStart, keyLength, hashCode, hashSetResult.getReadPos());
+    JoinUtil.JoinResult joinResult;
+    if (existance == -1) {
+      joinResult = JoinUtil.JoinResult.NOMATCH;
+    } else {
+      joinResult = JoinUtil.JoinResult.MATCH;
     }
+
+    optimizedHashSetResult.setJoinResult(joinResult);
+
+    return joinResult;
   }
 
   public VectorMapJoinFastBytesHashSet(
-      boolean isFullOuter,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount) {
-    super(
-        isFullOuter,
-        initialCapacity, loadFactor, writeBuffersSize, estimatedKeyCount);
-    hashSetStore = new VectorMapJoinFastBytesHashSetStore(writeBuffersSize);
-    writeBuffers = hashSetStore.getWriteBuffers();
-  }
+    super(initialCapacity, loadFactor, writeBuffersSize, estimatedKeyCount);
 
-  @Override
-  public long getEstimatedMemorySize() {
-    long size = super.getEstimatedMemorySize();
-    size += hashSetStore.getEstimatedMemorySize();
-    return size;
+    keyStore = new VectorMapJoinFastKeyStore(writeBuffersSize);
   }
 }

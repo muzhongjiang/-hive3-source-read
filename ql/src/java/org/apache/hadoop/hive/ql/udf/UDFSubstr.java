@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,18 +19,12 @@
 package org.apache.hadoop.hive.ql.udf;
 
 import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
 
 import org.apache.hadoop.hive.ql.exec.Description;
 import org.apache.hadoop.hive.ql.exec.UDF;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedExpressions;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.StringSubstrColStart;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.StringSubstrColStartLen;
-import org.apache.hadoop.hive.ql.plan.ColStatistics;
-import org.apache.hadoop.hive.ql.plan.ColStatistics.Range;
-import org.apache.hadoop.hive.ql.stats.estimator.StatEstimator;
-import org.apache.hadoop.hive.ql.stats.estimator.StatEstimatorProvider;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -39,7 +33,7 @@ import org.apache.hadoop.io.Text;
  * UDFSubstr.
  *
  */
-@Description(name = "substr,substring,mid",
+@Description(name = "substr,substring",
     value = "_FUNC_(str, pos[, len]) - returns the substring of str that"
     + " starts at pos and is of length len or" +
     "_FUNC_(bin, pos[, len]) - returns the slice of byte array that"
@@ -54,7 +48,7 @@ import org.apache.hadoop.io.Text;
     + "  > SELECT _FUNC_('Facebook', 5, 1) FROM src LIMIT 1;\n"
     + "  'b'")
 @VectorizedExpressions({StringSubstrColStart.class, StringSubstrColStartLen.class})
-public class UDFSubstr extends UDF implements StatEstimatorProvider {
+public class UDFSubstr extends UDF {
 
   private final int[] index;
   private final Text r;
@@ -136,51 +130,5 @@ public class UDFSubstr extends UDF implements StatEstimatorProvider {
 
   public BytesWritable evaluate(BytesWritable bw, IntWritable pos){
     return evaluate(bw, pos, maxValue);
-  }
-
-  @Override
-  public StatEstimator getStatEstimator() {
-    return new SubStrStatEstimator();
-  }
-
-  private static class SubStrStatEstimator implements StatEstimator {
-
-    @Override
-    public Optional<ColStatistics> estimate(List<ColStatistics> csList) {
-      ColStatistics cs = csList.get(0).clone();
-      // this might bad in a skewed case; consider:
-      // 1 row with 1000 long string
-      // 99 rows with 0 length
-      // orig avg is 10
-      // new avg is 5 (if substr(5)) ; but in reality it will stay ~10
-      Optional<Double> start = getRangeWidth(csList.get(1).getRange());
-      Range startRange = csList.get(1).getRange();
-      if (startRange != null && startRange.minValue != null) {
-        double newAvgColLen = cs.getAvgColLen() - startRange.minValue.doubleValue();
-        if (newAvgColLen > 0) {
-          cs.setAvgColLen(newAvgColLen);
-        }
-      }
-      if (csList.size() > 2) {
-        Range lengthRange = csList.get(2).getRange();
-        if (lengthRange != null && lengthRange.maxValue != null) {
-          Double w = lengthRange.maxValue.doubleValue();
-          if (cs.getAvgColLen() > w) {
-            cs.setAvgColLen(w);
-          }
-        }
-      }
-      return Optional.of(cs);
-    }
-
-    private Optional<Double> getRangeWidth(Range range) {
-      if (range != null) {
-        if (range.minValue != null && range.maxValue != null) {
-          return Optional.of(range.maxValue.doubleValue() - range.minValue.doubleValue());
-        }
-      }
-      return Optional.empty();
-    }
-
   }
 }

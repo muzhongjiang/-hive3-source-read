@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,8 +28,6 @@ import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.HiveObjectType;
 import org.apache.hadoop.hive.metastore.api.PrincipalPrivilegeSet;
 import org.apache.hadoop.hive.metastore.api.PrivilegeGrantInfo;
-import org.apache.hadoop.hive.ql.hooks.ReadEntity;
-import org.apache.hadoop.hive.ql.hooks.WriteEntity;
 import org.apache.hadoop.hive.ql.metadata.AuthorizationException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
@@ -65,8 +63,8 @@ public abstract class BitSetCheckedAuthorizationProvider extends
   }
 
   @Override
-  public void authorizeDbLevelOperations(Privilege[] inputRequiredPriv, Privilege[] outputRequiredPriv,
-      Collection<ReadEntity> inputs, Collection<WriteEntity> outputs) throws HiveException, AuthorizationException {
+  public void authorize(Privilege[] inputRequiredPriv,
+      Privilege[] outputRequiredPriv) throws HiveException, AuthorizationException {
 
     BitSetChecker checker = BitSetChecker.getBitSetChecker(inputRequiredPriv,
         outputRequiredPriv);
@@ -260,7 +258,7 @@ public abstract class BitSetCheckedAuthorizationProvider extends
       Privilege[] inputRequiredPriv, Privilege[] outputRequiredPriv,
       boolean[] inputCheck, boolean[] outputCheck) throws HiveException {
 
-    if (authorizeUserAndDBPriv(hive_db.getDatabase(table.getCatName(), table.getDbName()),
+    if (authorizeUserAndDBPriv(hive_db.getDatabase(table.getDbName()),
         inputRequiredPriv, outputRequiredPriv, inputCheck, outputCheck)) {
       return true;
     }
@@ -294,8 +292,8 @@ public abstract class BitSetCheckedAuthorizationProvider extends
       boolean[] inputCheck, boolean[] outputCheck) throws HiveException {
 
     if (authorizeUserAndDBPriv(
-        hive_db.getDatabase(part.getTable().getCatName(), part.getTable().getDbName()),
-        inputRequiredPriv, outputRequiredPriv, inputCheck, outputCheck)) {
+        hive_db.getDatabase(part.getTable().getDbName()), inputRequiredPriv,
+        outputRequiredPriv, inputCheck, outputCheck)) {
       return true;
     }
 
@@ -332,6 +330,7 @@ public abstract class BitSetCheckedAuthorizationProvider extends
   /**
    * try to match an array of privileges from user/groups/roles grants.
    *
+   * @param container
    */
   private boolean matchPrivs(Privilege[] inputPriv,
       PrincipalPrivilegeSet privileges, boolean[] check) {

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,12 +19,13 @@
 
 package org.apache.hive.hcatalog.mapreduce;
 
-import org.junit.Assert;
+import junit.framework.Assert;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.serde2.thrift.test.IntString;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
+import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
 import org.apache.pig.data.DataType;
 import org.apache.pig.data.Tuple;
@@ -76,8 +77,8 @@ public class TestHCatHiveThriftCompatibility extends HCatBaseTest {
    */
   @Test
   public void testDynamicCols() throws Exception {
-    driver.run("drop table if exists test_thrift");
-    driver.run(
+    Assert.assertEquals(0, driver.run("drop table if exists test_thrift").getResponseCode());
+    Assert.assertEquals(0, driver.run(
         "create external table test_thrift " +
             "partitioned by (year string) " +
             "row format serde 'org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer' " +
@@ -86,11 +87,13 @@ public class TestHCatHiveThriftCompatibility extends HCatBaseTest {
             "  'serialization.format'='org.apache.thrift.protocol.TBinaryProtocol') " +
             "stored as" +
             "  inputformat 'org.apache.hadoop.mapred.SequenceFileInputFormat'" +
-            "  outputformat 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'");
+            "  outputformat 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'")
+        .getResponseCode());
+    Assert.assertEquals(0,
+        driver.run("alter table test_thrift add partition (year = '2012') location '" +
+            intStringSeq.getParent() + "'").getResponseCode());
 
-    driver.run("alter table test_thrift add partition (year = '2012') location '" + intStringSeq.getParent() + "'");
-
-    PigServer pigServer = createPigServer(false);
+    PigServer pigServer = new PigServer(ExecType.LOCAL);
     pigServer.registerQuery("A = load 'test_thrift' using org.apache.hive.hcatalog.pig.HCatLoader();");
 
     Schema expectedSchema = new Schema();

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,7 +33,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TestCustomPartitionVertex {
-    @Test(timeout = 20000)
+    @Test(timeout = 5000)
     public void testGetBytePayload() throws IOException {
         int numBuckets = 10;
         VertexManagerPluginContext context = mock(VertexManagerPluginContext.class);

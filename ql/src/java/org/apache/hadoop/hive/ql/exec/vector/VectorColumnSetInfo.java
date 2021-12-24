@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,9 +21,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
-import org.apache.hadoop.hive.ql.exec.vector.ColumnVector.Type;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 
 /**
  * Class to keep information on a set of typed vector columns.  Used by
@@ -37,34 +35,34 @@ public class VectorColumnSetInfo {
   /**
    * indices of LONG primitive keys.
    */
-  public int[] longIndices;
+  protected int[] longIndices;
 
   /**
    * indices of DOUBLE primitive keys.
    */
-  public int[] doubleIndices;
+  protected int[] doubleIndices;
 
   /**
    * indices of string (byte[]) primitive keys.
    */
-  public int[] stringIndices;
+  protected int[] stringIndices;
 
   /**
    * indices of decimal primitive keys.
    */
-  public int[] decimalIndices;
+  protected int[] decimalIndices;
 
   /**
    * indices of TIMESTAMP primitive keys.
    */
-  public int[] timestampIndices;
+  protected int[] timestampIndices;
 
   /**
    * indices of INTERVAL_DAY_TIME primitive keys.
    */
-  public int[] intervalDayTimeIndices;
+  protected int[] intervalDayTimeIndices;
 
-  final public int keyCount;
+  final protected int keyCount;
   private int addKeyIndex;
 
   private int addLongIndex;
@@ -77,9 +75,8 @@ public class VectorColumnSetInfo {
   // Given the keyIndex these arrays return:
   //   The ColumnVector.Type,
   //   The type specific index into longIndices, doubleIndices, etc...
-  public TypeInfo[] typeInfos;
-  public ColumnVector.Type[] columnVectorTypes;
-  public int[] columnTypeSpecificIndices;
+  protected ColumnVector.Type[] columnVectorTypes;
+  protected int[] columnTypeSpecificIndices;
 
   protected VectorColumnSetInfo(int keyCount) {
     this.keyCount = keyCount;
@@ -99,18 +96,15 @@ public class VectorColumnSetInfo {
     intervalDayTimeIndices = new int[this.keyCount];
     addIntervalDayTimeIndex = 0;
 
-    typeInfos = new TypeInfo[this.keyCount];
     columnVectorTypes = new ColumnVector.Type[this.keyCount];
     columnTypeSpecificIndices = new int[this.keyCount];
   }
 
 
-  protected void addKey(TypeInfo typeInfo) throws HiveException {
+  protected void addKey(ColumnVector.Type columnVectorType) throws HiveException {
 
-    Type columnVectorType = VectorizationContext.getColumnVectorTypeFromTypeInfo(typeInfo);
     switch (columnVectorType) {
     case LONG:
-    case DECIMAL_64:
       longIndices[addLongIndex] = addKeyIndex;
       columnTypeSpecificIndices[addKeyIndex] = addLongIndex++;
       break;
@@ -138,7 +132,6 @@ public class VectorColumnSetInfo {
       throw new HiveException("Unexpected column vector type " + columnVectorType);
     }
 
-    typeInfos[addKeyIndex] = typeInfo;
     columnVectorTypes[addKeyIndex] = columnVectorType;
     addKeyIndex++;
   }

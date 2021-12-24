@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,20 +17,17 @@
  */
 package org.apache.hadoop.hive.ql.exec.spark.Statistic;
 
+import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 public class SparkStatisticGroup {
   private final String groupName;
-  private final Map<String, SparkStatistic> statistics = new LinkedHashMap<>();
+  private final List<SparkStatistic> statisticList;
 
   SparkStatisticGroup(String groupName, List<SparkStatistic> statisticList) {
     this.groupName = groupName;
-    for (SparkStatistic sparkStatistic : statisticList) {
-      this.statistics.put(sparkStatistic.getName(), sparkStatistic);
-    }
+    this.statisticList = Collections.unmodifiableList(statisticList);
   }
 
   public String getGroupName() {
@@ -38,17 +35,6 @@ public class SparkStatisticGroup {
   }
 
   public Iterator<SparkStatistic> getStatistics() {
-    return this.statistics.values().iterator();
-  }
-
-  /**
-   * Get a {@link SparkStatistic} by its given name
-   */
-  public SparkStatistic getSparkStatistic(String name) {
-    return this.statistics.get(name);
-  }
-
-  public boolean containsSparkStatistic(String name) {
-    return this.statistics.containsKey(name);
+    return this.statisticList.iterator();
   }
 }

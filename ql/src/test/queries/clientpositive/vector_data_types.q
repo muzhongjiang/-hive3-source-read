@@ -2,11 +2,11 @@ set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 
-DROP TABLE over1k_n8;
-DROP TABLE over1korc_n1;
+DROP TABLE over1k;
+DROP TABLE over1korc;
 
 -- data setup
-CREATE TABLE over1k_n8(t tinyint,
+CREATE TABLE over1k(t tinyint,
            si smallint,
            i int,
            b bigint,
@@ -15,17 +15,14 @@ CREATE TABLE over1k_n8(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE;
 
--- TODO: Remove this line after fixing HIVE-24351
-set hive.vectorized.execution.enabled=false;
+LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE over1k;
 
-LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE over1k_n8;
-
-CREATE TABLE over1korc_n1(t tinyint,
+CREATE TABLE over1korc(t tinyint,
            si smallint,
            i int,
            b bigint,
@@ -34,33 +31,26 @@ CREATE TABLE over1korc_n1(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS ORC;
 
-INSERT INTO TABLE over1korc_n1 SELECT * FROM over1k_n8;
-
--- Add a single NULL row that will come from ORC as isRepeated.
-insert into over1korc_n1 values (NULL, NULL,NULL, NULL,NULL, NULL,NULL, NULL,NULL, NULL,NULL);
+INSERT INTO TABLE over1korc SELECT * FROM over1k;
 
 SET hive.vectorized.execution.enabled=false;
 
-EXPLAIN SELECT t, si, i, b, f, d, bo, s, ts, `dec`, bin FROM over1korc_n1 ORDER BY t, si, i LIMIT 20;
+EXPLAIN VECTORIZATION EXPRESSION SELECT t, si, i, b, f, d, bo, s, ts, dec, bin FROM over1korc ORDER BY t, si, i LIMIT 20;
 
-SELECT t, si, i, b, f, d, bo, s, ts, `dec`, bin FROM over1korc_n1 ORDER BY t, si, i LIMIT 20;
+SELECT t, si, i, b, f, d, bo, s, ts, dec, bin FROM over1korc ORDER BY t, si, i LIMIT 20;
 
 SELECT SUM(HASH(*))
-FROM (SELECT t, si, i, b, f, d, bo, s, ts, `dec`, bin FROM over1korc_n1 ORDER BY t, si, i) as q;
+FROM (SELECT t, si, i, b, f, d, bo, s, ts, dec, bin FROM over1korc ORDER BY t, si, i) as q;
 
 SET hive.vectorized.execution.enabled=true;
 
-EXPLAIN VECTORIZATION EXPRESSION select t, si, i, b, f, d, bo, s, ts, `dec`, bin FROM over1korc_n1 ORDER BY t, si, i LIMIT 20;
+EXPLAIN VECTORIZATION EXPRESSION select t, si, i, b, f, d, bo, s, ts, dec, bin FROM over1korc ORDER BY t, si, i LIMIT 20;
 
-SELECT t, si, i, b, f, d, bo, s, ts, `dec`, bin FROM over1korc_n1 ORDER BY t, si, i LIMIT 20;
-
-EXPLAIN VECTORIZATION EXPRESSION 
-SELECT SUM(HASH(*))
-FROM (SELECT t, si, i, b, f, d, bo, s, ts, `dec`, bin FROM over1korc_n1 ORDER BY t, si, i) as q;
+SELECT t, si, i, b, f, d, bo, s, ts, dec, bin FROM over1korc ORDER BY t, si, i LIMIT 20;
 
 SELECT SUM(HASH(*))
-FROM (SELECT t, si, i, b, f, d, bo, s, ts, `dec`, bin FROM over1korc_n1 ORDER BY t, si, i) as q;
+FROM (SELECT t, si, i, b, f, d, bo, s, ts, dec, bin FROM over1korc ORDER BY t, si, i) as q;

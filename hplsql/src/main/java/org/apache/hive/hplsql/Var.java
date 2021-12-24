@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,18 +20,21 @@ package org.apache.hive.hplsql;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import org.apache.hive.hplsql.executor.QueryResult;
 
 /**
  * Variable or the result of expression 
  */
 public class Var {
-  // Data types
+
+	// Data types
 	public enum Type {BOOL, CURSOR, DATE, DECIMAL, DERIVED_TYPE, DERIVED_ROWTYPE, DOUBLE, FILE, IDENT, BIGINT, INTERVAL, ROW, 
-	                  RS_LOCATOR, STRING, STRINGLIST, TIMESTAMP, NULL, HPL_OBJECT}
+	                  RS_LOCATOR, STRING, STRINGLIST, TIMESTAMP, NULL};
 	public static final String DERIVED_TYPE = "DERIVED%TYPE";
 	public static final String DERIVED_ROWTYPE = "DERIVED%ROWTYPE";
 	public static Var Empty = new Var();
@@ -45,7 +48,7 @@ public class Var {
 	int scale;
 	
 	boolean constant = false;
-
+	
 	public Var() {
 	  type = Type.NULL;  
 	}
@@ -136,69 +139,72 @@ public class Var {
     this.type = type;
   }
 
-  public Var(String name, String type, Integer len, Integer scale, Var def) {
+	public Var(String name, String type, String len, String scale, Var def) {
 	  this.name = name;
-	  setType(type);
-    if (len != null) {
-      this.len = len;
-    }
+	  setType(type);	  
+	  if (len != null) {
+	    this.len = Integer.parseInt(len);
+	  }
     if (scale != null) {
-      this.scale = scale;
+	    this.scale = Integer.parseInt(scale);
     }
     if (def != null) {
       cast(def);
     }
-  }
-
-	public Var(String name, String type, String len, String scale, Var def) {
-	  this(name, type, len != null ? Integer.parseInt(len) : null, scale != null ? Integer.parseInt(scale) : null, def);
 	}
 	
 	/**
 	 * Cast a new value to the variable 
 	 */
 	public Var cast(Var val) {
-	  try {
-      if (constant) {
-        return this;
-      } else if (val == null || val.value == null) {
-        value = null;
-      } else if (type == Type.DERIVED_TYPE) {
-        type = val.type;
-        value = val.value;
-      } else if (type == val.type && type == Type.STRING) {
-        cast((String) val.value);
-      } else if (type == val.type) {
-        value = val.value;
-      } else if (type == Type.STRING) {
-        cast(val.toString());
-      } else if (type == Type.BIGINT) {
-        if (val.type == Type.STRING) {
-          value = Long.parseLong((String) val.value);
-        } else if (val.type == Type.DECIMAL) {
-          value = ((BigDecimal)val.value).longValue();
-        }
-      } else if (type == Type.DECIMAL) {
-        if (val.type == Type.STRING) {
-          value = new BigDecimal((String) val.value);
-        } else if (val.type == Type.BIGINT) {
-          value = BigDecimal.valueOf(val.longValue());
-        } else if (val.type == Type.DOUBLE) {
-          value = BigDecimal.valueOf(val.doubleValue());
-        }
-      } else if (type == Type.DOUBLE) {
-        if (val.type == Type.STRING) {
-          value = Double.valueOf((String) val.value);
-        } else if (val.type == Type.BIGINT || val.type == Type.DECIMAL) {
-          value = Double.valueOf(val.doubleValue());
-        }
-      } else if (type == Type.DATE) {
-        value = Utils.toDate(val.toString());
-      } else if (type == Type.TIMESTAMP) {
-        value = Utils.toTimestamp(val.toString());
+	  if (constant) {
+	    return this;
+	  }
+	  else if (val == null || val.value == null) {
+	    value = null;
+	  }
+ 	  else if (type == Type.DERIVED_TYPE) {
+ 	    type = val.type;
+ 	    value = val.value;
+ 	  }
+	  else if (type == val.type && type == Type.STRING) {
+	    cast((String)val.value);
+	  }
+	  else if (type == val.type) {
+	    value = val.value;
+	  }
+	  else if (type == Type.STRING) {
+	    cast(val.toString());
+	  }
+	  else if (type == Type.BIGINT) {
+	    if (val.type == Type.STRING) {
+	      value = Long.parseLong((String)val.value);
+	    }
+    }
+	  else if (type == Type.DECIMAL) {
+	    if (val.type == Type.STRING) {
+        value = new BigDecimal((String)val.value);
       }
-    } catch (NumberFormatException e) {
-      throw new TypeException(null, type, val.type, val.value);
+	    else if (val.type == Type.BIGINT) {
+	      value = BigDecimal.valueOf(val.longValue());
+	    }
+	    else if (val.type == Type.DOUBLE) {
+	      value = BigDecimal.valueOf(val.doubleValue());
+	    }
+	  }
+	  else if (type == Type.DOUBLE) {
+	    if (val.type == Type.STRING) {
+        value = new Double((String)val.value);
+      }
+	    else if (val.type == Type.BIGINT || val.type == Type.DECIMAL) {
+        value = Double.valueOf(val.doubleValue());
+      }
+	  }
+	  else if (type == Type.DATE) {
+	    value = Utils.toDate(val.toString());
+    }
+    else if (type == Type.TIMESTAMP) {
+      value = Utils.toTimestamp(val.toString());
     }
 	  return this;
 	}
@@ -248,38 +254,47 @@ public class Var {
       this.value = value;
 	  }
   }
-
-  public Var setValue(QueryResult queryResult, int idx) {
-    int type = queryResult.jdbcType(idx);
+	
+	/**
+   * Set the new value from the result set
+   */
+  public Var setValue(ResultSet rs, ResultSetMetaData rsm, int idx) throws SQLException {
+    int type = rsm.getColumnType(idx);
     if (type == java.sql.Types.CHAR || type == java.sql.Types.VARCHAR) {
-      cast(new Var(queryResult.column(idx, String.class)));
-    } else if (type == java.sql.Types.INTEGER || type == java.sql.Types.BIGINT ||
-            type == java.sql.Types.SMALLINT || type == java.sql.Types.TINYINT) {
-      cast(new Var(Long.valueOf(queryResult.column(idx, Long.class))));
-    } else if (type == java.sql.Types.DECIMAL || type == java.sql.Types.NUMERIC) {
-      cast(new Var(queryResult.column(idx, BigDecimal.class)));
-    } else if (type == java.sql.Types.FLOAT || type == java.sql.Types.DOUBLE) {
-      cast(new Var(Double.valueOf(queryResult.column(idx, Double.class))));
+      cast(new Var(rs.getString(idx)));
+    }
+    else if (type == java.sql.Types.INTEGER || type == java.sql.Types.BIGINT ||
+        type == java.sql.Types.SMALLINT || type == java.sql.Types.TINYINT) {
+      cast(new Var(new Long(rs.getLong(idx))));
+    }
+    else if (type == java.sql.Types.DECIMAL || type == java.sql.Types.NUMERIC) {
+      cast(new Var(rs.getBigDecimal(idx)));
+    }
+    else if (type == java.sql.Types.FLOAT || type == java.sql.Types.DOUBLE) {
+      cast(new Var(new Double(rs.getDouble(idx))));
     }
     return this;
   }
-
-  public Var setRowValues(QueryResult queryResult) {
+  
+  /**
+   * Set ROW values from the result set
+   */
+  public Var setValues(ResultSet rs, ResultSetMetaData rsm) throws SQLException {
     Row row = (Row)this.value;
-    int idx = 0;
+    int idx = 1;
     for (Column column : row.getColumns()) {
-      Var var = new Var(column.getName(), column.getType(), (Integer) null, null, null);
-      var.setValue(queryResult, idx);
+      Var var = new Var(column.getName(), column.getType(), null, null, null);
+      var.setValue(rs, rsm, idx);
       column.setValue(var);
       idx++;
     }
     return this;
   }
-
-  /**
+	
+	/**
 	 * Set the data type from string representation
 	 */
-	public void setType(String type) {
+	void setType(String type) {
 	  this.type = defineType(type);
 	}
 	
@@ -312,7 +327,7 @@ public class Var {
       return Type.BIGINT;
     }
     else if (type.equalsIgnoreCase("CHAR") || type.equalsIgnoreCase("VARCHAR") || type.equalsIgnoreCase("VARCHAR2") || 
-             type.equalsIgnoreCase("STRING") || type.equalsIgnoreCase("XML") || type.equalsIgnoreCase("CHARACTER")) {
+             type.equalsIgnoreCase("STRING") || type.equalsIgnoreCase("XML")) {
       return Type.STRING;
     }
     else if (type.equalsIgnoreCase("DEC") || type.equalsIgnoreCase("DECIMAL") || type.equalsIgnoreCase("NUMERIC") ||
@@ -344,12 +359,6 @@ public class Var {
     }
     else if (type.equalsIgnoreCase(Var.DERIVED_TYPE)) {
       return Type.DERIVED_TYPE;
-    }
-    else if (type.equalsIgnoreCase(Type.HPL_OBJECT.name())) {
-      return Type.HPL_OBJECT;
-    }
-    else if (type.equalsIgnoreCase(Type.ROW.name())) {
-      return Type.ROW;
     }
     return Type.NULL;
   }
@@ -402,7 +411,7 @@ public class Var {
       }
     }
     else if (type == Type.STRING && var.type == Type.STRING &&
-            ((String)value).equals(var.value)) {
+            ((String)value).equals((String)var.value)) {
       return true;
     }
     else if (type == Type.DECIMAL && var.type == Type.DECIMAL &&
@@ -443,9 +452,6 @@ public class Var {
     else if (type == Type.BIGINT && v.type == Type.BIGINT) {
       return ((Long)value).compareTo((Long)v.value);
     }
-    else if (type == Type.DOUBLE && v.type == Type.DECIMAL) {
-      return (new BigDecimal((double)value)).compareTo((BigDecimal)v.value);
-    }
     else if (type == Type.STRING && v.type == Type.STRING) {
       return ((String)value).compareTo((String)v.value);
     }
@@ -469,9 +475,9 @@ public class Var {
 	 /**
    * Increment an integer value
    */
-  public Var increment(long i) {
+  public Var increment(Long i) {
     if (type == Type.BIGINT) {
-      value = Long.valueOf(((Long) value).longValue() + i);
+      value = new Long(((Long)value).longValue() + i);
     }
     return this;
   }
@@ -479,12 +485,12 @@ public class Var {
   /**
   * Decrement an integer value
   */
-  public Var decrement(long i) {
-    if (type == Type.BIGINT) {
-      value = Long.valueOf(((Long) value).longValue() - i);
-    }
-    return this;
-  }
+ public Var decrement(Long i) {
+   if (type == Type.BIGINT) {
+     value = new Long(((Long)value).longValue() - i);
+   }
+   return this;
+ }
   
 	/**
 	 * Return an integer value
@@ -546,30 +552,12 @@ public class Var {
 	}
 	
 	/**
-	 * Negate the value
+	 * Negate the boolean value
 	 */
 	public void negate() {
-    if (value == null){
-      return;
-    }
-    if (type == Type.BOOL) {
+    if(type == Type.BOOL && value != null) {
       boolean v = ((Boolean)value).booleanValue();
       value = Boolean.valueOf(!v);
-    }
-    else if (type == Type.DECIMAL) {
-      BigDecimal v = (BigDecimal)value;
-      value = v.negate();
-    }
-    else if (type == Type.DOUBLE) {
-      Double v = (Double)value;
-      value = -v;
-    }
-    else if (type == Type.BIGINT) {
-      Long v = (Long)value;
-      value = -v;
-    }
-    else {
-      throw new NumberFormatException("invalid type " + type);
     }
   }
 	
@@ -618,7 +606,7 @@ public class Var {
 	}
 
   /**
-   * Convert value to SQL string - string literals are quoted and escaped, ab'c -&gt; 'ab''c'
+   * Convert value to SQL string - string literals are quoted and escaped, ab'c -> 'ab''c'
    */
   public String toSqlString() {
     if (value == null) {

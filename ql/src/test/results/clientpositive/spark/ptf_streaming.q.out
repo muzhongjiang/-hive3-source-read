@@ -8,8 +8,6 @@ from noopstreaming(on part
   order by p_name
   )
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name, p_size,
 rank() over (partition by p_mfgr order by p_name) as r,
@@ -20,8 +18,6 @@ from noopstreaming(on part
   order by p_name
   )
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -41,7 +37,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string), p_name (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -61,14 +56,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -88,7 +82,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -97,21 +91,21 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col7
                               name: sum
                               window function: GenericUDAFSumDouble
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), _col5 (type: int), rank_window_0 (type: int), dense_rank_window_1 (type: int), sum_window_2 (type: double)
@@ -186,8 +180,6 @@ from noopstreaming (on (select p1.* from part p1 join part p2 on p1.p_partkey = 
 distribute by j.p_mfgr
 sort by j.p_name)
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name,
 p_size, p_size - lag(p_size,1,p_size) over (partition by p_mfgr order by p_name) as deltaSz
@@ -195,8 +187,6 @@ from noopstreaming (on (select p1.* from part p1 join part p2 on p1.p_partkey = 
 distribute by j.p_mfgr
 sort by j.p_name)
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -214,14 +204,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: p1
-                  filterExpr: p_partkey is not null (type: boolean)
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: p_partkey is not null (type: boolean)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: p_partkey (type: int)
-                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: p_partkey (type: int)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -230,14 +218,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: p2
-                  filterExpr: p_partkey is not null (type: boolean)
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: p_partkey is not null (type: boolean)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: p_partkey (type: int)
-                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: p_partkey (type: int)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -253,7 +239,6 @@ STAGE PLANS:
                 Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col2 (type: string), _col1 (type: string)
-                  null sort order: az
                   sort order: ++
                   Map-reduce partition columns: _col2 (type: string)
                   Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
@@ -273,14 +258,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2
                         raw input shape:
                   Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
@@ -300,7 +284,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -309,7 +293,7 @@ STAGE PLANS:
                               arguments: _col5, 1, _col5
                               name: lag
                               window function: GenericUDAFLagEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                   Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
@@ -381,8 +365,6 @@ partition by p_mfgr
 order by p_name 
 ) abc join part p1 on abc.p_partkey = p1.p_partkey
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain 
 select abc.* 
 from noopstreaming(on part 
@@ -390,8 +372,6 @@ partition by p_mfgr
 order by p_name 
 ) abc join part p1 on abc.p_partkey = p1.p_partkey
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -411,7 +391,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string), p_name (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -420,14 +399,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: p1
-                  filterExpr: p_partkey is not null (type: boolean)
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: p_partkey is not null (type: boolean)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: p_partkey (type: int)
-                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: p_partkey (type: int)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -446,7 +423,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: abc
                         name: noopstreaming
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         output shape: _col0: int, _col1: string, _col2: string, _col3: string, _col4: string, _col5: int, _col6: string, _col7: double, _col8: string
                         partition by: _col2
                         raw input shape:
@@ -456,7 +433,6 @@ STAGE PLANS:
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col0 (type: int)
-                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: _col0 (type: int)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -536,8 +512,6 @@ from noopwithmapstreaming(on part
 partition by p_mfgr
 order by p_name, p_size desc)
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name, p_size, 
 rank() over (partition by p_mfgr order by p_name, p_size desc) as r
@@ -545,8 +519,6 @@ from noopwithmapstreaming(on part
 partition by p_mfgr
 order by p_name, p_size desc)
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -573,7 +545,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_1
                           name: noopwithmapstreaming
-                          order by: p_name ASC NULLS LAST, p_size DESC NULLS LAST
+                          order by: p_name ASC NULLS FIRST, p_size DESC NULLS LAST
                           output shape: p_name: string, p_mfgr: string, p_size: int
                           partition by: p_mfgr
                           raw input shape:
@@ -582,7 +554,6 @@ STAGE PLANS:
                     Map-side function: true
                     Reduce Output Operator
                       key expressions: p_mfgr (type: string), p_name (type: string), p_size (type: int)
-                      null sort order: azz
                       sort order: ++-
                       Map-reduce partition columns: p_mfgr (type: string)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -601,7 +572,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopwithmapstreaming
-                        order by: _col1 ASC NULLS LAST, _col5 DESC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST, _col5 DESC NULLS LAST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2
                         raw input shape:
@@ -609,7 +580,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string), _col5 (type: int)
-                    null sort order: azz
                     sort order: ++-
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -628,7 +598,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST, _col5 DESC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST, _col5 DESC NULLS LAST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -637,7 +607,7 @@ STAGE PLANS:
                               arguments: _col1, _col5
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
@@ -709,8 +679,6 @@ from noopwithmapstreaming(on part
   partition by p_mfgr
   order by p_name)
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name, p_size,
 rank() over (partition by p_mfgr order by p_name) as r,
@@ -720,8 +688,6 @@ from noopwithmapstreaming(on part
   partition by p_mfgr
   order by p_name)
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -748,7 +714,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_1
                           name: noopwithmapstreaming
-                          order by: p_name ASC NULLS LAST
+                          order by: p_name ASC NULLS FIRST
                           output shape: p_name: string, p_mfgr: string, p_size: int, p_retailprice: double
                           partition by: p_mfgr
                           raw input shape:
@@ -757,7 +723,6 @@ STAGE PLANS:
                     Map-side function: true
                     Reduce Output Operator
                       key expressions: p_mfgr (type: string), p_name (type: string)
-                      null sort order: az
                       sort order: ++
                       Map-reduce partition columns: p_mfgr (type: string)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -777,7 +742,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopwithmapstreaming
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -785,7 +750,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -805,7 +769,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -814,21 +778,21 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col7
                               name: sum
                               window function: GenericUDAFSumDouble
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), _col5 (type: int), rank_window_0 (type: int), dense_rank_window_1 (type: int), sum_window_2 (type: double)
@@ -904,8 +868,6 @@ partition by p_mfgr
 order by p_mfgr, p_name
 )))
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name, p_size, 
 rank() over (partition by p_mfgr order by p_name) as r, 
@@ -916,8 +878,6 @@ partition by p_mfgr
 order by p_mfgr, p_name
 )))
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -938,7 +898,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string), p_name (type: string)
-                    null sort order: zz
                     sort order: ++
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -958,7 +917,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -972,7 +931,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_1
                           name: noopwithmapstreaming
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int, _col7: double
                           partition by: _col2
                           raw input shape:
@@ -980,7 +939,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_2
                           name: noopstreaming
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int, _col7: double
                           partition by: _col2
                           raw input shape:
@@ -988,7 +947,6 @@ STAGE PLANS:
                     Map-side function: true
                     Reduce Output Operator
                       key expressions: _col2 (type: string), _col1 (type: string)
-                      null sort order: zz
                       sort order: ++
                       Map-reduce partition columns: _col2 (type: string)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1008,7 +966,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopwithmapstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -1016,14 +974,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_2
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1043,7 +1000,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -1052,21 +1009,21 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col7
                               name: sum
                               window function: GenericUDAFSumDouble
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), _col5 (type: int), rank_window_0 (type: int), dense_rank_window_1 (type: int), sum_window_2 (type: double)
@@ -1144,8 +1101,6 @@ partition by p_mfgr
 order by p_mfgr, p_name
 )))
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name, p_size, 
 rank() over (partition by p_mfgr order by p_name) as r, 
@@ -1156,8 +1111,6 @@ partition by p_mfgr
 order by p_mfgr, p_name
 )))
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -1178,7 +1131,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string), p_name (type: string)
-                    null sort order: zz
                     sort order: ++
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1198,7 +1150,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -1212,7 +1164,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_1
                           name: noopwithmap
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int, _col7: double
                           partition by: _col2
                           raw input shape:
@@ -1220,7 +1172,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_2
                           name: noopstreaming
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int, _col7: double
                           partition by: _col2
                           raw input shape:
@@ -1228,7 +1180,6 @@ STAGE PLANS:
                     Map-side function: true
                     Reduce Output Operator
                       key expressions: _col2 (type: string), _col1 (type: string)
-                      null sort order: zz
                       sort order: ++
                       Map-reduce partition columns: _col2 (type: string)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1248,7 +1199,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopwithmap
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -1256,14 +1207,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_2
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1283,7 +1233,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -1292,21 +1242,21 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col7
                               name: sum
                               window function: GenericUDAFSumDouble
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), _col5 (type: int), rank_window_0 (type: int), dense_rank_window_1 (type: int), sum_window_2 (type: double)
@@ -1384,8 +1334,6 @@ partition by p_mfgr
 order by p_mfgr, p_name
 )))
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name, p_size, 
 rank() over (partition by p_mfgr order by p_name) as r, 
@@ -1396,8 +1344,6 @@ partition by p_mfgr
 order by p_mfgr, p_name
 )))
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -1418,7 +1364,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string), p_name (type: string)
-                    null sort order: zz
                     sort order: ++
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1438,7 +1383,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -1452,7 +1397,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_1
                           name: noopwithmapstreaming
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int, _col7: double
                           partition by: _col2
                           raw input shape:
@@ -1460,7 +1405,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_2
                           name: noop
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int, _col7: double
                           partition by: _col2
                           raw input shape:
@@ -1468,7 +1413,6 @@ STAGE PLANS:
                     Map-side function: true
                     Reduce Output Operator
                       key expressions: _col2 (type: string), _col1 (type: string)
-                      null sort order: zz
                       sort order: ++
                       Map-reduce partition columns: _col2 (type: string)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1488,7 +1432,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopwithmapstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -1496,14 +1440,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_2
                         name: noop
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1523,7 +1466,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -1532,21 +1475,21 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col7
                               name: sum
                               window function: GenericUDAFSumDouble
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), _col5 (type: int), rank_window_0 (type: int), dense_rank_window_1 (type: int), sum_window_2 (type: double)
@@ -1626,8 +1569,6 @@ partition by p_mfgr
 order by p_name 
 ) abc join part p1 on abc.p_partkey = p1.p_partkey
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select abc.p_mfgr, abc.p_name, 
 rank() over (distribute by abc.p_mfgr sort by abc.p_name) as r, 
@@ -1640,8 +1581,6 @@ partition by p_mfgr
 order by p_name 
 ) abc join part p1 on abc.p_partkey = p1.p_partkey
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -1662,7 +1601,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string), p_name (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1671,14 +1609,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: p1
-                  filterExpr: p_partkey is not null (type: boolean)
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: p_partkey is not null (type: boolean)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: p_partkey (type: int)
-                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: p_partkey (type: int)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1697,7 +1633,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: abc
                         name: noopstreaming
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         output shape: _col0: int, _col1: string, _col2: string, _col5: int, _col7: double
                         partition by: _col2
                         raw input shape:
@@ -1707,7 +1643,6 @@ STAGE PLANS:
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col0 (type: int)
-                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: _col0 (type: int)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1724,7 +1659,6 @@ STAGE PLANS:
                 Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col2 (type: string), _col1 (type: string)
-                  null sort order: az
                   sort order: ++
                   Map-reduce partition columns: _col2 (type: string)
                   Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
@@ -1744,7 +1678,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -1753,33 +1687,33 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: count_window_2
                               arguments: _col1
                               name: count
                               window function: GenericUDAFCountEvaluator
-                              window frame: RANGE PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                             window function definition
                               alias: sum_window_3
                               arguments: _col7
                               name: sum
                               window function: GenericUDAFSumDouble
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                             window function definition
                               alias: lag_window_4
                               arguments: _col5, 1, _col5
                               name: lag
                               window function: GenericUDAFLagEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                   Statistics: Num rows: 28 Data size: 3461 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
@@ -1871,8 +1805,6 @@ from noopstreaming(on
         partition by p_mfgr,p_name  
         order by p_mfgr,p_name)
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name,  
 rank() over (partition by p_mfgr,p_name) as r, 
@@ -1890,8 +1822,6 @@ from noopstreaming(on
         partition by p_mfgr,p_name  
         order by p_mfgr,p_name)
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -1912,7 +1842,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string)
-                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1932,14 +1861,14 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2
                         raw input shape:
                       Partition table definition
                         input alias: ptf_2
                         name: noop
-                        order by: _col2 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2
                         raw input shape:
@@ -1953,7 +1882,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_1
                           name: noopwithmap
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int
                           partition by: _col2, _col1
                           raw input shape:
@@ -1961,7 +1890,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_2
                           name: noopstreaming
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int
                           partition by: _col2, _col1
                           raw input shape:
@@ -1969,7 +1898,6 @@ STAGE PLANS:
                     Map-side function: true
                     Reduce Output Operator
                       key expressions: _col2 (type: string), _col1 (type: string)
-                      null sort order: zz
                       sort order: ++
                       Map-reduce partition columns: _col2 (type: string), _col1 (type: string)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -1989,7 +1917,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopwithmap
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2, _col1
                         raw input shape:
@@ -1997,14 +1925,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_2
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2, _col1
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: aa
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string), _col1 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2033,21 +1960,21 @@ STAGE PLANS:
                               arguments: _col2, _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col2, _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col5
                               name: sum
                               window function: GenericUDAFSumLong
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), rank_window_0 (type: int), dense_rank_window_1 (type: int), _col5 (type: int), sum_window_2 (type: bigint)
@@ -2146,8 +2073,6 @@ from noop(on
         partition by p_mfgr  
         order by p_mfgr )
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name,  
 rank() over (partition by p_mfgr order by p_name) as r, 
@@ -2165,8 +2090,6 @@ from noop(on
         partition by p_mfgr  
         order by p_mfgr )
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -2188,7 +2111,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string)
-                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: p_mfgr (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2208,21 +2130,20 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2
                         raw input shape:
                       Partition table definition
                         input alias: ptf_2
                         name: noop
-                        order by: _col2 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: zz
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string), _col1 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2242,14 +2163,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2, _col1
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string)
-                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2269,14 +2189,13 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noop
-                        order by: _col2 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2
                         raw input shape:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2296,7 +2215,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -2305,21 +2224,21 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col5
                               name: sum
                               window function: GenericUDAFSumLong
-                              window frame: ROWS PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), rank_window_0 (type: int), dense_rank_window_1 (type: int), _col5 (type: int), sum_window_2 (type: bigint)
@@ -2415,8 +2334,6 @@ from noopwithmapstreaming(on
               order by p_mfgr, p_name) 
           ))
 PREHOOK: type: QUERY
-PREHOOK: Input: default@part
-#### A masked pattern was here ####
 POSTHOOK: query: explain
 select p_mfgr, p_name,  
 rank() over (partition by p_mfgr order by p_name) as r, 
@@ -2431,8 +2348,6 @@ from noopwithmapstreaming(on
               order by p_mfgr, p_name) 
           ))
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@part
-#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -2453,7 +2368,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: p_mfgr (type: string), p_name (type: string)
-                    null sort order: zz
                     sort order: ++
                     Map-reduce partition columns: p_mfgr (type: string), p_name (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2473,14 +2387,14 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2, _col1
                         raw input shape:
                       Partition table definition
                         input alias: ptf_2
                         name: noop
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2, _col1
                         raw input shape:
@@ -2494,7 +2408,7 @@ STAGE PLANS:
                         Partition table definition
                           input alias: ptf_1
                           name: noopwithmapstreaming
-                          order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                          order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                           output shape: _col1: string, _col2: string, _col5: int
                           partition by: _col2, _col1
                           raw input shape:
@@ -2503,7 +2417,6 @@ STAGE PLANS:
                     Map-side function: true
                     Reduce Output Operator
                       key expressions: _col2 (type: string), _col1 (type: string)
-                      null sort order: zz
                       sort order: ++
                       Map-reduce partition columns: _col2 (type: string), _col1 (type: string)
                       Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2523,7 +2436,7 @@ STAGE PLANS:
                       Partition table definition
                         input alias: ptf_1
                         name: noopwithmapstreaming
-                        order by: _col2 ASC NULLS LAST, _col1 ASC NULLS LAST
+                        order by: _col2 ASC NULLS FIRST, _col1 ASC NULLS FIRST
                         output shape: _col1: string, _col2: string, _col5: int
                         partition by: _col2, _col1
                         raw input shape:
@@ -2531,7 +2444,6 @@ STAGE PLANS:
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: string), _col1 (type: string)
-                    null sort order: az
                     sort order: ++
                     Map-reduce partition columns: _col2 (type: string)
                     Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
@@ -2551,7 +2463,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST
+                        order by: _col1 ASC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:
@@ -2560,21 +2472,21 @@ STAGE PLANS:
                               arguments: _col1
                               name: rank
                               window function: GenericUDAFRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: dense_rank_window_1
                               arguments: _col1
                               name: dense_rank
                               window function: GenericUDAFDenseRankEvaluator
-                              window frame: ROWS PRECEDING(MAX)~FOLLOWING(MAX)
+                              window frame: PRECEDING(MAX)~FOLLOWING(MAX)
                               isPivotResult: true
                             window function definition
                               alias: sum_window_2
                               arguments: _col5
                               name: sum
                               window function: GenericUDAFSumLong
-                              window frame: RANGE PRECEDING(MAX)~CURRENT
+                              window frame: PRECEDING(MAX)~CURRENT
                   Statistics: Num rows: 26 Data size: 3147 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
                     expressions: _col2 (type: string), _col1 (type: string), rank_window_0 (type: int), dense_rank_window_1 (type: int), _col5 (type: int), sum_window_2 (type: bigint), sum_window_2 (type: bigint)

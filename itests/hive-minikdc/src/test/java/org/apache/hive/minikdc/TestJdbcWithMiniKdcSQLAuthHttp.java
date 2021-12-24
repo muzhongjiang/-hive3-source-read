@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,6 +18,7 @@
 
 package org.apache.hive.minikdc;
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.jdbc.miniHS2.MiniHS2;
 import org.junit.BeforeClass;
 
@@ -25,7 +26,8 @@ public class TestJdbcWithMiniKdcSQLAuthHttp extends JdbcWithMiniKdcSQLAuthTest {
 
   @BeforeClass
   public static void beforeTest() throws Exception {
-    JdbcWithMiniKdcSQLAuthTest.beforeTestBase(MiniHS2.HS2_HTTP_MODE);
+    hiveConf.setVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE, MiniHS2.HS2_HTTP_MODE);
+    JdbcWithMiniKdcSQLAuthTest.beforeTestBase();
 
   }
 

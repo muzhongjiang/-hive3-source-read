@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,7 +22,6 @@ import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * This operation is handled as a special case because Hive
@@ -31,9 +30,15 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  */
 public class LongColDivideLongColumn extends VectorExpression {
   private static final long serialVersionUID = 1L;
+  int colNum1;
+  int colNum2;
+  int outputColumn;
 
-  public LongColDivideLongColumn(int colNum1, int colNum2, int outputColumnNum) {
-    super(colNum1, colNum2, outputColumnNum);
+  public LongColDivideLongColumn(int colNum1, int colNum2, int outputColumn) {
+    this();
+    this.colNum1 = colNum1;
+    this.colNum2 = colNum2;
+    this.outputColumn = outputColumn;
   }
 
   public LongColDivideLongColumn() {
@@ -41,15 +46,15 @@ public class LongColDivideLongColumn extends VectorExpression {
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    LongColumnVector inputColVector1 = (LongColumnVector) batch.cols[inputColumnNum[0]];
-    LongColumnVector inputColVector2 = (LongColumnVector) batch.cols[inputColumnNum[1]];
-    DoubleColumnVector outputColVector = (DoubleColumnVector) batch.cols[outputColumnNum];
+    LongColumnVector inputColVector1 = (LongColumnVector) batch.cols[colNum1];
+    LongColumnVector inputColVector2 = (LongColumnVector) batch.cols[colNum2];
+    DoubleColumnVector outputColVector = (DoubleColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
     int n = batch.size;
     long[] vector1 = inputColVector1.vector;
@@ -61,9 +66,9 @@ public class LongColDivideLongColumn extends VectorExpression {
       return;
     }
 
-    /*
-     * Propagate null values for a two-input operator and set isRepeating and noNulls appropriately.
-     */
+    outputColVector.isRepeating = inputColVector1.isRepeating && inputColVector2.isRepeating;
+
+    // Handle nulls first
     NullUtil.propagateNullsColCol(
       inputColVector1, inputColVector2, outputColVector, sel, n, batch.selectedInUse);
 
@@ -139,8 +144,38 @@ public class LongColDivideLongColumn extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "double";
+  }
+
+  public int getColNum1() {
+    return colNum1;
+  }
+
+  public void setColNum1(int colNum1) {
+    this.colNum1 = colNum1;
+  }
+
+  public int getColNum2() {
+    return colNum2;
+  }
+
+  public void setColNum2(int colNum2) {
+    this.colNum2 = colNum2;
+  }
+
+  public void setOutputColumn(int outputColumn) {
+    this.outputColumn = outputColumn;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", " + getColumnParamString(1, inputColumnNum[1]);
+    return "col " + colNum1 + ", col " + colNum2;
   }
 
   @Override

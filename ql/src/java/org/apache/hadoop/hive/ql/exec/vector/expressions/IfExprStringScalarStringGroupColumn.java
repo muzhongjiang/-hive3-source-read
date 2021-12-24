@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * Compute IF(expr1, expr2, expr3) for 3 input column expressions.
@@ -37,43 +36,35 @@ public class IfExprStringScalarStringGroupColumn extends VectorExpression {
 
   private static final long serialVersionUID = 1L;
 
-  private final byte[] arg2Scalar;
+  private int arg1Column, arg3Column;
+  private byte[] arg2Scalar;
+  private int outputColumn;
 
-
-  public IfExprStringScalarStringGroupColumn(int arg1Column, byte[] arg2Scalar, int arg3Column,
-      int outputColumnNum) {
-    super(arg1Column, arg3Column, outputColumnNum);
+  public IfExprStringScalarStringGroupColumn(int arg1Column, byte[] arg2Scalar, int arg3Column, int outputColumn) {
+    this.arg1Column = arg1Column;
     this.arg2Scalar = arg2Scalar;
+    this.arg3Column = arg3Column;
+    this.outputColumn = outputColumn;
   }
 
   public IfExprStringScalarStringGroupColumn() {
     super();
-
-    // Dummy final assignments.
-    arg2Scalar = null;
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
 
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    LongColumnVector arg1ColVector = (LongColumnVector) batch.cols[inputColumnNum[0]];
-    BytesColumnVector arg3ColVector = (BytesColumnVector) batch.cols[inputColumnNum[1]];
-    BytesColumnVector outputColVector = (BytesColumnVector) batch.cols[outputColumnNum];
+    LongColumnVector arg1ColVector = (LongColumnVector) batch.cols[arg1Column];
+    BytesColumnVector arg3ColVector = (BytesColumnVector) batch.cols[arg3Column];
+    BytesColumnVector outputColVector = (BytesColumnVector) batch.cols[outputColumn];
     int[] sel = batch.selected;
     boolean[] outputIsNull = outputColVector.isNull;
-
-    if (!outputColVector.noNulls) {
-      // TEMPORARILY:
-      outputColVector.reset();
-    }
-
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
-
+    outputColVector.noNulls = arg3ColVector.noNulls;
+    outputColVector.isRepeating = false; // may override later
     int n = batch.size;
     long[] vector1 = arg1ColVector.vector;
 
@@ -91,7 +82,7 @@ public class IfExprStringScalarStringGroupColumn extends VectorExpression {
      * of code paths.
      */
     if (arg1ColVector.isRepeating) {
-      if ((arg1ColVector.noNulls || !arg1ColVector.isNull[0]) && vector1[0] == 1) {
+      if (vector1[0] == 1) {
         outputColVector.fill(arg2Scalar);
       } else {
         arg3ColVector.copySelected(batch.selectedInUse, sel, n, outputColVector);
@@ -101,11 +92,6 @@ public class IfExprStringScalarStringGroupColumn extends VectorExpression {
 
     // extend any repeating values and noNulls indicator in the input
     arg3ColVector.flatten(batch.selectedInUse, sel, n);
-
-    /*
-     * Do careful maintenance of NULLs.
-     */
-    outputColVector.noNulls = false;
 
     if (arg1ColVector.noNulls) {
       if (batch.selectedInUse) {
@@ -170,8 +156,18 @@ public class IfExprStringScalarStringGroupColumn extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "String";
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", val "+ displayUtf8Bytes(arg2Scalar) + getColumnParamString(2, inputColumnNum[1]);
+    return "col " + arg1Column + ", val "+ displayUtf8Bytes(arg2Scalar) + ", col "+ arg3Column;
   }
 
   @Override
@@ -182,8 +178,8 @@ public class IfExprStringScalarStringGroupColumn extends VectorExpression {
         .setNumArguments(3)
         .setArgumentTypes(
             VectorExpressionDescriptor.ArgumentType.INT_FAMILY,
-            VectorExpressionDescriptor.ArgumentType.STRING_BINARY,
-            VectorExpressionDescriptor.ArgumentType.STRING_FAMILY_BINARY)
+            VectorExpressionDescriptor.ArgumentType.STRING,
+            VectorExpressionDescriptor.ArgumentType.STRING_FAMILY)
         .setInputExpressionTypes(
             VectorExpressionDescriptor.InputExpressionType.COLUMN,
             VectorExpressionDescriptor.InputExpressionType.SCALAR,

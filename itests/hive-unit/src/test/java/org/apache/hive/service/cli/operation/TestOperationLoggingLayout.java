@@ -18,17 +18,11 @@
 package org.apache.hive.service.cli.operation;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.log.HushableRandomAccessFileAppender;
-import org.apache.hadoop.hive.ql.log.LogDivertAppender;
-import org.apache.hadoop.hive.ql.log.LogDivertAppenderForTest;
 import org.apache.hive.jdbc.miniHS2.MiniHS2;
 import org.apache.hive.service.cli.CLIServiceClient;
 import org.apache.hive.service.cli.FetchOrientation;
@@ -36,15 +30,6 @@ import org.apache.hive.service.cli.FetchType;
 import org.apache.hive.service.cli.OperationHandle;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.SessionHandle;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.AbstractLogEvent;
-import org.apache.logging.log4j.core.Appender;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.appender.routing.RoutingAppender;
-import org.apache.logging.log4j.core.config.AppenderControl;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -103,156 +88,33 @@ public class TestOperationLoggingLayout {
     miniHS2.stop();
   }
 
-  private String getQueryId(RowSet rowSetLog) {
+  @Test
+  public void testSwitchLogLayout() throws Exception {
+    // verify whether the sql operation log is generated and fetch correctly.
+    OperationHandle operationHandle = client.executeStatement(sessionHandle, sqlCntStar, null);
+    RowSet rowSetLog = client.fetchResults(operationHandle, FetchOrientation.FETCH_FIRST, 1000,
+        FetchType.LOG);
     Iterator<Object[]> iter = rowSetLog.iterator();
     // non-verbose pattern is %-5p : %m%n. Look for " : "
     while (iter.hasNext()) {
       String row = iter.next()[0].toString();
       Assert.assertEquals(true, row.matches("^.*(FATAL|ERROR|WARN|INFO|DEBUG|TRACE).*$"));
-
-      // look for a row like "INFO  : Query ID = asherman_20170718154720_17c7d18b-36e6-4b35-a8e2-f50847db58ae"
-      String queryIdLoggingProbe = "INFO  : Query ID = ";
-      int index = row.indexOf(queryIdLoggingProbe);
-      if (index >= 0) {
-        return row.substring(queryIdLoggingProbe.length()).trim();
-      }
-    }
-    return null;
-  }
-
-  private void appendHushableRandomAccessFileAppender(Appender queryAppender) {
-    HushableRandomAccessFileAppender hushableAppender;
-
-    if((queryAppender!= null) && (queryAppender instanceof HushableRandomAccessFileAppender)) {
-      hushableAppender = (HushableRandomAccessFileAppender) queryAppender;
-      try {
-        hushableAppender.append(new LocalLogEvent());
-      } catch (Exception e) {
-        Assert.fail("Exception is not expected while appending HushableRandomAccessFileAppender");
-      }
-    }
-  }
-
-  private void executeWithOperationLog(String query, boolean queryLogEnabled) throws Exception {
-    // verify whether the sql operation log is generated and fetch correctly.
-    OperationHandle operationHandle = client.executeStatement(sessionHandle, query, null);
-    RowSet rowSetLog = client.fetchResults(operationHandle, FetchOrientation.FETCH_FIRST, 1000,
-            FetchType.LOG);
-    String queryId = "";
-    boolean expectedStopped = true;
-    if (queryLogEnabled) {
-      queryId = getQueryId(rowSetLog);
-      expectedStopped = false;
-      Assert.assertNotNull("Could not find query id, perhaps a logging message changed", queryId);
-    } else {
-      Assert.assertEquals("Operation log is generated even if query logging is disabled", rowSetLog.numRows(), 0);
-      Assert.assertNull("Query id present even if logging is disabled.", getQueryId(rowSetLog));
     }
 
-    checkAppenderState("before operation close ", LogDivertAppender.QUERY_ROUTING_APPENDER, queryId, expectedStopped);
-    checkAppenderState("before operation close ", LogDivertAppenderForTest.TEST_QUERY_ROUTING_APPENDER, queryId, expectedStopped);
-    client.closeOperation(operationHandle);
-    checkAppenderState("after operation close ", LogDivertAppender.QUERY_ROUTING_APPENDER, queryId, true);
-    checkAppenderState("after operation close ", LogDivertAppenderForTest.TEST_QUERY_ROUTING_APPENDER, queryId, true);
-  }
-
-  @Test
-  public void testSwitchLogLayout() throws Exception {
-    executeWithOperationLog(sqlCntStar, true);
-  }
-
-  @Test
-  public void testQueryLogDisabled() throws Exception {
-    OperationHandle operationHandle = client.executeStatement(sessionHandle,
-            "set hive.server2.logging.operation.enabled=false", null);
-    client.closeOperation(operationHandle);
-
-    executeWithOperationLog(sqlCntStar, false);
-
-    operationHandle = client.executeStatement(sessionHandle,
-            "set hive.server2.logging.operation.enabled=true", null);
-    client.closeOperation(operationHandle);
-  }
-
-  @Test
-  /**
-   * Test to make sure that appending log event to HushableRandomAccessFileAppender even after
-   * closing the corresponding operation would not throw an exception.
-   */
-  public void testHushableRandomAccessFileAppender() throws Exception {
-    // verify whether the sql operation log is generated and fetch correctly.
-    OperationHandle operationHandle = client.executeStatement(sessionHandle, sqlCntStar, null);
-    RowSet rowSetLog = client.fetchResults(operationHandle, FetchOrientation.FETCH_FIRST, 1000,
-            FetchType.LOG);
-    Appender queryAppender;
-    Appender testQueryAppender;
-    String queryId = getQueryId(rowSetLog);
-
-    Assert.assertNotNull("Could not find query id, perhaps a logging message changed", queryId);
-
-    checkAppenderState("before operation close ", LogDivertAppender.QUERY_ROUTING_APPENDER, queryId, false);
-    queryAppender = getAppender(LogDivertAppender.QUERY_ROUTING_APPENDER, queryId);
-    checkAppenderState("before operation close ", LogDivertAppenderForTest.TEST_QUERY_ROUTING_APPENDER, queryId, false);
-    testQueryAppender = getAppender(LogDivertAppenderForTest.TEST_QUERY_ROUTING_APPENDER, queryId);
-
-    client.closeOperation(operationHandle);
-    appendHushableRandomAccessFileAppender(queryAppender);
-    appendHushableRandomAccessFileAppender(testQueryAppender);
-  }
-  /**
-   * assert that the appender for the given queryId is in the expected state.
-   * @param msg a diagnostic
-   * @param routingAppenderName name of the RoutingAppender
-   * @param queryId the query id to use as a key
-   * @param expectedStopped the expected stop state
-   */
-  private void checkAppenderState(String msg, String routingAppenderName, String queryId,
-      boolean expectedStopped) throws NoSuchFieldException, IllegalAccessException {
-    LoggerContext context = (LoggerContext) LogManager.getContext(false);
-    Configuration configuration = context.getConfiguration();
-    LoggerConfig loggerConfig = configuration.getRootLogger();
-    Map<String, Appender> appendersMap = loggerConfig.getAppenders();
-    RoutingAppender routingAppender = (RoutingAppender) appendersMap.get(routingAppenderName);
-    Assert.assertNotNull(msg + "could not find routingAppender " + routingAppenderName, routingAppender);
-    Field defaultsField = RoutingAppender.class.getDeclaredField("createdAppenders");
-    defaultsField.setAccessible(true);
-    ConcurrentHashMap appenders = (ConcurrentHashMap) defaultsField.get(routingAppender);
-    AppenderControl appenderControl = (AppenderControl) appenders.get(queryId);
-    if (!expectedStopped) {
-      Assert.assertNotNull(msg + "Could not find AppenderControl for query id " + queryId, appenderControl);
-      Appender appender = appenderControl.getAppender();
-      Assert.assertNotNull(msg + "could not find Appender for query id " + queryId + " from AppenderControl " +
-              appenderControl, appender);
-      Assert.assertEquals(msg + "Appender for query is in unexpected state", expectedStopped, appender.isStopped());
-    } else {
-      Assert.assertNull(msg + "AppenderControl for query id is not removed" + queryId, appenderControl);
-    }
-  }
-
-  /**
-   * Get the appender associated with a query.
-   * @param routingAppenderName Routing appender name
-   * @param queryId Query Id for the operation
-   * @return Appender if found, else null
-   * @throws NoSuchFieldException
-   * @throws IllegalAccessException
-   */
-  private Appender getAppender(String routingAppenderName, String queryId)
-          throws NoSuchFieldException, IllegalAccessException {
-    LoggerContext context = (LoggerContext) LogManager.getContext(false);
-    Configuration configuration = context.getConfiguration();
-    LoggerConfig loggerConfig = configuration.getRootLogger();
-    Map<String, Appender> appendersMap = loggerConfig.getAppenders();
-    RoutingAppender routingAppender = (RoutingAppender) appendersMap.get(routingAppenderName);
-    Assert.assertNotNull("could not find routingAppender " + routingAppenderName, routingAppender);
-    Field defaultsField = RoutingAppender.class.getDeclaredField("createdAppenders");
-    defaultsField.setAccessible(true);
-    ConcurrentHashMap appenders = (ConcurrentHashMap) defaultsField.get(routingAppender);
-    AppenderControl appenderControl = (AppenderControl) appenders.get(queryId);
-    if(appenderControl != null) {
-      return appenderControl.getAppender();
-    } else {
-      return null;
+    String queryString = "set hive.server2.logging.operation.level=verbose";
+    client.executeStatement(sessionHandle, queryString, null);
+    operationHandle = client.executeStatement(sessionHandle, sqlCntStar, null);
+    // just check for first few lines, some log lines are multi-line strings which can break format
+    // checks below
+    rowSetLog = client.fetchResults(operationHandle, FetchOrientation.FETCH_FIRST, 10,
+        FetchType.LOG);
+    iter = rowSetLog.iterator();
+    // verbose pattern is "%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n"
+    while (iter.hasNext()) {
+      String row = iter.next()[0].toString();
+      // just check if the log line starts with date
+      Assert.assertEquals(true,
+          row.matches("^\\d{2}[/](0[1-9]|1[012])[/](0[1-9]|[12][0-9]|3[01]).*$"));
     }
   }
 
@@ -285,18 +147,5 @@ public class TestOperationLoggingLayout {
     Assert.assertEquals("val_238", rowSetResult.iterator().next()[1]);
 
     return sessionHandle;
-  }
-
-  /**
-   * A minimal LogEvent implementation for testing
-   */
-  private static class LocalLogEvent extends AbstractLogEvent {
-
-    LocalLogEvent() {
-    }
-
-    @Override public Level getLevel() {
-      return Level.DEBUG;
-    }
   }
 }

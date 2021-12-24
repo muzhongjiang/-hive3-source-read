@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,38 +18,42 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.io.IOException;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hive.common.type.HiveChar;
+import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
-import org.apache.hadoop.hive.common.type.Date;
-import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
-import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils;
 import org.apache.hadoop.hive.ql.io.IOPrepareCache;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
+import org.apache.hadoop.hive.ql.plan.Explain;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.PartitionDesc;
-import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.ql.plan.Explain.Level;
+import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
+import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
-import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.mapred.FileSplit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.hive.common.util.DateUtils;
 
 import com.google.common.base.Preconditions;
 
@@ -71,16 +75,11 @@ public class VectorizedRowBatchCtx {
   // It will be stored in MapWork and ReduceWork.
   private String[] rowColumnNames;
   private TypeInfo[] rowColumnTypeInfos;
-  private DataTypePhysicalVariation[] rowDataTypePhysicalVariations;
   private int[] dataColumnNums;
   private int dataColumnCount;
   private int partitionColumnCount;
-  private int virtualColumnCount;
-  private VirtualColumn[] neededVirtualColumns;
 
   private String[] scratchColumnTypeNames;
-  private DataTypePhysicalVariation[] scratchDataTypePhysicalVariations;
-
 
   /**
    * Constructor for VectorizedRowBatchCtx
@@ -88,53 +87,15 @@ public class VectorizedRowBatchCtx {
   public VectorizedRowBatchCtx() {
   }
 
-  public VectorizedRowBatchCtx(
-      String[] rowColumnNames,
-      TypeInfo[] rowColumnTypeInfos,
-      DataTypePhysicalVariation[] rowDataTypePhysicalVariations,
-      int[] dataColumnNums,
-      int partitionColumnCount,
-      int virtualColumnCount,
-      VirtualColumn[] neededVirtualColumns,
-      String[] scratchColumnTypeNames,
-      DataTypePhysicalVariation[] scratchDataTypePhysicalVariations) {
+  public VectorizedRowBatchCtx(String[] rowColumnNames, TypeInfo[] rowColumnTypeInfos,
+      int[] dataColumnNums, int partitionColumnCount, String[] scratchColumnTypeNames) {
     this.rowColumnNames = rowColumnNames;
     this.rowColumnTypeInfos = rowColumnTypeInfos;
-    if (rowDataTypePhysicalVariations == null) {
-      this.rowDataTypePhysicalVariations = new DataTypePhysicalVariation[rowColumnTypeInfos.length];
-      Arrays.fill(this.rowDataTypePhysicalVariations, DataTypePhysicalVariation.NONE);
-    } else {
-      this.rowDataTypePhysicalVariations = rowDataTypePhysicalVariations;
-    }
     this.dataColumnNums = dataColumnNums;
     this.partitionColumnCount = partitionColumnCount;
-
-    /*
-     * Needed virtual columns are those used in the query.
-     */
-    if (neededVirtualColumns == null) {
-      neededVirtualColumns = new VirtualColumn[0];
-    } else {
-      this.neededVirtualColumns = neededVirtualColumns;
-    }
-
-    /*
-     * The virtual columns available under vectorization.  They may not actually
-     * be used in this query.  Unused columns will be null, just like unused data and partition
-     * columns are.
-     */
-    //
-    this.virtualColumnCount = virtualColumnCount;
-
     this.scratchColumnTypeNames = scratchColumnTypeNames;
-    if (scratchDataTypePhysicalVariations == null) {
-      this.scratchDataTypePhysicalVariations = new DataTypePhysicalVariation[scratchColumnTypeNames.length];
-      Arrays.fill(this.scratchDataTypePhysicalVariations, DataTypePhysicalVariation.NONE);
-    } else {
-      this.scratchDataTypePhysicalVariations = scratchDataTypePhysicalVariations;
-    }
 
-    dataColumnCount = rowColumnTypeInfos.length - partitionColumnCount - virtualColumnCount;
+    dataColumnCount = rowColumnTypeInfos.length - partitionColumnCount;
   }
 
   public String[] getRowColumnNames() {
@@ -143,15 +104,6 @@ public class VectorizedRowBatchCtx {
 
   public TypeInfo[] getRowColumnTypeInfos() {
     return rowColumnTypeInfos;
-  }
-
-  public DataTypePhysicalVariation[] getRowdataTypePhysicalVariations() {
-    return rowDataTypePhysicalVariations;
-  }
-
-  public void setRowDataTypePhysicalVariations(
-    final DataTypePhysicalVariation[] rowDataTypePhysicalVariations) {
-    this.rowDataTypePhysicalVariations = rowDataTypePhysicalVariations;
   }
 
   public int[] getDataColumnNums() {
@@ -166,41 +118,8 @@ public class VectorizedRowBatchCtx {
     return partitionColumnCount;
   }
 
-  public int getVirtualColumnCount() {
-    return virtualColumnCount;
-  }
-
-  public VirtualColumn[] getNeededVirtualColumns() {
-    return neededVirtualColumns;
-  }
-
-  public boolean isVirtualColumnNeeded(String virtualColumnName) {
-    for (VirtualColumn neededVirtualColumn : neededVirtualColumns) {
-      if (neededVirtualColumn.getName().equals(virtualColumnName)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  public int findVirtualColumnNum(VirtualColumn virtualColumn) {
-    // Virtual columns start after the last partition column.
-    int resultColumnNum = dataColumnCount + partitionColumnCount;
-    for (VirtualColumn neededVirtualColumn : neededVirtualColumns) {
-      if (neededVirtualColumn.equals(virtualColumn)) {
-        return resultColumnNum;
-      }
-      resultColumnNum++;
-    }
-    return -1;
-  }
-
   public String[] getScratchColumnTypeNames() {
     return scratchColumnTypeNames;
-  }
-
-  public DataTypePhysicalVariation[] getScratchDataTypePhysicalVariations() {
-    return scratchDataTypePhysicalVariations;
   }
 
   /**
@@ -219,41 +138,10 @@ public class VectorizedRowBatchCtx {
     rowColumnTypeInfos = VectorizedBatchUtil.typeInfosFromStructObjectInspector(structObjectInspector);
     dataColumnNums = null;
     partitionColumnCount = 0;
-    virtualColumnCount = 0;
-    neededVirtualColumns = new VirtualColumn[0];
     dataColumnCount = rowColumnTypeInfos.length;
 
     // Scratch column information.
     this.scratchColumnTypeNames = scratchColumnTypeNames;
-    final int scratchSize = scratchColumnTypeNames.length;
-    scratchDataTypePhysicalVariations = new DataTypePhysicalVariation[scratchSize];
-    Arrays.fill(scratchDataTypePhysicalVariations, DataTypePhysicalVariation.NONE);
-  }
-
-  /**
-   * Initializes the VectorizedRowBatch context based on an scratch column type names and
-   * object inspector.
-   * @param structObjectInspector
-   * @param scratchColumnTypeNames
-   *          Object inspector that shapes the column types
-   * @throws HiveException
-   */
-  public void init(StructObjectInspector structObjectInspector, String[] scratchColumnTypeNames,
-      DataTypePhysicalVariation[] scratchDataTypePhysicalVariations)
-          throws HiveException {
-
-    // Row column information.
-    rowColumnNames = VectorizedBatchUtil.columnNamesFromStructObjectInspector(structObjectInspector);
-    rowColumnTypeInfos = VectorizedBatchUtil.typeInfosFromStructObjectInspector(structObjectInspector);
-    dataColumnNums = null;
-    partitionColumnCount = 0;
-    virtualColumnCount = 0;
-    neededVirtualColumns = new VirtualColumn[0];
-    dataColumnCount = rowColumnTypeInfos.length;
-
-    // Scratch column information.
-    this.scratchColumnTypeNames = scratchColumnTypeNames;
-    this.scratchDataTypePhysicalVariations = scratchDataTypePhysicalVariations;
   }
 
   public static void getPartitionValues(VectorizedRowBatchCtx vrbCtx, Configuration hiveConf,
@@ -269,7 +157,7 @@ public class VectorizedRowBatchCtx {
     Map<Path, PartitionDesc> pathToPartitionInfo = mapWork.getPathToPartitionInfo();
 
     PartitionDesc partDesc = HiveFileFormatUtils
-        .getFromPathRecursively(pathToPartitionInfo,
+        .getPartitionDescFromPathRecursively(pathToPartitionInfo,
             split.getPath(), IOPrepareCache.get().getPartitionDescMap());
 
     getPartitionValues(vrbCtx, partDesc, partitionValues);
@@ -308,67 +196,46 @@ public class VectorizedRowBatchCtx {
     }
   }
 
-  private ColumnVector createColumnVectorFromRowColumnTypeInfos(int columnNum) {
-    TypeInfo typeInfo = rowColumnTypeInfos[columnNum];
-    final DataTypePhysicalVariation dataTypePhysicalVariation;
-    if (rowDataTypePhysicalVariations != null) {
-      dataTypePhysicalVariation = rowDataTypePhysicalVariations[columnNum];
-    } else {
-      dataTypePhysicalVariation = DataTypePhysicalVariation.NONE;
-    }
-    return VectorizedBatchUtil.createColumnVector(typeInfo, dataTypePhysicalVariation);
-  }
-
   /**
    * Creates a Vectorized row batch and the column vectors.
    *
    * @return VectorizedRowBatch
+   * @throws HiveException
    */
   public VectorizedRowBatch createVectorizedRowBatch()
   {
-    final int nonScratchColumnCount = rowColumnTypeInfos.length;
-    final int totalColumnCount =
-        nonScratchColumnCount + scratchColumnTypeNames.length;
+    final int dataAndPartColumnCount = rowColumnTypeInfos.length;
+    final int totalColumnCount = dataAndPartColumnCount + scratchColumnTypeNames.length;
     VectorizedRowBatch result = new VectorizedRowBatch(totalColumnCount);
 
     if (dataColumnNums == null) {
         // All data and partition columns.
-      for (int i = 0; i < nonScratchColumnCount; i++) {
-        result.cols[i] = createColumnVectorFromRowColumnTypeInfos(i);
+      for (int i = 0; i < dataAndPartColumnCount; i++) {
+        TypeInfo typeInfo = rowColumnTypeInfos[i];
+        result.cols[i] = VectorizedBatchUtil.createColumnVector(typeInfo);
       }
     } else {
       // Create only needed/included columns data columns.
       for (int i = 0; i < dataColumnNums.length; i++) {
         int columnNum = dataColumnNums[i];
-        Preconditions.checkState(columnNum < nonScratchColumnCount);
-        result.cols[columnNum] =
-            createColumnVectorFromRowColumnTypeInfos(columnNum);
+        Preconditions.checkState(columnNum < dataAndPartColumnCount);
+        TypeInfo typeInfo = rowColumnTypeInfos[columnNum];
+        result.cols[columnNum] = VectorizedBatchUtil.createColumnVector(typeInfo);
       }
-      // Always create partition and virtual columns.
-      final int partitionEndColumnNum = dataColumnCount + partitionColumnCount;
-      for (int partitionColumnNum = dataColumnCount; partitionColumnNum < partitionEndColumnNum; partitionColumnNum++) {
-        result.cols[partitionColumnNum] =
-          createColumnVectorFromRowColumnTypeInfos(partitionColumnNum);
-      }
-      final int virtualEndColumnNum = partitionEndColumnNum + virtualColumnCount;
-      for (int virtualColumnNum = partitionEndColumnNum; virtualColumnNum < virtualEndColumnNum; virtualColumnNum++) {
-        String virtualColumnName = rowColumnNames[virtualColumnNum];
-        if (!isVirtualColumnNeeded(virtualColumnName)) {
-          continue;
-        }
-        result.cols[virtualColumnNum] =
-            VectorizedBatchUtil.createColumnVector(rowColumnTypeInfos[virtualColumnNum]);
+      // Always create partition columns.
+      final int endColumnNum = dataColumnCount + partitionColumnCount;
+      for (int partitionColumnNum = dataColumnCount; partitionColumnNum < endColumnNum; partitionColumnNum++) {
+        TypeInfo typeInfo = rowColumnTypeInfos[partitionColumnNum];
+        result.cols[partitionColumnNum] = VectorizedBatchUtil.createColumnVector(typeInfo);
       }
     }
 
     for (int i = 0; i < scratchColumnTypeNames.length; i++) {
       String typeName = scratchColumnTypeNames[i];
-      DataTypePhysicalVariation dataTypePhysicalVariation = scratchDataTypePhysicalVariations[i];
-      result.cols[nonScratchColumnCount + i] =
-          VectorizedBatchUtil.createColumnVector(typeName, dataTypePhysicalVariation);
+      result.cols[rowColumnTypeInfos.length + i] =
+          VectorizedBatchUtil.createColumnVector(typeName);
     }
 
-    // UNDONE: Also remember virtualColumnCount...
     result.setPartitionInfo(dataColumnCount, partitionColumnCount);
 
     result.reset();
@@ -380,13 +247,9 @@ public class VectorizedRowBatchCtx {
    *
    * @param batch
    * @param partitionValues
+   * @throws HiveException
    */
   public void addPartitionColsToBatch(VectorizedRowBatch batch, Object[] partitionValues)
-  {
-    addPartitionColsToBatch(batch.cols, partitionValues);
-  }
-
-  public void addPartitionColsToBatch(ColumnVector[] cols, Object[] partitionValues)
   {
     if (partitionValues != null) {
       for (int i = 0; i < partitionColumnCount; i++) {
@@ -397,163 +260,163 @@ public class VectorizedRowBatchCtx {
         PrimitiveTypeInfo primitiveTypeInfo = (PrimitiveTypeInfo) rowColumnTypeInfos[colIndex];
         switch (primitiveTypeInfo.getPrimitiveCategory()) {
         case BOOLEAN: {
-          LongColumnVector lcv = (LongColumnVector) cols[colIndex];
+          LongColumnVector lcv = (LongColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
             lcv.fill((Boolean) value == true ? 1 : 0);
+            lcv.isNull[0] = false;
           }
         }
         break;
 
         case BYTE: {
-          LongColumnVector lcv = (LongColumnVector) cols[colIndex];
+          LongColumnVector lcv = (LongColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
             lcv.fill((Byte) value);
+            lcv.isNull[0] = false;
           }
         }
         break;
 
         case SHORT: {
-          LongColumnVector lcv = (LongColumnVector) cols[colIndex];
+          LongColumnVector lcv = (LongColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
             lcv.fill((Short) value);
+            lcv.isNull[0] = false;
           }
         }
         break;
 
         case INT: {
-          LongColumnVector lcv = (LongColumnVector) cols[colIndex];
+          LongColumnVector lcv = (LongColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
             lcv.fill((Integer) value);
+            lcv.isNull[0] = false;
           }
         }
         break;
 
         case LONG: {
-          LongColumnVector lcv = (LongColumnVector) cols[colIndex];
+          LongColumnVector lcv = (LongColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
             lcv.fill((Long) value);
+            lcv.isNull[0] = false;
           }
         }
         break;
 
         case DATE: {
-          LongColumnVector lcv = (LongColumnVector) cols[colIndex];
+          LongColumnVector lcv = (LongColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
-            lcv.fill(DateWritableV2.dateToDays((Date) value));
+            lcv.fill(DateWritable.dateToDays((Date) value));
+            lcv.isNull[0] = false;
           }
         }
         break;
 
         case TIMESTAMP: {
-          TimestampColumnVector lcv = (TimestampColumnVector) cols[colIndex];
+          TimestampColumnVector lcv = (TimestampColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
-            lcv.fill(((Timestamp) value).toSqlTimestamp());
+            lcv.fill((Timestamp) value);
+            lcv.isNull[0] = false;
           }
         }
         break;
 
         case INTERVAL_YEAR_MONTH: {
-          LongColumnVector lcv = (LongColumnVector) cols[colIndex];
+          LongColumnVector lcv = (LongColumnVector) batch.cols[colIndex];
           if (value == null) {
             lcv.noNulls = false;
             lcv.isNull[0] = true;
             lcv.isRepeating = true;
           } else {
             lcv.fill(((HiveIntervalYearMonth) value).getTotalMonths());
+            lcv.isNull[0] = false;
           }
         }
 
         case INTERVAL_DAY_TIME: {
-          IntervalDayTimeColumnVector icv = (IntervalDayTimeColumnVector) cols[colIndex];
+          IntervalDayTimeColumnVector icv = (IntervalDayTimeColumnVector) batch.cols[colIndex];
           if (value == null) {
             icv.noNulls = false;
             icv.isNull[0] = true;
             icv.isRepeating = true;
           } else {
             icv.fill(((HiveIntervalDayTime) value));
+            icv.isNull[0] = false;
           }
         }
 
         case FLOAT: {
-          DoubleColumnVector dcv = (DoubleColumnVector) cols[colIndex];
+          DoubleColumnVector dcv = (DoubleColumnVector) batch.cols[colIndex];
           if (value == null) {
             dcv.noNulls = false;
             dcv.isNull[0] = true;
             dcv.isRepeating = true;
           } else {
             dcv.fill((Float) value);
+            dcv.isNull[0] = false;
           }
         }
         break;
 
         case DOUBLE: {
-          DoubleColumnVector dcv = (DoubleColumnVector) cols[colIndex];
+          DoubleColumnVector dcv = (DoubleColumnVector) batch.cols[colIndex];
           if (value == null) {
             dcv.noNulls = false;
             dcv.isNull[0] = true;
             dcv.isRepeating = true;
           } else {
             dcv.fill((Double) value);
+            dcv.isNull[0] = false;
           }
         }
         break;
 
         case DECIMAL: {
-          DataTypePhysicalVariation dataTypePhysicalVariation = rowDataTypePhysicalVariations != null ?
-            rowDataTypePhysicalVariations[colIndex] : DataTypePhysicalVariation.NONE;
-
-          if (dataTypePhysicalVariation == DataTypePhysicalVariation.DECIMAL_64) {
-            Decimal64ColumnVector dv = (Decimal64ColumnVector) cols[colIndex];
-            if (value == null) {
-              dv.noNulls = false;
-              dv.isNull[0] = true;
-              dv.isRepeating = true;
-            } else {
-              dv.fill(((HiveDecimal) value).longValue());
-            }
+          DecimalColumnVector dv = (DecimalColumnVector) batch.cols[colIndex];
+          if (value == null) {
+            dv.noNulls = false;
+            dv.isNull[0] = true;
+            dv.isRepeating = true;
           } else {
-            DecimalColumnVector dv = (DecimalColumnVector) cols[colIndex];
-            if (value == null) {
-              dv.noNulls = false;
-              dv.isNull[0] = true;
-              dv.isRepeating = true;
-            } else {
-              dv.fill((HiveDecimal) value);
-            }
+            HiveDecimal hd = (HiveDecimal) value;
+            dv.set(0, hd);
+            dv.isRepeating = true;
+            dv.isNull[0] = false;
           }
         }
         break;
 
         case BINARY: {
-            BytesColumnVector bcv = (BytesColumnVector) cols[colIndex];
+            BytesColumnVector bcv = (BytesColumnVector) batch.cols[colIndex];
             byte[] bytes = (byte[]) value;
             if (bytes == null) {
               bcv.noNulls = false;
@@ -561,6 +424,7 @@ public class VectorizedRowBatchCtx {
               bcv.isRepeating = true;
             } else {
               bcv.fill(bytes);
+              bcv.isNull[0] = false;
             }
           }
           break;
@@ -568,14 +432,15 @@ public class VectorizedRowBatchCtx {
         case STRING:
         case CHAR:
         case VARCHAR: {
-          BytesColumnVector bcv = (BytesColumnVector) cols[colIndex];
+          BytesColumnVector bcv = (BytesColumnVector) batch.cols[colIndex];
           String sVal = value.toString();
           if (sVal == null) {
             bcv.noNulls = false;
             bcv.isNull[0] = true;
             bcv.isRepeating = true;
           } else {
-            bcv.fill(sVal.getBytes());
+            bcv.setVal(0, sVal.getBytes());
+            bcv.isRepeating = true;
           }
         }
         break;

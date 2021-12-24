@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -43,7 +43,7 @@ public class UDFCos extends UDFMath {
    */
   @Override
   protected DoubleWritable doEvaluate(DoubleWritable a) {
-    result.set(StrictMath.cos(a.get()));
+    result.set(Math.cos(a.get()));
     return result;
   }
 

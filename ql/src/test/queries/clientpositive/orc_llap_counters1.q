@@ -1,4 +1,3 @@
-set hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
 SET hive.optimize.index.filter=true;
 SET hive.cbo.enable=false;
@@ -16,11 +15,10 @@ CREATE TABLE staging(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
-STORED AS TEXTFILE
-TBLPROPERTIES ("hive.serialization.decode.binary.as.base64"="false");
+STORED AS TEXTFILE;
 
 LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE staging;
 LOAD DATA LOCAL INPATH '../../data/files/over1k' INTO TABLE staging;
@@ -36,12 +34,11 @@ CREATE TABLE orc_ppd_staging(t tinyint,
            c char(50),
            v varchar(50),
            da date,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS ORC tblproperties("orc.row.index.stride" = "1000", "orc.bloom.filter.columns"="*");
 
-insert overwrite table orc_ppd_staging select t, si, i, b, f, d, bo, s, cast(s as char(50)) as c,
-cast(s as varchar(50)) as v, cast(ts as date) as da, `dec`, bin from staging order by t, si, i, b, f, d, bo, s, c, v, da, `dec`, bin;
+insert overwrite table orc_ppd_staging select t, si, i, b, f, d, bo, s, cast(s as char(50)), cast(s as varchar(50)), cast(ts as date), dec, bin from staging order by t, s;
 
 -- just to introduce a gap in min/max range for bloom filters. The dataset has contiguous values
 -- which makes it hard to test bloom filters
@@ -59,13 +56,11 @@ CREATE TABLE orc_ppd(t tinyint,
            c char(50),
            v varchar(50),
            da date,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS ORC tblproperties("orc.row.index.stride" = "1000", "orc.bloom.filter.columns"="*");
 
-insert overwrite table orc_ppd select t, si, i, b, f, d, bo, s, cast(s as char(50)) as c,
-cast(s as varchar(50)) as v, da, `dec`, bin from orc_ppd_staging order by t, si, i, b, f, d, bo, s, c, v, da, `dec`, bin;
-
+insert overwrite table orc_ppd select t, si, i, b, f, d, bo, s, cast(s as char(50)), cast(s as varchar(50)), da, dec, bin from orc_ppd_staging order by t, s;
 
 describe formatted orc_ppd;
 

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,7 +37,6 @@ import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapperContext;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.io.RecordIdentifier;
-import org.apache.hadoop.hive.ql.io.orc.OrcRawRecordMerger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
 import org.apache.hadoop.hive.ql.plan.MapWork;
@@ -46,7 +45,6 @@ import org.apache.hadoop.hive.ql.plan.PartitionDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
-import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.SerDeException;
@@ -59,7 +57,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
-import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -82,7 +79,8 @@ public class MapOperator extends AbstractMapOperator {
   protected transient long logEveryNRows = 0;
 
   // input path --> {operator --> context}
-  private final Map<Path, Map<Operator<?>, MapOpCtx>> opCtxMap = new HashMap<>();
+  private final Map<String, Map<Operator<?>, MapOpCtx>> opCtxMap =
+      new HashMap<String, Map<Operator<?>, MapOpCtx>>();
   // child operator --> object inspector (converted OI if it's needed)
   private final Map<Operator<?>, StructObjectInspector> childrenOpToOI =
       new HashMap<Operator<?>, StructObjectInspector>();
@@ -91,11 +89,6 @@ public class MapOperator extends AbstractMapOperator {
   protected transient MapOpCtx[] currentCtxs;
 
   protected static class MapOpCtx {
-
-    @Override
-    public String toString() {
-      return "[alias=" + alias + ", op=" + op + "]";
-    }
 
     final String alias;
     final Operator<?> op;
@@ -346,16 +339,13 @@ public class MapOperator extends AbstractMapOperator {
   private Map<String, Configuration> cloneConfsForNestedColPruning(Configuration hconf) {
     Map<String, Configuration> tableNameToConf = new HashMap<>();
 
-    for (Map.Entry<Path, List<String>> e : conf.getPathToAliases().entrySet()) {
+    for (Map.Entry<Path, ArrayList<String>> e : conf.getPathToAliases().entrySet()) {
       List<String> aliases = e.getValue();
       if (aliases == null || aliases.isEmpty()) {
         continue;
       }
 
       String tableName = conf.getPathToPartitionInfo().get(e.getKey()).getTableName();
-      if (tableNameToConf.containsKey(tableName)) {
-        continue;
-      }
       for (String alias: aliases) {
         Operator<?> rootOp = conf.getAliasToWork().get(alias);
         if (!(rootOp instanceof TableScanOperator)) {
@@ -410,7 +400,7 @@ public class MapOperator extends AbstractMapOperator {
       StructObjectInspector soi = null;
       PartitionDesc partDesc = conf.getAliasToPartnInfo().get(tsOp.getConf().getAlias());
       Configuration newConf = tableNameToConf.get(partDesc.getTableDesc().getTableName());
-      AbstractSerDe serde = partDesc.getTableDesc().getSerDe();
+      Deserializer serde = partDesc.getTableDesc().getDeserializer();
       partDesc.setProperties(partDesc.getProperties());
       MapOpCtx opCtx = new MapOpCtx(tsOp.getConf().getAlias(), child, partDesc);
       StructObjectInspector tableRowOI = (StructObjectInspector) serde.getObjectInspector();
@@ -429,7 +419,7 @@ public class MapOperator extends AbstractMapOperator {
     Map<String, Configuration> tableNameToConf = cloneConfsForNestedColPruning(hconf);
     Map<TableDesc, StructObjectInspector> convertedOI = getConvertedOI(tableNameToConf);
 
-    for (Map.Entry<Path, List<String>> entry : conf.getPathToAliases().entrySet()) {
+    for (Map.Entry<Path, ArrayList<String>> entry : conf.getPathToAliases().entrySet()) {
       Path onefile = entry.getKey();
       List<String> aliases = entry.getValue();
       PartitionDesc partDesc = conf.getPathToPartitionInfo().get(onefile);
@@ -438,9 +428,14 @@ public class MapOperator extends AbstractMapOperator {
 
       for (String alias : aliases) {
         Operator<? extends OperatorDesc> op = conf.getAliasToWork().get(alias);
-        LOG.debug("Adding alias {} to work list for file {}", alias, onefile);
-        Map<Operator<?>, MapOpCtx> contexts = opCtxMap.computeIfAbsent(onefile,
-                k -> new LinkedHashMap<>());
+        if (isLogDebugEnabled) {
+          LOG.debug("Adding alias " + alias + " to work list for file "
+              + onefile);
+        }
+        Map<Operator<?>, MapOpCtx> contexts = opCtxMap.get(onefile.toString());
+        if (contexts == null) {
+          opCtxMap.put(onefile.toString(), contexts = new LinkedHashMap<Operator<?>, MapOpCtx>());
+        }
         if (contexts.containsKey(op)) {
           continue;
         }
@@ -474,7 +469,7 @@ public class MapOperator extends AbstractMapOperator {
         if (prev != null && !prev.equals(context.rowObjectInspector)) {
           throw new HiveException("Conflict on row inspector for " + context.alias);
         }
-        if (LOG.isDebugEnabled()) {
+        if (isLogDebugEnabled) {
           LOG.debug("dump " + context.op + " " + context.rowObjectInspector.getTypeName());
         }
       }
@@ -512,9 +507,9 @@ public class MapOperator extends AbstractMapOperator {
   public void cleanUpInputFileChangedOp() throws HiveException {
     super.cleanUpInputFileChangedOp();
     Path fpath = getExecContext().getCurrentInputPath();
-    Path nominalPath = getNominalPath(fpath);
+    String nominalPath = getNominalPath(fpath);
     Map<Operator<?>, MapOpCtx> contexts = opCtxMap.get(nominalPath);
-    if (LOG.isInfoEnabled()) {
+    if (isLogInfoEnabled) {
       StringBuilder builder = new StringBuilder();
       for (MapOpCtx context : contexts.values()) {
         if (builder.length() > 0) {
@@ -522,7 +517,9 @@ public class MapOperator extends AbstractMapOperator {
         }
         builder.append(context.alias);
       }
-      LOG.debug("Processing alias(es) {} for file {}", builder, fpath);
+      if (isLogDebugEnabled) {
+        LOG.debug("Processing alias(es) " + builder.toString() + " for file " + fpath);
+      }
     }
     // Add alias, table name, and partitions to hadoop conf so that their
     // children will inherit these
@@ -560,15 +557,9 @@ public class MapOperator extends AbstractMapOperator {
         }
         if (row == null) {
           deserialize_error_count.set(deserialize_error_count.get() + 1);
-          LOG.trace("Hive Runtime Error while processing writable " + message);
-          throw new HiveException("Hive Runtime Error while processing writable", e);
+          throw new HiveException("Hive Runtime Error while processing writable " + message, e);
         }
-
-        // Log the contents of the row that caused exception so that it's available for debugging. But
-        // when exposed through an error message it can leak sensitive information, even to the
-        // client application.
-        LOG.trace("Hive Runtime Error while processing row " + message);
-        throw new HiveException("Hive Runtime Error while processing row", e);
+        throw new HiveException("Hive Runtime Error while processing row " + message, e);
       }
     }
     rowsForwarded(childrenDone, 1);
@@ -576,7 +567,7 @@ public class MapOperator extends AbstractMapOperator {
 
   protected final void rowsForwarded(int childrenDone, int rows) {
     numRows += rows;
-    if (LOG.isInfoEnabled()) {
+    if (isLogInfoEnabled) {
       while (numRows >= cntr) {
         cntr = logEveryNRows == 0 ? cntr * 10 : numRows + logEveryNRows;
         if (cntr < 0 || numRows < 0) {
@@ -672,18 +663,9 @@ public class MapOperator extends AbstractMapOperator {
             //happen since IO layer either knows how to produce ROW__ID or not - but to be safe
           }
 	  break;
-        case ROWISDELETED:
-          vcValues[i] = new BooleanWritable(ctx.getIoCxt().isDeletedRecord());
-          break;
       }
     }
     return vcValues;
-  }
-
-  @Override
-  public void closeOp(boolean abort) throws HiveException {
-    super.closeOp(abort);
-    LOG.info("{}: Total records read - {}. abort - {}", this, numRows, abort);
   }
 
   @Override
@@ -707,7 +689,7 @@ public class MapOperator extends AbstractMapOperator {
 
   public void initializeContexts() {
     Path fpath = getExecContext().getCurrentInputPath();
-    Path nominalPath = getNominalPath(fpath);
+    String nominalPath = getNominalPath(fpath);
     Map<Operator<?>, MapOpCtx> contexts = opCtxMap.get(nominalPath);
     currentCtxs = contexts.values().toArray(new MapOpCtx[contexts.size()]);
   }

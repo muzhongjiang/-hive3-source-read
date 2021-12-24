@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -20,74 +20,42 @@ package org.apache.hadoop.hive.ql.parse;
 
 import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
 
-import com.google.common.collect.LinkedHashMultimap;
-import com.google.common.collect.SetMultimap;
-
-import java.util.Collection;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 public class ColumnAccessInfo {
   /**
-   * Map of table name to names of accessed columns (directly and indirectly -through views-).
+   * Map of table name to names of accessed columns
    */
-  private final SetMultimap<String, ColumnAccess> tableToColumnAccessMap;
+  private final Map<String, Set<String>> tableToColumnAccessMap;
 
   public ColumnAccessInfo() {
     // Must be deterministic order map for consistent q-test output across Java versions
-    tableToColumnAccessMap = LinkedHashMultimap.create();
+    tableToColumnAccessMap = new LinkedHashMap<String, Set<String>>();
   }
 
-  /**
-   * Adds access to column.
-   */
   public void add(String table, String col) {
-    tableToColumnAccessMap.put(table, new ColumnAccess(col, Access.DIRECT));
+    Set<String> tableColumns = tableToColumnAccessMap.get(table);
+    if (tableColumns == null) {
+      // Must be deterministic order set for consistent q-test output across Java versions
+      tableColumns = new LinkedHashSet<String>();
+      tableToColumnAccessMap.put(table, tableColumns);
+    }
+    tableColumns.add(col);
   }
 
-  /**
-   * Adds indirect access to column (through view).
-   */
-  public void addIndirect(String table, String col) {
-    tableToColumnAccessMap.put(table, new ColumnAccess(col, Access.INDIRECT));
-  }
-
-  /**
-   * Includes direct access.
-   */
   public Map<String, List<String>> getTableToColumnAccessMap() {
     // Must be deterministic order map for consistent q-test output across Java versions
     Map<String, List<String>> mapping = new LinkedHashMap<String, List<String>>();
-    for (Map.Entry<String, Collection<ColumnAccess>> entry : tableToColumnAccessMap.asMap().entrySet()) {
-      List<String> sortedCols = entry.getValue().stream()
-        .filter(ca -> ca.access == Access.DIRECT)
-        .map(ca -> ca.columnName)
-        .sorted()
-        .collect(Collectors.toList());
-      if (!sortedCols.isEmpty()) {
-        mapping.put(entry.getKey(), sortedCols);
-      }
-    }
-    return mapping;
-  }
-
-  /**
-   * Includes direct and indirect access.
-   */
-  public Map<String, List<String>> getTableToColumnAllAccessMap() {
-    // Must be deterministic order map for consistent q-test output across Java versions
-    Map<String, List<String>> mapping = new LinkedHashMap<String, List<String>>();
-    for (Map.Entry<String, Collection<ColumnAccess>> entry : tableToColumnAccessMap.asMap().entrySet()) {
-      mapping.put(
-        entry.getKey(),
-        entry.getValue().stream()
-          .map(ca -> ca.columnName)
-          .distinct()
-          .sorted()
-          .collect(Collectors.toList()));
+    for (Map.Entry<String, Set<String>> entry : tableToColumnAccessMap.entrySet()) {
+      List<String> sortedCols = new ArrayList<String>(entry.getValue());
+      Collections.sort(sortedCols);
+      mapping.put(entry.getKey(), sortedCols);
     }
     return mapping;
   }
@@ -98,50 +66,14 @@ public class ColumnAccessInfo {
    * @param vc
    */
   public void stripVirtualColumn(VirtualColumn vc) {
-    for (Map.Entry<String, Collection<ColumnAccess>> e : tableToColumnAccessMap.asMap().entrySet()) {
-      for (ColumnAccess columnAccess : e.getValue()) {
-        if (vc.getName().equalsIgnoreCase(columnAccess.columnName)) {
-          e.getValue().remove(columnAccess);
+    for (Map.Entry<String, Set<String>> e : tableToColumnAccessMap.entrySet()) {
+      for (String columnName : e.getValue()) {
+        if (vc.getName().equalsIgnoreCase(columnName)) {
+          e.getValue().remove(columnName);
           break;
         }
       }
     }
-  }
 
-  /**
-   * Column access information.
-   */
-  private static class ColumnAccess {
-    private final String columnName;
-    private final Access access;
-    
-    private ColumnAccess (String columnName, Access access) {
-      this.columnName = Objects.requireNonNull(columnName);
-      this.access = Objects.requireNonNull(access);
-    }
-    
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o instanceof ColumnAccess) {
-        ColumnAccess other = (ColumnAccess) o;
-        return columnName.equals(other.columnName)
-            && access == other.access;
-      }
-      return false;
-    }
-    
-    @Override
-    public int hashCode() {
-      return Objects.hash(columnName, access);      
-    }
-    
-  }
-  
-  private enum Access {
-    DIRECT,
-    INDIRECT
   }
 }

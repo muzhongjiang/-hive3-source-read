@@ -1,32 +1,29 @@
---! qt:dataset:src
-set hive.support.concurrency=true;
-
-drop table tstsrc_n1;
-create table tstsrc_n1 like src;
-insert overwrite table tstsrc_n1 select key, value from src;
+drop table tstsrc;
+create table tstsrc like src;
+insert overwrite table tstsrc select key, value from src;
 
 SHOW LOCKS;
-SHOW LOCKS tstsrc_n1;
+SHOW LOCKS tstsrc;
 
-LOCK TABLE tstsrc_n1 shared;
+LOCK TABLE tstsrc shared;
 SHOW LOCKS;
-SHOW LOCKS tstsrc_n1;
-SHOW LOCKS tstsrc_n1 extended;
+SHOW LOCKS tstsrc;
+SHOW LOCKS tstsrc extended;
 
-UNLOCK TABLE tstsrc_n1;
+UNLOCK TABLE tstsrc;
 SHOW LOCKS;
 SHOW LOCKS extended;
-SHOW LOCKS tstsrc_n1;
-lock TABLE tstsrc_n1 SHARED;
+SHOW LOCKS tstsrc;
+lock TABLE tstsrc SHARED;
 SHOW LOCKS;
 SHOW LOCKS extended;
-SHOW LOCKS tstsrc_n1;
-LOCK TABLE tstsrc_n1 SHARED;
+SHOW LOCKS tstsrc;
+LOCK TABLE tstsrc SHARED;
 SHOW LOCKS;
 SHOW LOCKS extended;
-SHOW LOCKS tstsrc_n1;
-UNLOCK TABLE tstsrc_n1;
+SHOW LOCKS tstsrc;
+UNLOCK TABLE tstsrc;
 SHOW LOCKS;
 SHOW LOCKS extended;
-SHOW LOCKS tstsrc_n1;
-drop table tstsrc_n1;
+SHOW LOCKS tstsrc;
+drop table tstsrc;

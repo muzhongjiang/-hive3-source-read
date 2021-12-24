@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,14 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.io.UnsupportedEncodingException;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 /**
  * This class provides the implementation of vectorized substring, with a single start index
@@ -34,14 +31,24 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  */
 public class StringSubstrColStart extends VectorExpression {
   private static final long serialVersionUID = 1L;
-
   private int startIdx;
+  private int colNum;
+  private int outputColumn;
+  private transient static byte[] EMPTY_STRING;
 
-  private static final byte[] EMPTY_STRING =
-      StringUtils.EMPTY.getBytes(StandardCharsets.UTF_8);
+  // Populating the Empty string bytes. Putting it as static since it should be immutable and can
+  // be shared.
+  static {
+    try {
+      EMPTY_STRING = "".getBytes("UTF-8");
+    } catch(UnsupportedEncodingException e) {
+      e.printStackTrace();
+    }
+  }
 
-  public StringSubstrColStart(int colNum, int startIdx, int outputColumnNum) {
-    super(colNum, outputColumnNum);
+  public StringSubstrColStart(int colNum, int startIdx, int outputColumn) {
+    this();
+    this.colNum = colNum;
 
     /* Switch from a 1-based start offset (the Hive end user convention) to a 0-based start offset
      * (the internal convention).
@@ -58,13 +65,11 @@ public class StringSubstrColStart extends VectorExpression {
       // start index of -n means give the last n characters of the string
       this.startIdx = startIdx;
     }
+    this.outputColumn = outputColumn;
   }
 
   public StringSubstrColStart() {
     super();
-
-    // Dummy final assignments.
-    startIdx = -1;
   }
 
   /**
@@ -109,13 +114,13 @@ public class StringSubstrColStart extends VectorExpression {
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) throws HiveException {
+  public void evaluate(VectorizedRowBatch batch) {
     if (childExpressions != null) {
       super.evaluateChildren(batch);
     }
 
-    BytesColumnVector inV = (BytesColumnVector) batch.cols[inputColumnNum[0]];
-    BytesColumnVector outputColVector = (BytesColumnVector) batch.cols[outputColumnNum];
+    BytesColumnVector inV = (BytesColumnVector) batch.cols[colNum];
+    BytesColumnVector outV = (BytesColumnVector) batch.cols[outputColumn];
 
     int n = batch.size;
 
@@ -127,100 +132,82 @@ public class StringSubstrColStart extends VectorExpression {
     int[] sel = batch.selected;
     int[] len = inV.length;
     int[] start = inV.start;
-    outputColVector.initBuffer();
-    boolean[] outputIsNull = outputColVector.isNull;
-
-    // We do not need to do a column reset since we are carefully changing the output.
-    outputColVector.isRepeating = false;
+    outV.initBuffer();
 
     if (inV.isRepeating) {
-      if (inV.noNulls || !inV.isNull[0]) {
-        outputIsNull[0] = false;
+      outV.isRepeating = true;
+      if (!inV.noNulls && inV.isNull[0]) {
+        outV.isNull[0] = true;
+        outV.noNulls = false;
+        outV.setVal(0, EMPTY_STRING, 0, EMPTY_STRING.length);
+        return;
+      } else {
+        outV.noNulls = true;
         int offset = getSubstrStartOffset(vector[0], start[0], len[0], startIdx);
         if (offset != -1) {
-          outputColVector.setVal(0, vector[0], offset, len[0] - (offset - start[0]));
+          outV.setVal(0, vector[0], offset, len[0] - (offset - start[0]));
         } else {
-          outputColVector.setVal(0, EMPTY_STRING, 0, EMPTY_STRING.length);
-        }
-      } else {
-        outputIsNull[0] = true;
-        outputColVector.noNulls = false;
-        outputColVector.setVal(0, EMPTY_STRING, 0, EMPTY_STRING.length);
-      }
-      outputColVector.isRepeating = true;
-      return;
-    }
-
-    if (batch.selectedInUse) {
-      if (!inV.noNulls) /* there are nulls in the inputColVector */ {
-
-        // Carefully handle NULLs...
-
-        for (int i = 0; i != n; ++i) {
-          int selected = sel[i];
-          if (!inV.isNull[selected]) {
-            outputIsNull[selected] = false;
-            int offset = getSubstrStartOffset(vector[selected], start[selected], len[selected],
-                startIdx);
-            outputColVector.isNull[selected] = false;
-            if (offset != -1) {
-              outputColVector.setVal(selected, vector[selected], offset,
-                  len[selected] - (offset - start[selected]));
-            } else {
-              outputColVector.setVal(selected, EMPTY_STRING, 0, EMPTY_STRING.length);
-            }
-          } else {
-            outputColVector.isNull[selected] = true;
-            outputColVector.noNulls = false;
-          }
-        }
-      } else {
-        for (int i = 0; i != n; ++i) {
-          int selected = sel[i];
-          outputColVector.isNull[selected] = false;
-          int offset = getSubstrStartOffset(vector[selected], start[selected], len[selected],
-              startIdx);
-          if (offset != -1) {
-            outputColVector.setVal(selected, vector[selected], offset,
-                len[selected] - (offset - start[selected]));
-          } else {
-            outputColVector.setVal(selected, EMPTY_STRING, 0, EMPTY_STRING.length);
-          }
+          outV.setVal(0, EMPTY_STRING, 0, EMPTY_STRING.length);
         }
       }
     } else {
-      if (!inV.noNulls)  /* there are nulls in the inputColVector */ {
-
-        // Carefully handle NULLs...
-
-        for (int i = 0; i != n; ++i) {
-          if (!inV.isNull[i]) {
-            outputColVector.isNull[i] = false;
-            int offset = getSubstrStartOffset(vector[i], start[i], len[i], startIdx);
-            if (offset != -1) {
-              outputColVector.setVal(i, vector[i], offset, len[i] - (offset - start[i]));
+      outV.isRepeating = false;
+      if (batch.selectedInUse) {
+        if (!inV.noNulls) {
+          outV.noNulls = false;
+          for (int i = 0; i != n; ++i) {
+            int selected = sel[i];
+            if (!inV.isNull[selected]) {
+              int offset = getSubstrStartOffset(vector[selected], start[selected], len[selected],
+                  startIdx);
+              outV.isNull[selected] = false;
+              if (offset != -1) {
+                outV.setVal(selected, vector[selected], offset,
+                    len[selected] - (offset - start[selected]));
+              } else {
+                outV.setVal(selected, EMPTY_STRING, 0, EMPTY_STRING.length);
+              }
             } else {
-              outputColVector.setVal(i, EMPTY_STRING, 0, EMPTY_STRING.length);
+              outV.isNull[selected] = true;
             }
-          } else {
-            outputColVector.isNull[i] = true;
-            outputColVector.noNulls = false;
+          }
+        } else {
+          outV.noNulls = true;
+          for (int i = 0; i != n; ++i) {
+            int selected = sel[i];
+            int offset = getSubstrStartOffset(vector[selected], start[selected], len[selected],
+                startIdx);
+            if (offset != -1) {
+              outV.setVal(selected, vector[selected], offset,
+                  len[selected] - (offset - start[selected]));
+            } else {
+              outV.setVal(selected, EMPTY_STRING, 0, EMPTY_STRING.length);
+            }
           }
         }
       } else {
-        if (!outputColVector.noNulls) {
-
-          // Assume it is almost always a performance win to fill all of isNull so we can
-          // safely reset noNulls.
-          Arrays.fill(outputIsNull, false);
-          outputColVector.noNulls = true;
-        }
-        for (int i = 0; i != n; ++i) {
-          int offset = getSubstrStartOffset(vector[i], start[i], len[i], startIdx);
-          if (offset != -1) {
-            outputColVector.setVal(i, vector[i], offset, len[i] - (offset - start[i]));
-          } else {
-            outputColVector.setVal(i, EMPTY_STRING, 0, EMPTY_STRING.length);
+        if (!inV.noNulls) {
+          outV.noNulls = false;
+          System.arraycopy(inV.isNull, 0, outV.isNull, 0, n);
+          for (int i = 0; i != n; ++i) {
+            if (!inV.isNull[i]) {
+              int offset = getSubstrStartOffset(vector[i], start[i], len[i], startIdx);
+              if (offset != -1) {
+                outV.setVal(i, vector[i], offset, len[i] - (offset - start[i]));
+              } else {
+                outV.setVal(i, EMPTY_STRING, 0, EMPTY_STRING.length);
+              }
+            }
+          }
+        } else {
+          outV.noNulls = true;
+          for (int i = 0; i != n; ++i) {
+            int offset = getSubstrStartOffset(vector[i], start[i], len[i], startIdx);
+            if (offset != -1) {
+              outV.setVal(i, vector[i], offset, len[i] - (offset - start[i]));
+            } else {
+              outV.setVal(i, EMPTY_STRING, 0, EMPTY_STRING.length);
+            }
           }
         }
       }
@@ -228,8 +215,38 @@ public class StringSubstrColStart extends VectorExpression {
   }
 
   @Override
+  public int getOutputColumn() {
+    return outputColumn;
+  }
+
+  @Override
+  public String getOutputType() {
+    return "string";
+  }
+
+  public int getStartIdx() {
+    return startIdx;
+  }
+
+  public void setStartIdx(int startIdx) {
+    this.startIdx = startIdx;
+  }
+
+  public int getColNum() {
+    return colNum;
+  }
+
+  public void setColNum(int colNum) {
+    this.colNum = colNum;
+  }
+
+  public void setOutputColumn(int outputColumn) {
+    this.outputColumn = outputColumn;
+  }
+
+  @Override
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", start " + startIdx;
+    return "col " + colNum + ", start " + startIdx;
   }
 
   @Override

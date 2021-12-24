@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -64,16 +64,11 @@ public class VectorReduceSinkDesc extends AbstractVectorDesc  {
 
   private boolean isVectorizationReduceSinkNativeEnabled;
   private String engine;
-  private boolean isEmptyKey;
-  private boolean isEmptyValue;
-  private boolean isEmptyBuckets;
-  private boolean isEmptyPartitions;
-  private boolean hasPTFTopN;
+  private boolean hasTopN;
   private boolean hasDistinctColumns;
   private boolean isKeyBinarySortable;
   private boolean isValueLazyBinary;
   private boolean isUnexpectedCondition;
-  private boolean isAcidChange;
 
   /*
    * The following conditions are for native Vector ReduceSink.
@@ -90,35 +85,11 @@ public class VectorReduceSinkDesc extends AbstractVectorDesc  {
   public String getEngine() {
     return engine;
   }
-  public void setIsEmptyKey(boolean isEmptyKey) {
-    this.isEmptyKey = isEmptyKey;
+  public void setHasTopN(boolean hasTopN) {
+    this.hasTopN = hasTopN;
   }
-  public boolean getIsEmptyKey() {
-    return isEmptyKey;
-  }
-  public void setIsEmptyValue(boolean isEmptyValue) {
-    this.isEmptyValue = isEmptyValue;
-  }
-  public boolean getIsEmptyValue() {
-    return isEmptyValue;
-  }
-  public void setIsEmptyBuckets(boolean isEmptyBuckets) {
-    this.isEmptyBuckets = isEmptyBuckets;
-  }
-  public boolean getIsEmptyBuckets() {
-    return isEmptyBuckets;
-  }
-  public void setIsEmptyPartitions(boolean isEmptyPartitions) {
-    this.isEmptyPartitions = isEmptyPartitions;
-  }
-  public boolean getIsEmptyPartitions() {
-    return isEmptyPartitions;
-  }
-  public void setHasPTFTopN(boolean hasPTFTopN) {
-    this.hasPTFTopN = hasPTFTopN;
-  }
-  public boolean getHasPTFTopN() {
-    return hasPTFTopN;
+  public boolean getHasTopN() {
+    return hasTopN;
   }
   public void setHasDistinctColumns(boolean hasDistinctColumns) {
     this.hasDistinctColumns = hasDistinctColumns;
@@ -143,13 +114,5 @@ public class VectorReduceSinkDesc extends AbstractVectorDesc  {
   }
   public boolean getIsUnexpectedCondition() {
     return isUnexpectedCondition;
-  }
-
-  public void setIsAcidChange(boolean isAcidChange) {
-    this.isAcidChange = isAcidChange;
-  }
-
-  public boolean getIsAcidChange() {
-    return isAcidChange;
   }
 }

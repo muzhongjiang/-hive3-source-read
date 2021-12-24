@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -105,9 +105,6 @@ public abstract class HCatBaseInputFormat
   public List<InputSplit> getSplits(JobContext jobContext)
     throws IOException, InterruptedException {
     Configuration conf = jobContext.getConfiguration();
-    // Set up recursive reads for sub-directories.
-    // (Otherwise, sub-directories produced by Hive UNION operations won't be readable.)
-    conf.setBoolean("mapred.input.dir.recursive", true);
 
     //Get the job info from the configuration,
     //throws exception if not initialized
@@ -126,20 +123,16 @@ public abstract class HCatBaseInputFormat
     }
 
     HiveStorageHandler storageHandler;
-    Map<String,String> hiveProps = null;
+    JobConf jobConf;
     //For each matching partition, call getSplits on the underlying InputFormat
     for (PartInfo partitionInfo : partitionInfoList) {
-      JobConf jobConf = HCatUtil.getJobConfFromContext(jobContext);
-      if (hiveProps == null) {
-        hiveProps = HCatUtil.getHCatKeyHiveConf(jobConf);
-      }
+      jobConf = HCatUtil.getJobConfFromContext(jobContext);
       List<String> setInputPath = setInputPath(jobConf, partitionInfo.getLocation());
       if (setInputPath.isEmpty()) {
         continue;
       }
       Map<String, String> jobProperties = partitionInfo.getJobProperties();
 
-      HCatUtil.copyJobPropertiesToJobConf(hiveProps, jobConf);
       HCatUtil.copyJobPropertiesToJobConf(jobProperties, jobConf);
 
       storageHandler = HCatUtil.getStorageHandler(
@@ -190,8 +183,9 @@ public abstract class HCatBaseInputFormat
     PartInfo partitionInfo = hcatSplit.getPartitionInfo();
     // Ensure PartInfo's TableInfo is initialized.
     if (partitionInfo.getTableInfo() == null) {
-      partitionInfo.setTableInfo(
-              HCatUtil.getLastInputJobInfosFromConf(taskContext.getConfiguration()).getTableInfo());
+      partitionInfo.setTableInfo(((InputJobInfo)HCatUtil.deserialize(
+          taskContext.getConfiguration().get(HCatConstants.HCAT_KEY_JOB_INFO)
+      )).getTableInfo());
     }
     JobContext jobContext = taskContext;
     Configuration conf = jobContext.getConfiguration();
@@ -280,13 +274,14 @@ public abstract class HCatBaseInputFormat
    */
   private static InputJobInfo getJobInfo(Configuration conf)
     throws IOException {
-    InputJobInfo inputJobInfo = HCatUtil.getLastInputJobInfosFromConf(conf);
-    if (inputJobInfo == null) {
+    String jobString = conf.get(
+      HCatConstants.HCAT_KEY_JOB_INFO);
+    if (jobString == null) {
       throw new IOException("job information not found in JobContext."
         + " HCatInputFormat.setInput() not called?");
     }
 
-    return inputJobInfo;
+    return (InputJobInfo) HCatUtil.deserialize(jobString);
   }
 
   private List<String> setInputPath(JobConf jobConf, String location)
@@ -338,7 +333,7 @@ public abstract class HCatBaseInputFormat
     Iterator<String> pathIterator = pathStrings.iterator();
     while (pathIterator.hasNext()) {
       String pathString = pathIterator.next();
-      if (ignoreInvalidPath && org.apache.commons.lang3.StringUtils.isBlank(pathString)) {
+      if (ignoreInvalidPath && org.apache.commons.lang.StringUtils.isBlank(pathString)) {
         continue;
       }
       Path path = new Path(pathString);

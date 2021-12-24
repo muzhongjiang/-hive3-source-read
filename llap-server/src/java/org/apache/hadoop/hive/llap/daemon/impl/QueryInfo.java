@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.base.Preconditions;
@@ -57,9 +57,6 @@ public class QueryInfo {
   private final FileSystem localFs;
   private String[] localDirs;
   private final LlapNodeId amNodeId;
-  private final String appTokenIdentifier;
-  private final Token<JobTokenIdentifier> appToken;
-  private final boolean isExternalQuery;
   // Map of states for different vertices.
 
   private final Set<QueryFragmentInfo> knownFragments =
@@ -69,17 +66,14 @@ public class QueryInfo {
 
   private final FinishableStateTracker finishableStateTracker = new FinishableStateTracker();
   private final String tokenUserName, appId;
-  private final ContainerRunnerImpl.UgiPool ugiPool;
+  private final AtomicReference<UserGroupInformation> umbilicalUgi;
 
   public QueryInfo(QueryIdentifier queryIdentifier, String appIdString, String dagIdString,
     String dagName, String hiveQueryIdString,
     int dagIdentifier, String user,
     ConcurrentMap<String, SourceStateProto> sourceStateMap,
     String[] localDirsBase, FileSystem localFs, String tokenUserName,
-    String tokenAppId, final LlapNodeId amNodeId,
-    String tokenIdentifier,
-    Token<JobTokenIdentifier> appToken,
-    boolean isExternalQuery, ContainerRunnerImpl.UgiPool ugiPool) {
+    String tokenAppId, final LlapNodeId amNodeId) {
     this.queryIdentifier = queryIdentifier;
     this.appIdString = appIdString;
     this.dagIdString = dagIdString;
@@ -92,16 +86,8 @@ public class QueryInfo {
     this.localFs = localFs;
     this.tokenUserName = tokenUserName;
     this.appId = tokenAppId;
+    this.umbilicalUgi = new AtomicReference<>();
     this.amNodeId = amNodeId;
-    this.appTokenIdentifier = tokenIdentifier;
-    this.appToken = appToken;
-    this.isExternalQuery = isExternalQuery;
-    this.ugiPool = ugiPool;
-    final InetSocketAddress address =
-        NetUtils.createSocketAddrForHost(amNodeId.getHostname(), amNodeId.getPort());
-    SecurityUtil.setTokenService(appToken, address);
-    // TODO Caching this and re-using across submissions breaks AM recovery, since the
-    // new AM may run on a different host/port.
   }
 
   public QueryIdentifier getQueryIdentifier() {
@@ -140,18 +126,7 @@ public class QueryInfo {
       int attemptNumber, SignableVertexSpec vertexSpec, String fragmentIdString) {
     QueryFragmentInfo fragmentInfo = new QueryFragmentInfo(
         this, vertexName, fragmentNumber, attemptNumber, vertexSpec, fragmentIdString);
-    boolean wasUniqueFragment = knownFragments.add(fragmentInfo);
-    if (!wasUniqueFragment) {
-      // The same query fragment (including attempt number) has already been registered.
-      // This could potentially occur for external clients that are trying to submit the
-      // exact same fragment more than once (for example speculative execution of a query fragment).
-      // This should not occur for a non-external query fragment.
-      // Either way, registering the same fragment twice should be disallowed as the LLAP structures
-      // it will only ever have a single submission of a fragment.
-      String message = "Fragment " + fragmentIdString + "(isExternal=" + isExternalQuery()
-              + ") has already been registered.";
-      throw new IllegalArgumentException(message);
-    }
+    knownFragments.add(fragmentInfo);
     return fragmentInfo;
   }
 
@@ -161,10 +136,6 @@ public class QueryInfo {
 
   public List<QueryFragmentInfo> getRegisteredFragments() {
     return Lists.newArrayList(knownFragments);
-  }
-
-  public boolean isExternalQuery() {
-    return isExternalQuery;
   }
 
   private synchronized void createLocalDirs() throws IOException {
@@ -196,7 +167,7 @@ public class QueryInfo {
   private static String createAppSpecificLocalDir(String baseDir, String applicationIdString,
                                                   String user, int dagIdentifier) {
     // TODO This is broken for secure clusters. The app will not have permission to create these directories.
-    // May work via YARN Service - since the directory would already exist. Otherwise may need a custom shuffle handler.
+    // May work via Slider - since the directory would already exist. Otherwise may need a custom shuffle handler.
     // TODO This should be the process user - and not the user on behalf of whom the query is being submitted.
     return baseDir + File.separator + "usercache" + File.separator + user + File.separator +
         "appcache" + File.separator + applicationIdString + File.separator + dagIdentifier;
@@ -344,11 +315,23 @@ public class QueryInfo {
     return appId;
   }
 
-  UserGroupInformation getUmbilicalUgi() throws ExecutionException {
-    return ugiPool.getUmbilicalUgi(appTokenIdentifier, appToken);
+  public void setupUmbilicalUgi(String umbilicalUser, Token<JobTokenIdentifier> appToken, String amHost, int amPort) {
+    synchronized (umbilicalUgi) {
+      if (umbilicalUgi.get() == null) {
+        UserGroupInformation taskOwner =
+            UserGroupInformation.createRemoteUser(umbilicalUser);
+        final InetSocketAddress address =
+            NetUtils.createSocketAddrForHost(amHost, amPort);
+        SecurityUtil.setTokenService(appToken, address);
+        taskOwner.addToken(appToken);
+        umbilicalUgi.set(taskOwner);
+      }
+    }
   }
 
-  void returnUmbilicalUgi(UserGroupInformation ugi) {
-    ugiPool.returnUmbilicalUgi(appTokenIdentifier, ugi);
+  public UserGroupInformation getUmbilicalUgi() {
+    synchronized (umbilicalUgi) {
+      return umbilicalUgi.get();
+    }
   }
 }

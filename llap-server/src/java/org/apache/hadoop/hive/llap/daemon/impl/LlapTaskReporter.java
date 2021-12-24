@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,9 +33,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hive.llap.counters.FragmentCountersMap;
-import org.apache.hadoop.hive.llap.counters.WmFragmentCounters;
 import org.apache.hadoop.hive.llap.daemon.SchedulerFragmentCompletingListener;
 import org.apache.hadoop.hive.llap.protocol.LlapTaskUmbilicalProtocol;
 import org.apache.tez.common.counters.TezCounters;
@@ -93,12 +92,10 @@ public class LlapTaskReporter implements TaskReporterInterface {
   @VisibleForTesting
   HeartbeatCallable currentCallable;
 
-  private final WmFragmentCounters wmCounters;
-
   public LlapTaskReporter(SchedulerFragmentCompletingListener completionListener, LlapTaskUmbilicalProtocol umbilical, long amPollInterval,
                       long sendCounterInterval, int maxEventsToGet, AtomicLong requestCounter,
       String containerIdStr, final String fragmentId, TezEvent initialEvent,
-                          String fragmentRequestId, WmFragmentCounters wmCounters) {
+                          String fragmentRequestId) {
     this.umbilical = umbilical;
     this.pollInterval = amPollInterval;
     this.sendCounterInterval = sendCounterInterval;
@@ -112,7 +109,6 @@ public class LlapTaskReporter implements TaskReporterInterface {
     heartbeatExecutor = MoreExecutors.listeningDecorator(executor);
     this.completionListener = completionListener;
     this.fragmentRequestId = fragmentRequestId;
-    this.wmCounters = wmCounters;
   }
 
   /**
@@ -124,11 +120,10 @@ public class LlapTaskReporter implements TaskReporterInterface {
     TezCounters tezCounters = task.addAndGetTezCounter(fragmentId);
     FragmentCountersMap.registerCountersForFragment(fragmentId, tezCounters);
     LOG.info("Registered counters for fragment: {} vertexName: {}", fragmentId, task.getVertexName());
-    currentCallable = new HeartbeatCallable(completionListener, task, umbilical, pollInterval,
-        sendCounterInterval, maxEventsToGet, requestCounter, containerIdStr, initialEvent,
-        fragmentRequestId, wmCounters);
+    currentCallable = new HeartbeatCallable(completionListener, task, umbilical, pollInterval, sendCounterInterval,
+        maxEventsToGet, requestCounter, containerIdStr, initialEvent, fragmentRequestId);
     ListenableFuture<Boolean> future = heartbeatExecutor.submit(currentCallable);
-    Futures.addCallback(future, new HeartbeatCallback(errorReporter), MoreExecutors.directExecutor());
+    Futures.addCallback(future, new HeartbeatCallback(errorReporter));
   }
 
   /**
@@ -175,7 +170,6 @@ public class LlapTaskReporter implements TaskReporterInterface {
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition condition = lock.newCondition();
-    private final WmFragmentCounters wmCounters;
 
     /*
      * Keeps track of regular timed heartbeats. Is primarily used as a timing mechanism to send /
@@ -194,7 +188,7 @@ public class LlapTaskReporter implements TaskReporterInterface {
         RuntimeTask task, LlapTaskUmbilicalProtocol umbilical,
         long amPollInterval, long sendCounterInterval, int maxEventsToGet,
         AtomicLong requestCounter, String containerIdStr,
-        TezEvent initialEvent, String fragmentRequestId, WmFragmentCounters wmCounters) {
+        TezEvent initialEvent, String fragmentRequestId) {
 
       this.pollInterval = amPollInterval;
       this.sendCounterInterval = sendCounterInterval;
@@ -204,7 +198,6 @@ public class LlapTaskReporter implements TaskReporterInterface {
       this.initialEvent = initialEvent;
       this.completionListener = completionListener;
       this.fragmentRequestId = fragmentRequestId;
-      this.wmCounters = wmCounters;
 
       this.task = task;
       this.umbilical = umbilical;
@@ -282,7 +275,7 @@ public class LlapTaskReporter implements TaskReporterInterface {
           sendCounters = true;
           prevCounterSendHeartbeatNum = nonOobHeartbeatCounter.get();
         }
-        updateEvent = new TezEvent(getStatusUpdateEvent(sendCounters, false), updateEventMetadata);
+        updateEvent = new TezEvent(getStatusUpdateEvent(sendCounters), updateEventMetadata);
         events.add(updateEvent);
       }
 
@@ -292,12 +285,16 @@ public class LlapTaskReporter implements TaskReporterInterface {
       int maxEvents = Math.min(maxEventsToGet, task.getMaxEventsToHandle());
       TezHeartbeatRequest request = new TezHeartbeatRequest(requestId, events, fromPreRoutedEventId,
           containerIdStr, task.getTaskAttemptID(), fromEventId, maxEvents);
-      LOG.debug("Sending heartbeat to AM, request={}", request);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Sending heartbeat to AM, request=" + request);
+      }
 
       maybeLogCounters();
 
       TezHeartbeatResponse response = umbilical.heartbeat(request);
-      LOG.debug("Received heartbeat response from AM, response={}", response);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Received heartbeat response from AM, response=" + response);
+      }
 
       if (response.shouldDie()) {
         LOG.info("Received should die response from AM: {}", task.getTaskAttemptID());
@@ -381,8 +378,7 @@ public class LlapTaskReporter implements TaskReporterInterface {
     private boolean taskSucceeded(TezTaskAttemptID taskAttemptID) throws IOException, TezException {
       // Ensure only one final event is ever sent.
       if (!finalEventQueued.getAndSet(true)) {
-        TezEvent statusUpdateEvent = new TezEvent(
-            getStatusUpdateEvent(true, true), updateEventMetadata);
+        TezEvent statusUpdateEvent = new TezEvent(getStatusUpdateEvent(true), updateEventMetadata);
         TezEvent taskCompletedEvent = new TezEvent(new TaskAttemptCompletedEvent(),
             updateEventMetadata);
         if (LOG.isDebugEnabled()) {
@@ -396,7 +392,7 @@ public class LlapTaskReporter implements TaskReporterInterface {
       }
     }
 
-    private TaskStatusUpdateEvent getStatusUpdateEvent(boolean sendCounters, boolean isLast) {
+    private TaskStatusUpdateEvent getStatusUpdateEvent(boolean sendCounters) {
       TezCounters counters = null;
       TaskStatistics stats = null;
       float progress = 0;
@@ -407,9 +403,6 @@ public class LlapTaskReporter implements TaskReporterInterface {
         if (sendCounters) {
           // send these potentially large objects at longer intervals to avoid overloading the AM
           counters = task.getCounters();
-          if (wmCounters != null && counters != null) {
-            wmCounters.dumpToTezCounters(counters, isLast);
-          }
           stats = task.getTaskStatistics();
         }
       }
@@ -451,8 +444,7 @@ public class LlapTaskReporter implements TaskReporterInterface {
               srcMeta == null ? updateEventMetadata : srcMeta));
         }
         try {
-          tezEvents.add(new TezEvent(
-              getStatusUpdateEvent(true, true), updateEventMetadata));
+          tezEvents.add(new TezEvent(getStatusUpdateEvent(true), updateEventMetadata));
         } catch (Exception e) {
           // Counter may exceed limitation
           LOG.warn("Error when get constructing TaskStatusUpdateEvent. Not sending it out");

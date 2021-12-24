@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,10 +21,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-import org.apache.hadoop.hive.ql.io.filter.MutableFilterContext;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
-import org.apache.hive.common.util.SuppressFBWarnings;
 
 /**
  * A VectorizedRowBatch is a set of rows, organized with each column
@@ -33,7 +31,7 @@ import org.apache.hive.common.util.SuppressFBWarnings;
  * The major fields are public by design to allow fast and convenient
  * access by the vectorized query execution code.
  */
-public class VectorizedRowBatch implements Writable, MutableFilterContext {
+public class VectorizedRowBatch implements Writable {
   public int numCols;           // number of columns
   public ColumnVector[] cols;   // a vector for each column
   public int size;              // number of rows that qualify (i.e. haven't been filtered out)
@@ -138,120 +136,12 @@ public class VectorizedRowBatch implements Writable, MutableFilterContext {
     return o.toString();
   }
 
-  public String stringifyColumn(int columnNum) {
+  @Override
+  public String toString() {
     if (size == 0) {
       return "";
     }
     StringBuilder b = new StringBuilder();
-    b.append("columnNum ");
-    b.append(columnNum);
-    b.append(", size ");
-    b.append(size);
-    b.append(", selectedInUse ");
-    b.append(selectedInUse);
-    ColumnVector colVector = cols[columnNum];
-    b.append(", noNulls ");
-    b.append(colVector.noNulls);
-    b.append(", isRepeating ");
-    b.append(colVector.isRepeating);
-    b.append('\n');
-
-    final boolean noNulls = colVector.noNulls;
-    final boolean[] isNull = colVector.isNull;
-    if (colVector.isRepeating) {
-      final boolean hasRepeatedValue = (noNulls || !isNull[0]);
-      for (int i = 0; i < size; i++) {
-        if (hasRepeatedValue) {
-          colVector.stringifyValue(b, 0);
-        } else {
-          b.append("NULL");
-        }
-        b.append('\n');
-      }
-    } else {
-      for (int i = 0; i < size; i++) {
-        final int batchIndex = (selectedInUse ? selected[i] : i);
-        if (noNulls || !isNull[batchIndex]) {
-          colVector.stringifyValue(b, batchIndex);
-        } else {
-          b.append("NULL");
-        }
-        b.append('\n');
-      }
-    }
-    return b.toString();
-  }
-
-  private void appendVectorType(StringBuilder b, ColumnVector cv) {
-    String colVectorType = null;
-    if (cv instanceof LongColumnVector) {
-      colVectorType = "LONG";
-    } else if (cv instanceof DoubleColumnVector) {
-      colVectorType = "DOUBLE";
-    } else if (cv instanceof BytesColumnVector) {
-      colVectorType = "BYTES";
-    } else if (cv instanceof DecimalColumnVector) {
-      colVectorType = "DECIMAL";
-    } else if (cv instanceof TimestampColumnVector) {
-      colVectorType = "TIMESTAMP";
-    } else if (cv instanceof IntervalDayTimeColumnVector) {
-      colVectorType = "INTERVAL_DAY_TIME";
-    } else if (cv instanceof ListColumnVector) {
-      colVectorType = "LIST";
-    } else if (cv instanceof MapColumnVector) {
-      colVectorType = "MAP";
-    } else if (cv instanceof StructColumnVector) {
-      colVectorType = "STRUCT";
-    } else if (cv instanceof UnionColumnVector) {
-      colVectorType = "UNION";
-    } else {
-      colVectorType = "Unknown";
-    }
-    b.append(colVectorType);
-
-    if (cv instanceof ListColumnVector) {
-      ListColumnVector listColumnVector = (ListColumnVector) cv;
-      b.append("<");
-      appendVectorType(b, listColumnVector.child);
-      b.append(">");
-    } else if (cv instanceof MapColumnVector) {
-      MapColumnVector mapColumnVector = (MapColumnVector) cv;
-      b.append("<");
-      appendVectorType(b, mapColumnVector.keys);
-      b.append(", ");
-      appendVectorType(b, mapColumnVector.values);
-      b.append(">");
-    } else if (cv instanceof StructColumnVector) {
-      StructColumnVector structColumnVector = (StructColumnVector) cv;
-      b.append("<");
-      final int fieldCount = structColumnVector.fields.length;
-      for (int i = 0; i < fieldCount; i++) {
-        if (i > 0) {
-          b.append(", ");
-        }
-        appendVectorType(b, structColumnVector.fields[i]);
-      }
-      b.append(">");
-    } else if (cv instanceof UnionColumnVector) {
-      UnionColumnVector unionColumnVector = (UnionColumnVector) cv;
-      b.append("<");
-      final int fieldCount = unionColumnVector.fields.length;
-      for (int i = 0; i < fieldCount; i++) {
-        if (i > 0) {
-          b.append(", ");
-        }
-        appendVectorType(b, unionColumnVector.fields[i]);
-      }
-      b.append(">");
-    }
-  }
-
-  public String stringify(String prefix) {
-    if (size == 0) {
-      return "";
-    }
-    StringBuilder b = new StringBuilder();
-    b.append(prefix);
     b.append("Column vector types: ");
     for (int k = 0; k < projectionSize; k++) {
       int projIndex = projectedColumns[k];
@@ -261,10 +151,33 @@ public class VectorizedRowBatch implements Writable, MutableFilterContext {
       }
       b.append(projIndex);
       b.append(":");
-      appendVectorType(b, cv);
+      String colVectorType = null;
+      if (cv instanceof LongColumnVector) {
+        colVectorType = "LONG";
+      } else if (cv instanceof DoubleColumnVector) {
+        colVectorType = "DOUBLE";
+      } else if (cv instanceof BytesColumnVector) {
+        colVectorType = "BYTES";
+      } else if (cv instanceof DecimalColumnVector) {
+        colVectorType = "DECIMAL";
+      } else if (cv instanceof TimestampColumnVector) {
+        colVectorType = "TIMESTAMP";
+      } else if (cv instanceof IntervalDayTimeColumnVector) {
+        colVectorType = "INTERVAL_DAY_TIME";
+      } else if (cv instanceof ListColumnVector) {
+        colVectorType = "LIST";
+      } else if (cv instanceof MapColumnVector) {
+        colVectorType = "MAP";
+      } else if (cv instanceof StructColumnVector) {
+        colVectorType = "STRUCT";
+      } else if (cv instanceof UnionColumnVector) {
+        colVectorType = "UNION";
+      } else {
+        colVectorType = "Unknown";
+      }
+      b.append(colVectorType);
     }
     b.append('\n');
-    b.append(prefix);
 
     if (this.selectedInUse) {
       for (int j = 0; j < size; j++) {
@@ -276,18 +189,11 @@ public class VectorizedRowBatch implements Writable, MutableFilterContext {
           if (k > 0) {
             b.append(", ");
           }
-          if (cv != null) {
-            try {
-              cv.stringifyValue(b, i);
-            } catch (Exception ex) {
-              b.append("<invalid>");
-            }
-          }
+          cv.stringifyValue(b, i);
         }
         b.append(']');
         if (j < size - 1) {
           b.append('\n');
-          b.append(prefix);
         }
       }
     } else {
@@ -310,16 +216,10 @@ public class VectorizedRowBatch implements Writable, MutableFilterContext {
         b.append(']');
         if (i < size - 1) {
           b.append('\n');
-          b.append(prefix);
         }
       }
     }
     return b.toString();
-  }
-
-  @Override
-  public String toString() {
-    return stringify("");
   }
 
   @Override
@@ -340,7 +240,6 @@ public class VectorizedRowBatch implements Writable, MutableFilterContext {
    *  - resets each column
    *  - inits each column
    */
-  @Override
   public void reset() {
     selectedInUse = false;
     size = 0;
@@ -358,71 +257,8 @@ public class VectorizedRowBatch implements Writable, MutableFilterContext {
    * Data is not preserved.
    */
   public void ensureSize(int rows) {
-    for (ColumnVector col : cols) {
-      col.ensureSize(rows, false);
+    for(int i=0; i < cols.length; ++i) {
+      cols[i].ensureSize(rows, false);
     }
-    updateSelected(rows);
-  }
-
-  @Override
-  public boolean isSelectedInUse() {
-    return selectedInUse;
-  }
-
-  @Override
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "Expose internal rep for efficiency")
-  public int[] getSelected() {
-    return selected;
-  }
-
-  @Override
-  public int getSelectedSize() {
-    return size;
-  }
-
-  @Override
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "Ref external obj for efficiency")
-  public void setFilterContext(boolean isSelectedInUse, int[] selected, int selectedSize) {
-    this.selectedInUse = isSelectedInUse;
-    this.selected = selected;
-    this.size = selectedSize;
-    // Avoid selected.length < selectedSize since we can borrow a larger array for selected
-    // Debug loop for selected array: use without assert when needed (asserts only fail in testing)
-    assert validateSelected() : "Selected array may not contain duplicates or unordered values";
-  }
-
-  @Override
-  public boolean validateSelected() {
-    for (int i = 1; i < size; i++) {
-      if (selected[i-1] >= selected[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @Override
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "Expose internal rep for efficiency")
-  public int[] updateSelected(int minCapacity) {
-    if (selected == null || selected.length < minCapacity) {
-      selected = new int[minCapacity];
-    }
-    return selected;
-  }
-
-  @Override
-  public void setSelectedInUse(boolean selectedInUse) {
-    this.selectedInUse = selectedInUse;
-  }
-
-  @Override
-  @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "Ref external obj for efficiency")
-  public void setSelected(int[] selectedArray) {
-    selected = selectedArray;
-  }
-
-  @Override
-  public void setSelectedSize(int selectedSize) {
-    size = selectedSize;
   }
 }

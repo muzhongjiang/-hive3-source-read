@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -83,7 +83,7 @@ public class ParquetRecordReaderWrapper extends ParquetRecordReaderBase
     Configuration conf = jobConf;
     if (skipTimestampConversion ^ HiveConf.getBoolVar(
         conf, HiveConf.ConfVars.HIVE_PARQUET_TIMESTAMP_SKIP_CONVERSION)) {
-      conf = new JobConf(jobConf);
+      conf = new JobConf(oldJobConf);
       HiveConf.setBoolVar(conf,
         HiveConf.ConfVars.HIVE_PARQUET_TIMESTAMP_SKIP_CONVERSION, skipTimestampConversion);
     }

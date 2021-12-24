@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,7 @@ package org.apache.hadoop.hive.serde2.thrift;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.hive.serde2.AbstractDeserializer;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeStats;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -32,7 +32,7 @@ import org.apache.thrift.protocol.TProtocolFactory;
  * ThriftDeserializer.
  *
  */
-public class ThriftDeserializer extends AbstractSerDe {
+public class ThriftDeserializer extends AbstractDeserializer {
 
   private ThriftByteStreamTypedSerDe tsd;
 
@@ -40,19 +40,18 @@ public class ThriftDeserializer extends AbstractSerDe {
   }
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
+  public void initialize(Configuration job, Properties tbl)
       throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
     try {
       // both the classname and the protocol name are Table properties
       // the only hardwired assumption is that records are fixed on a
       // per Table basis
 
-      String className = properties
+      String className = tbl
           .getProperty(org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_CLASS);
-      Class<?> recordClass = configuration.getClassByName(className);
+      Class<?> recordClass = job.getClassByName(className);
 
-      String protoName = properties
+      String protoName = tbl
           .getProperty(org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT);
       if (protoName == null) {
         protoName = "TBinaryProtocol";
@@ -84,15 +83,5 @@ public class ThriftDeserializer extends AbstractSerDe {
   public SerDeStats getSerDeStats() {
     // no support for statistics
     return null;
-  }
-
-  @Override
-  public Class<? extends Writable> getSerializedClass() {
-    return null;
-  }
-
-  @Override
-  public Writable serialize(Object obj, ObjectInspector objInspector) throws SerDeException {
-    throw new UnsupportedOperationException();
   }
 }

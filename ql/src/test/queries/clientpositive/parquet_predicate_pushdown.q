@@ -1,7 +1,5 @@
-set hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
 SET hive.optimize.ppd=true;
-set hive.llap.cache.allow.synthetic.fileid=true;
 
 -- SORT_QUERY_RESULTS
 CREATE TABLE tbl_pred(t tinyint,
@@ -13,11 +11,11 @@ CREATE TABLE tbl_pred(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 STORED AS PARQUET;
 
-CREATE TABLE staging_n0(t tinyint,
+CREATE TABLE staging(t tinyint,
            si smallint,
            i int,
            b bigint,
@@ -26,14 +24,14 @@ CREATE TABLE staging_n0(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE staging_n0;
+LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE staging;
 
-INSERT INTO TABLE tbl_pred select * from staging_n0;
+INSERT INTO TABLE tbl_pred select * from staging;
 
 -- no predicate case. the explain plan should not have filter expression in table scan operator
 

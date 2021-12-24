@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,11 +24,8 @@ import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonJV
 import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonMappedBufferCount;
 import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonMappedBufferMemoryUsed;
 import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonMappedBufferTotalCapacity;
-import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonLimitFileDescriptorCount;
 import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonMaxFileDescriptorCount;
 import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonOpenFileDescriptorCount;
-import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonResidentSetSize;
-import static org.apache.hadoop.hive.llap.metrics.LlapDaemonJvmInfo.LlapDaemonVirtualMemorySize;
 import static org.apache.hadoop.metrics2.impl.MsInfo.ProcessName;
 import static org.apache.hadoop.metrics2.impl.MsInfo.SessionId;
 
@@ -37,16 +34,12 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
 import java.util.List;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.llap.LlapDaemonInfo;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
-import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.util.ResourceCalculatorProcessTree;
 
 import com.sun.management.UnixOperatingSystemMXBean;
 
@@ -58,35 +51,24 @@ public class LlapDaemonJvmMetrics implements MetricsSource {
   private final String name;
   private final String sessionId;
   private final MetricsRegistry registry;
-  private final ResourceCalculatorProcessTree processTree;
-  private final String daemonPid = LlapDaemonInfo.INSTANCE.getPID();
-  private long maxOpenFdCountSoFar = 0;
 
-  private LlapDaemonJvmMetrics(String displayName, String sessionId, final Configuration conf) {
+  private LlapDaemonJvmMetrics(String displayName, String sessionId) {
     this.name = displayName;
     this.sessionId = sessionId;
-    Class<? extends ResourceCalculatorProcessTree> clazz = conf.getClass(YarnConfiguration.NM_CONTAINER_MON_PROCESS_TREE,
-      null, ResourceCalculatorProcessTree.class);
-    this.processTree = ResourceCalculatorProcessTree.getResourceCalculatorProcessTree("" + daemonPid, clazz, conf);
-    if (processTree != null) {
-      this.processTree.setConf(conf);
-    }
     this.registry = new MetricsRegistry("LlapDaemonJvmRegistry");
     this.registry.tag(ProcessName, MetricsUtils.METRICS_PROCESS_NAME).tag(SessionId, sessionId);
   }
 
-  public static LlapDaemonJvmMetrics create(String displayName, String sessionId,
-    final Configuration conf) {
+  public static LlapDaemonJvmMetrics create(String displayName, String sessionId) {
     MetricsSystem ms = LlapMetricsSystem.instance();
-    return ms.register(displayName, "LlapDaemon JVM Metrics",
-      new LlapDaemonJvmMetrics(displayName, sessionId, conf));
+    return ms.register(displayName, "LlapDaemon JVM Metrics", new LlapDaemonJvmMetrics(displayName, sessionId));
   }
 
   @Override
   public void getMetrics(MetricsCollector collector, boolean b) {
     MetricsRecordBuilder rb = collector.addRecord(LlapDaemonJVMMetrics)
         .setContext("jvm")
-        .tag(ProcessName, MetricsUtils.METRICS_PROCESS_NAME + "(PID: " + daemonPid + ")")
+        .tag(ProcessName, MetricsUtils.METRICS_PROCESS_NAME)
         .tag(SessionId, sessionId);
     getJvmMetrics(rb);
   }
@@ -117,13 +99,6 @@ public class LlapDaemonJvmMetrics implements MetricsSource {
     if(os instanceof UnixOperatingSystemMXBean){
       openFileHandles = ((UnixOperatingSystemMXBean) os).getOpenFileDescriptorCount();
       maxFileHandles = ((UnixOperatingSystemMXBean) os).getMaxFileDescriptorCount();
-      maxOpenFdCountSoFar = openFileHandles > maxOpenFdCountSoFar ? openFileHandles : maxOpenFdCountSoFar;
-    }
-    long rss = 0;
-    long vmem = 0;
-    if (processTree != null) {
-      rss = processTree.getRssMemorySize();
-      vmem = processTree.getVirtualMemorySize();
     }
     rb.addGauge(LlapDaemonDirectBufferCount, directBufferCount)
       .addGauge(LlapDaemonDirectBufferTotalCapacity, directBufferTotalCapacity)
@@ -132,10 +107,7 @@ public class LlapDaemonJvmMetrics implements MetricsSource {
       .addGauge(LlapDaemonMappedBufferTotalCapacity, mappedBufferTotalCapacity)
       .addGauge(LlapDaemonMappedBufferMemoryUsed, mappedBufferMemoryUsed)
       .addGauge(LlapDaemonOpenFileDescriptorCount, openFileHandles)
-      .addGauge(LlapDaemonMaxFileDescriptorCount, maxOpenFdCountSoFar)
-      .addGauge(LlapDaemonLimitFileDescriptorCount, maxFileHandles)
-      .addGauge(LlapDaemonResidentSetSize, rss)
-      .addGauge(LlapDaemonVirtualMemorySize, vmem);
+      .addGauge(LlapDaemonMaxFileDescriptorCount, maxFileHandles);
   }
 
   public String getName() {

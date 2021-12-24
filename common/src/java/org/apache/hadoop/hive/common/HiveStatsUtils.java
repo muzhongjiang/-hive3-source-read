@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +19,6 @@ package org.apache.hadoop.hive.common;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -29,8 +28,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Lists;
 
 /**
  * HiveStatsUtils.
@@ -53,11 +50,11 @@ public class HiveStatsUtils {
    * @return array of FileStatus
    * @throws IOException
    */
-  public static List<FileStatus> getFileStatusRecurse(Path path, int level,  FileSystem fs)
+  public static FileStatus[] getFileStatusRecurse(Path path, int level, FileSystem fs)
       throws IOException {
 
     // if level is <0, the return all files/directories under the specified path
-    if (level < 0) {
+    if ( level < 0) {
       List<FileStatus> result = new ArrayList<FileStatus>();
       try {
         FileStatus fileStatus = fs.getFileStatus(path);
@@ -67,9 +64,9 @@ public class HiveStatsUtils {
         // does not exist. But getFileStatus() throw IOException. To mimic the
         // similar behavior we will return empty array on exception. For external
         // tables, the path of the table will not exists during table creation
-        return Collections.emptyList();
+        return new FileStatus[0];
       }
-      return result;
+      return result.toArray(new FileStatus[result.size()]);
     }
 
     // construct a path pattern (e.g., /*/*) to find all dynamically generated paths
@@ -78,7 +75,7 @@ public class HiveStatsUtils {
       sb.append(Path.SEPARATOR).append("*");
     }
     Path pathPattern = new Path(path, sb.toString());
-    return Lists.newArrayList(fs.globStatus(pathPattern, FileUtils.HIDDEN_FILES_PATH_FILTER));
+    return fs.globStatus(pathPattern, FileUtils.HIDDEN_FILES_PATH_FILTER);
   }
 
   public static int getNumBitVectorsForNDVEstimation(Configuration conf) throws Exception {

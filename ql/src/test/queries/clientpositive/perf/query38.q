@@ -1,5 +1,3 @@
-set hive.mapred.mode=nonstrict;
--- start query 1 in stream 0 using template query38.tpl and seed 1819994127
 explain
 select  count(*) from (
     select distinct c_last_name, c_first_name, d_date
@@ -22,4 +20,3 @@ select  count(*) from (
 ) hot_cust
 limit 100;
 
--- end query 1 in stream 0 using template query38.tpl

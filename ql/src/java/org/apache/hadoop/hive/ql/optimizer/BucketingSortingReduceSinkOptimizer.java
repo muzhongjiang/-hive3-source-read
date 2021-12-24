@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.See the NOTICE file
  * distributed with this work for additional information
@@ -38,12 +38,12 @@ import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
-import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
+import org.apache.hadoop.hive.ql.lib.Dispatcher;
+import org.apache.hadoop.hive.ql.lib.GraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
+import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.SemanticRule;
+import org.apache.hadoop.hive.ql.lib.Rule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
@@ -80,7 +80,7 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
   @Override
   public ParseContext transform(ParseContext pctx) throws SemanticException {
 
-    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
 
     // process reduce sink added by hive.enforce.bucketing or hive.enforce.sorting
     opRules.put(new RuleRegExp("R1",
@@ -90,8 +90,8 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
         getBucketSortReduceSinkProc(pctx));
 
     // The dispatcher fires the processor corresponding to the closest matching rule
-    SemanticDispatcher disp = new DefaultRuleDispatcher(getDefaultProc(), opRules, null);
-    SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
+    Dispatcher disp = new DefaultRuleDispatcher(getDefaultProc(), opRules, null);
+    GraphWalker ogw = new DefaultGraphWalker(disp);
 
     // Create a list of top nodes
     ArrayList<Node> topNodes = new ArrayList<Node>();
@@ -101,17 +101,17 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
     return pctx;
   }
 
-  private SemanticNodeProcessor getDefaultProc() {
-    return new SemanticNodeProcessor() {
+  private NodeProcessor getDefaultProc() {
+    return new NodeProcessor() {
       @Override
       public Object process(Node nd, Stack<Node> stack,
-                            NodeProcessorCtx procCtx, Object... nodeOutputs) throws SemanticException {
+          NodeProcessorCtx procCtx, Object... nodeOutputs) throws SemanticException {
         return null;
       }
     };
   }
 
-  private SemanticNodeProcessor getBucketSortReduceSinkProc(ParseContext pctx) {
+  private NodeProcessor getBucketSortReduceSinkProc(ParseContext pctx) {
     return new BucketSortReduceSinkProcessor(pctx);
   }
 
@@ -119,7 +119,7 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
    * BucketSortReduceSinkProcessor.
    *
    */
-  public class BucketSortReduceSinkProcessor implements SemanticNodeProcessor {
+  public class BucketSortReduceSinkProcessor implements NodeProcessor {
     private final Logger LOG = LoggerFactory.getLogger(BucketSortReduceSinkProcessor.class);
     protected ParseContext pGraphContext;
 
@@ -407,15 +407,11 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
         return null;
       }
 
-      if (stack.get(0) instanceof TableScanOperator) {
+      if(stack.get(0) instanceof TableScanOperator) {
         TableScanOperator tso = ((TableScanOperator)stack.get(0));
-        Table tab = tso.getConf().getTableMetadata();
-        if (AcidUtils.isFullAcidTable(tab)) {
+        if(AcidUtils.isAcidTable(tso.getConf().getTableMetadata())) {
           /*ACID tables have complex directory layout and require merging of delta files
           * on read thus we should not try to read bucket files directly*/
-          return null;
-        } else if (AcidUtils.isInsertOnlyTable(tab.getParameters())) {
-          // Do not support MM tables either at this point. We could do it with some extra logic.
           return null;
         }
       }
@@ -459,7 +455,6 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
       List<ExprNodeColumnDesc> sourceTableSortCols = new ArrayList<ExprNodeColumnDesc>();
       op = op.getParentOperators().get(0);
 
-      boolean isSrcMmTable = false;
       while (true) {
         if (!(op instanceof TableScanOperator) &&
             !(op instanceof FilterOperator) &&
@@ -508,11 +503,6 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
             assert !useBucketSortPositions;
             TableScanOperator ts = (TableScanOperator) op;
             Table srcTable = ts.getConf().getTableMetadata();
-            // Not supported for MM tables for now.
-            if (AcidUtils.isInsertOnlyTable(destTable.getParameters())) {
-              return null;
-            }
-
 
             // Find the positions of the bucketed columns in the table corresponding
             // to the select list.
@@ -618,11 +608,8 @@ public class BucketingSortingReduceSinkOptimizer extends Transform {
             sourceTableBucketCols.clear();
             sourceTableSortCols.clear();
 
-            if (selectDesc.getColList().size() < bucketPositions.size()
-                || selectDesc.getColList().size() != fsOp.getSchema().getSignature().size()) {
-              // Some columns in select are pruned. This may happen if those are constants.
-              // TODO: the best solution is to hook the operator before fs with the select operator. 
-              // See smb_mapjoin_20.q for more details. 
+            if (selectDesc.getColList().size() < bucketPositions.size()) {
+             // Some columns in select are pruned. This may happen if those are constants.
               return null;
             }
             // Only columns can be selected for both sorted and bucketed positions

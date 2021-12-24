@@ -1,7 +1,3 @@
---! qt:dataset:src
---! qt:dataset:part
--- SORT_QUERY_RESULTS
-
 set hive.mapred.mode=nonstrict;
 set hive.exec.infer.bucket.sort=true;
 

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,22 +18,21 @@
 
 package org.apache.hadoop.hive.serde2.objectinspector.primitive;
 
-import java.time.ZoneId;
+import java.sql.Date;
+import java.sql.Timestamp;
 
-import org.apache.hadoop.hive.common.type.Date;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hadoop.hive.common.type.Timestamp;
-import org.apache.hadoop.hive.common.type.TimestampTZ;
 import org.apache.hadoop.hive.serde2.ByteStream;
+import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
+import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
 import org.apache.hadoop.hive.serde2.lazy.LazyInteger;
 import org.apache.hadoop.hive.serde2.lazy.LazyLong;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters.Converter;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
-import org.apache.hadoop.hive.serde2.typeinfo.TimestampLocalTZTypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 
@@ -255,7 +254,7 @@ public class PrimitiveObjectInspectorConverter {
         SettableDateObjectInspector outputOI) {
       this.inputOI = inputOI;
       this.outputOI = outputOI;
-      r = outputOI.create(new Date());
+      r = outputOI.create(new Date(0));
     }
 
     public Object convert(Object input) {
@@ -277,7 +276,7 @@ public class PrimitiveObjectInspectorConverter {
         SettableTimestampObjectInspector outputOI) {
       this.inputOI = inputOI;
       this.outputOI = outputOI;
-      r = outputOI.create(new Timestamp());
+      r = outputOI.create(new Timestamp(0));
     }
 
     public void setIntToTimestampInSeconds(boolean intToTimestampInSeconds) {
@@ -290,31 +289,6 @@ public class PrimitiveObjectInspectorConverter {
       }
       return outputOI.set(r, PrimitiveObjectInspectorUtils.getTimestamp(input,
           inputOI, intToTimestampInSeconds));
-    }
-  }
-
-  public static class TimestampLocalTZConverter implements Converter {
-    final PrimitiveObjectInspector inputOI;
-    final SettableTimestampLocalTZObjectInspector outputOI;
-    final Object r;
-    final ZoneId timeZone;
-
-    public TimestampLocalTZConverter(
-        PrimitiveObjectInspector inputOI,
-        SettableTimestampLocalTZObjectInspector outputOI) {
-      this.inputOI = inputOI;
-      this.outputOI = outputOI;
-      this.r = outputOI.create(new TimestampTZ());
-      this.timeZone = ((TimestampLocalTZTypeInfo) outputOI.getTypeInfo()).timeZone();
-    }
-
-    @Override
-    public Object convert(Object input) {
-      if (input == null) {
-        return null;
-      }
-
-      return outputOI.set(r, PrimitiveObjectInspectorUtils.getTimestampLocalTZ(input, inputOI, timeZone));
     }
   }
 
@@ -492,9 +466,6 @@ public class PrimitiveObjectInspectorConverter {
         t.set(((TimestampObjectInspector) inputOI)
             .getPrimitiveWritableObject(input).toString());
         return t;
-      case TIMESTAMPLOCALTZ:
-        t.set(((TimestampLocalTZObjectInspector) inputOI).getPrimitiveWritableObject(input).toString());
-        return t;
       case INTERVAL_YEAR_MONTH:
         t.set(((HiveIntervalYearMonthObjectInspector) inputOI)
             .getPrimitiveWritableObject(input).toString());
@@ -513,8 +484,7 @@ public class PrimitiveObjectInspectorConverter {
         }
         return t;
       case DECIMAL:
-        HiveDecimal decimalVal = ((HiveDecimalObjectInspector) inputOI).getPrimitiveJavaObject(input);
-        t.set(decimalVal.toFormatString(inputOI.scale()));
+        t.set(((HiveDecimalObjectInspector) inputOI).getPrimitiveWritableObject(input).toString());
         return t;
       default:
         throw new RuntimeException("Hive 2 Internal error: type = " + inputOI.getTypeName());

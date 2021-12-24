@@ -1,5 +1,3 @@
---! qt:dataset:src
---! qt:dataset:part
 set hive.mapred.mode=nonstrict;
 -- Test type date, int, and string in partition column
 drop table if exists partcolstats;

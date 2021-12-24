@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -346,7 +346,6 @@ public class WindowingSpec {
     String name;
     boolean isStar;
     boolean isDistinct;
-    boolean respectNulls;
     ArrayList<ASTNode> args;
     WindowSpec windowSpec;
 
@@ -385,15 +384,6 @@ public class WindowingSpec {
     public void setWindowSpec(WindowSpec windowSpec) {
       this.windowSpec = windowSpec;
     }
-
-    public boolean isRespectNulls() {
-      return respectNulls;
-    }
-
-    public void setRespectNulls(boolean respectNulls) {
-      this.respectNulls = respectNulls;
-    }
-
     @Override
     public String toString() {
       StringBuilder buf = new StringBuilder();
@@ -424,10 +414,6 @@ public class WindowingSpec {
       }
 
       buf.append(")");
-
-      if (!respectNulls) {
-        buf.append(" ignore nulls ");
-      }
 
       if ( windowSpec != null )
       {

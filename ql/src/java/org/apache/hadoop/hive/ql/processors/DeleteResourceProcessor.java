@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,7 @@ package org.apache.hadoop.hive.ql.processors;
 import java.util.Arrays;
 import java.util.Map;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hive.conf.HiveVariableSource;
 import org.apache.hadoop.hive.conf.VariableSubstitution;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
@@ -36,11 +36,15 @@ import org.slf4j.LoggerFactory;
  */
 public class DeleteResourceProcessor implements CommandProcessor {
 
-  private static final Logger LOG = LoggerFactory.getLogger(DeleteResourceProcessor.class.getName());
-  private static final LogHelper console = new LogHelper(LOG);
+  public static final Logger LOG = LoggerFactory.getLogger(DeleteResourceProcessor.class.getName());
+  public static final LogHelper console = new LogHelper(LOG);
 
   @Override
-  public CommandProcessorResponse run(String command) throws CommandProcessorException {
+  public void init() {
+  }
+
+  @Override
+  public CommandProcessorResponse run(String command) {
     SessionState ss = SessionState.get();
     command = new VariableSubstitution(new HiveVariableSource() {
       @Override
@@ -56,7 +60,7 @@ public class DeleteResourceProcessor implements CommandProcessor {
       console.printError("Usage: delete ["
           + StringUtils.join(SessionState.ResourceType.values(), "|")
           + "] <value> [<value>]*");
-      throw new CommandProcessorException(1);
+      return new CommandProcessorResponse(1);
     }
     CommandProcessorResponse authErrResp =
         CommandUtil.authorizeCommand(ss, HiveOperationType.DELETE, Arrays.asList(tokens));
@@ -70,10 +74,6 @@ public class DeleteResourceProcessor implements CommandProcessor {
       ss.delete_resources(t);
     }
 
-    return new CommandProcessorResponse();
-  }
-
-  @Override
-  public void close() throws Exception {
+    return new CommandProcessorResponse(0);
   }
 }

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,12 +21,11 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 
 public class CastStringGroupToChar extends StringUnaryUDFDirect implements TruncStringOutput {
-
   private static final long serialVersionUID = 1L;
   private int maxLength; // Must be manually set with setMaxLength.
 
-  public CastStringGroupToChar(int inputColumn, int outputColumnNum) {
-    super(inputColumn, outputColumnNum);
+  public CastStringGroupToChar(int inputColumn, int outputColumn) {
+    super(inputColumn, outputColumn);
   }
 
   public CastStringGroupToChar() {
@@ -39,8 +38,12 @@ public class CastStringGroupToChar extends StringUnaryUDFDirect implements Trunc
   protected void func(BytesColumnVector outV, byte[][] vector, int[] start, int[] length, int i) {
     StringExpr.rightTrimAndTruncate(outV, i, vector[i], start[i], length[i], maxLength);
   }
-
   @Override
+  public String getOutputType() {
+    return "Char";
+  }
+  
+    @Override
   public int getMaxLength() {
     return maxLength;
   }
@@ -51,6 +54,6 @@ public class CastStringGroupToChar extends StringUnaryUDFDirect implements Trunc
   }
 
   public String vectorExpressionParameters() {
-    return getColumnParamString(0, inputColumnNum[0]) + ", maxLength " + maxLength;
+    return "col " + inputColumn + ", maxLength " + maxLength;
   }
 }

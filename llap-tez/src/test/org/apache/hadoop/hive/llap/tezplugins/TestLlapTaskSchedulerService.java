@@ -18,21 +18,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeast;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-
-import org.apache.tez.dag.records.TezDAGID;
-
-import org.apache.tez.dag.records.TezVertexID;
-
-import org.apache.tez.dag.records.TezTaskID;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -47,13 +40,11 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstanceSet;
+import org.apache.hadoop.hive.llap.registry.ServiceInstance;
+import org.apache.hadoop.hive.llap.registry.ServiceInstanceSet;
 import org.apache.hadoop.hive.llap.registry.impl.InactiveServiceInstance;
 import org.apache.hadoop.hive.llap.registry.impl.LlapFixedRegistryImpl;
 import org.apache.hadoop.hive.llap.testhelpers.ControlledClock;
-import org.apache.hadoop.hive.llap.tezplugins.LlapTaskSchedulerService.TaskInfo;
-import org.apache.hadoop.hive.llap.tezplugins.LlapTaskSchedulerService.TaskInfo.State;
 import org.apache.hadoop.hive.llap.tezplugins.helpers.MonotonicClock;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -65,7 +56,6 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.tez.common.TezUtils;
 import org.apache.tez.dag.api.UserPayload;
-import org.apache.tez.dag.records.TezTaskAttemptID;
 import org.apache.tez.serviceplugins.api.TaskAttemptEndReason;
 import org.apache.tez.serviceplugins.api.TaskSchedulerContext;
 import org.junit.Test;
@@ -93,7 +83,7 @@ public class TestLlapTaskSchedulerService {
       Priority priority1 = Priority.newInstance(1);
       String[] hosts1 = new String[]{HOST1};
 
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = new Object();
       Object clientCookie1 = new Object();
 
       tsWrapper.controlScheduler(true);
@@ -102,481 +92,8 @@ public class TestLlapTaskSchedulerService {
       tsWrapper.awaitLocalTaskAllocations(1);
 
       verify(tsWrapper.mockAppCallback).taskAllocated(eq(task1), eq(clientCookie1), any(Container.class));
-      assertEquals(1, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumAllocationsPerHost().get(HOST1).get());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-  @Test(timeout = 10000)
-  public void testGuaranteedScheduling() throws IOException, InterruptedException {
-    TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // Schedule a task - it should get the only duck; the 2nd one at the same pri doesn't get one.
-    // When the first one finishes, the duck goes to the 2nd, and then becomes unused.
-    try {
-      Priority priority = Priority.newInstance(1);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      Object clientCookie1 = new Object(), clientCookie2 = new Object();
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, priority, clientCookie1);
-      tsWrapper.awaitTotalTaskAllocations(1);
-      TaskInfo ti = tsWrapper.ts.getTaskInfo(task1);
-      assertTrue(ti.isGuaranteed());
-      assertEquals(State.ASSIGNED, ti.getState());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.allocateTask(task2, null, priority, clientCookie2);
-      tsWrapper.awaitTotalTaskAllocations(2);
-      TaskInfo ti2 = tsWrapper.ts.getTaskInfo(task2);
-      assertFalse(ti2.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertTrue(ti2.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-
-      tsWrapper.deallocateTask(task2, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertEquals(1, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-
-  @Test(timeout = 10000)
-  public void testGuaranteedTransfer() throws IOException, InterruptedException {
-    TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // Schedule low pri first. When high pri is scheduled, it takes away the duck from the
-    // low pri task. When the high pri finishes, low pri gets the duck back.
-    try {
-      Priority highPri = Priority.newInstance(1), lowPri = Priority.newInstance(2);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, lowPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(1);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1);
-      assertTrue(ti1.isGuaranteed());
-      assertEquals(State.ASSIGNED, ti1.getState());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.allocateTask(task2, null, highPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(2);
-      TaskInfo ti2 = tsWrapper.ts.getTaskInfo(task2);
-      assertTrue(ti2.isGuaranteed());
-      assertFalse(ti1.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.deallocateTask(task2, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertTrue(ti1.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertEquals(1, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-  @Test(timeout = 10000)
-  public void testChangeGuaranteedTotal() throws IOException, InterruptedException {
-    TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // Schedule 3 tasks. Give out two ducks - two higher pri tasks get them. Give out 2 more
-    // - the last task gets it and one duck is unused. Give out 2 more - goes to unused.
-    // Then revoke similarly in steps (1, 4, 1), with the opposite effect.
-    try {
-      Priority highPri = Priority.newInstance(1), lowPri = Priority.newInstance(2);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, highPri, new Object());
-      tsWrapper.allocateTask(task2, null, lowPri, new Object());
-      tsWrapper.allocateTask(task3, null, lowPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(3);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1), ti2 = tsWrapper.ts.getTaskInfo(task2),
-          ti3 = tsWrapper.ts.getTaskInfo(task3);
-      assertFalse(ti1.isGuaranteed() || ti2.isGuaranteed() || ti3.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.ts.updateGuaranteedCount(2);
-      assertTrue(ti1.isGuaranteed());
-      // This particular test doesn't care which of the lower pri tasks gets the duck.
-      TaskInfo ti23High = ti2.isGuaranteed() ? ti2 : ti3, ti23Low = (ti2 == ti23High) ? ti3 : ti2;
-      assertTrue(ti23High.isGuaranteed());
-      assertFalse(ti23Low.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.ts.updateGuaranteedCount(4);
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti23High.isGuaranteed());
-      assertTrue(ti23Low.isGuaranteed());
-      assertEquals(1, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.ts.updateGuaranteedCount(6);
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti23High.isGuaranteed());
-      assertTrue(ti23Low.isGuaranteed());
-      assertEquals(3, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.ts.updateGuaranteedCount(5);
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti23High.isGuaranteed());
-      assertTrue(ti23Low.isGuaranteed());
-      assertEquals(2, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.ts.updateGuaranteedCount(1);
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti23High.isGuaranteed());
-      assertFalse(ti23Low.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.ts.updateGuaranteedCount(0);
-      assertFalse(ti1.isGuaranteed());
-      assertFalse(ti23High.isGuaranteed());
-      assertFalse(ti23Low.isGuaranteed());
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      tsWrapper.deallocateTask(task2, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      tsWrapper.deallocateTask(task3, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-
-  @Test(timeout = 20000)
-  public void testConcurrentUpdates() throws IOException, InterruptedException {
-    final TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // Test 4 variations of callbacks. 2 increases/2 revokes - do not update the same task again;
-    // Then, increase + decrease and decrease + increase, the 2nd call coming after the message is sent;
-    // the message callback should undo the change.
-    try {
-      Priority highPri = Priority.newInstance(1), lowPri = Priority.newInstance(2);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, highPri, new Object());
-      tsWrapper.allocateTask(task2, null, lowPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(2);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1), ti2 = tsWrapper.ts.getTaskInfo(task2);
-      assertFalse(ti1.isGuaranteed() || ti2.isGuaranteed());
-
-      // Boring scenario #1 - two concurrent increases.
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed());  // Not updated yet.
-      assertFalse(ti2.isGuaranteed());
-      // We are now "sending" a message... update again, "return" both callbacks.
-      tsWrapper.ts.updateGuaranteedCount(2);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti2.isGuaranteed());
-
-      tsWrapper.ts.handleUpdateResult(ti1, true);
-      tsWrapper.ts.handleUpdateResult(ti2, true);
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti2.isGuaranteed());
-      assertTrue(ti1.getLastSetGuaranteed());
-      assertTrue(ti2.getLastSetGuaranteed());
-
-      // Boring scenario #2 - two concurrent revokes. Same as above.
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti2.isGuaranteed());
-      assertTrue(ti2.getLastSetGuaranteed()); // Not updated yet.
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertFalse(ti1.isGuaranteed());
-      assertFalse(ti2.isGuaranteed());
-
-      tsWrapper.ts.handleUpdateResult(ti1, true);
-      tsWrapper.ts.handleUpdateResult(ti2, true);
-      assertFalse(ti1.isGuaranteed());
-      assertFalse(ti2.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed());
-      assertFalse(ti2.getLastSetGuaranteed());
-
-      // Concurrent increase and revocation, then another increase - after the message is sent.
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed()); // Not updated yet.
-      assertTrue(ti1.isUpdateInProgress());
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.ts.assertNoMessagesSent(); // We are revoking from an updating task.
-      assertFalse(ti1.isGuaranteed());
-
-      tsWrapper.ts.handleUpdateResult(ti1, true);
-      tsWrapper.ts.waitForMessagesSent(1); // We should send a message to undo what we just did.
-      assertFalse(ti1.isGuaranteed());
-      assertTrue(ti1.getLastSetGuaranteed());
-      assertTrue(ti1.isUpdateInProgress());
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.assertNoMessagesSent();
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti1.getLastSetGuaranteed());
-
-      tsWrapper.ts.handleUpdateResult(ti1, true);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed());
-      assertTrue(ti1.isUpdateInProgress());
-      tsWrapper.ts.handleUpdateResult(ti1, true);
-      tsWrapper.ts.assertNoMessagesSent();
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti1.getLastSetGuaranteed());
-      assertFalse(ti1.isUpdateInProgress());
-
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      tsWrapper.deallocateTask(task2, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertEquals(1, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-
-  @Test(timeout = 10000)
-  public void testUpdateOnFinishingTask() throws IOException, InterruptedException {
-    final TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // The update fails because the task has terminated on the node.
-    try {
-      Priority highPri = Priority.newInstance(1), lowPri = Priority.newInstance(2);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, highPri, new Object());
-      tsWrapper.allocateTask(task2, null, lowPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(2);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1), ti2 = tsWrapper.ts.getTaskInfo(task2);
-
-      // Concurrent increase and termination, increase fails.
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed()); // Not updated yet.
-      assertTrue(ti1.isUpdateInProgress());
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      tsWrapper.ts.handleUpdateResult(ti1, false);
-
-      // We must have the duck still; it should just go to the other task.
-      assertTrue(ti2.isGuaranteed());
-      assertTrue(ti2.isUpdateInProgress());
-      tsWrapper.ts.handleUpdateResult(ti2, false);
-      tsWrapper.deallocateTask(task2, true, TaskAttemptEndReason.CONTAINER_EXITED);
-
-      // Same; with the termination after the failed update, we should maintain the correct count.
-      assertEquals(1, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-  @Test(timeout = 10000)
-  public void testConcurrentUpdateWithError() throws IOException, InterruptedException {
-    final TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // The update has failed but the state has changed since then - no retry needed.
-    try {
-      Priority highPri = Priority.newInstance(1);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, highPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(1);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1);
-      assertFalse(ti1.isGuaranteed());
-
-      // Concurrent increase and revocation, increase fails - no revocation is needed.
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed()); // Not updated yet.
-      assertTrue(ti1.isUpdateInProgress());
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.ts.assertNoMessagesSent(); // We are revoking from an updating task.
-      assertFalse(ti1.isGuaranteed());
-
-      tsWrapper.ts.handleUpdateResult(ti1, false);
-      assertFalse(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed());
-      assertFalse(ti1.isUpdateInProgress());
-      tsWrapper.ts.assertNoMessagesSent();
-
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-  @Test(timeout = 10000)
-  public void testUpdateWithError() throws IOException, InterruptedException {
-    final TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // The update has failed; we'd try with another candidate first, but only at the same priority.
-    try {
-      Priority highPri = Priority.newInstance(1), lowPri = Priority.newInstance(2);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, highPri, new Object());
-      tsWrapper.allocateTask(task2, null, highPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(2);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1), ti2 = tsWrapper.ts.getTaskInfo(task2);
-      assertFalse(ti1.isGuaranteed() || ti2.isGuaranteed());
-
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.waitForMessagesSent(1);
-      TaskInfo tiHigher = ti1.isGuaranteed() ? ti1 : ti2, tiLower = (tiHigher == ti1) ? ti2 : ti1;
-      assertTrue(tiHigher.isGuaranteed());
-      assertFalse(tiHigher.getLastSetGuaranteed()); // Not updated yet.
-      assertTrue(tiHigher.isUpdateInProgress());
-
-      tsWrapper.ts.handleUpdateResult(tiHigher, false); // Update has failed. We should try task2.
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertFalse(tiHigher.isGuaranteed());
-      assertFalse(tiHigher.getLastSetGuaranteed());
-      assertFalse(tiHigher.isUpdateInProgress());
-      assertTrue(tiLower.isGuaranteed());
-      assertFalse(tiLower.getLastSetGuaranteed());
-      assertTrue(tiLower.isUpdateInProgress());
-
-      // Fail the 2nd update too to get rid of the duck for the next test.
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.ts.handleUpdateResult(tiLower, false);
-      tsWrapper.ts.assertNoMessagesSent();
-
-      // Now run a lower priority task.
-      tsWrapper.deallocateTask(task2, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      tsWrapper.allocateTask(task3, null, lowPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(3);
-      TaskInfo ti3 = tsWrapper.ts.getTaskInfo(task3);
-
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti1.isUpdateInProgress());
-
-      tsWrapper.ts.handleUpdateResult(ti1, false); // Update has failed. We won't try a low pri task.
-      assertTrue(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed());
-      assertTrue(ti1.isUpdateInProgress());
-      assertFalse(ti3.isGuaranteed());
-      assertFalse(ti3.isUpdateInProgress());
-
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-  @Test(timeout = 10000)
-  public void testConcurrentUpdatesBeforeMessage() throws IOException, InterruptedException {
-    final TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // 2 more variations of callbacks; increase + decrease and decrease + increase, the 2nd call coming
-    // before the message is sent; no message should ever be sent.
-    try {
-      Priority highPri = Priority.newInstance(1), lowPri = Priority.newInstance(2);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId(), task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, highPri, new Object());
-      tsWrapper.allocateTask(task2, null, lowPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(2);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1), ti2 = tsWrapper.ts.getTaskInfo(task2);
-      assertFalse(ti1.isGuaranteed() || ti2.isGuaranteed());
-
-      // Concurrent increase and revocation - before the message is sent.
-      tsWrapper.ts.clearTestCounts();
-      tsWrapper.ts.setDelayCheckAndSend(true);
-      Thread updateThread = new Thread(new Runnable() {
-        @Override
-        public void run() {
-          tsWrapper.ts.updateGuaranteedCount(1);
-        }
-      }, "test-update-thread");
-      updateThread.start(); // This should eventually hang in the delay code.
-      tsWrapper.ts.waitForCheckAndSendCall(1); // From the background thread.
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti1.isUpdateInProgress());
-      assertFalse(ti1.getLastSetGuaranteed());
-      tsWrapper.ts.updateGuaranteedCount(0); // This won't go into checkAndSend.
-      tsWrapper.ts.assertNoMessagesSent();
-      // Release the background thread.
-      tsWrapper.ts.setDelayCheckAndSend(false);
-      updateThread.join();
-      tsWrapper.ts.assertNoMessagesSent(); // No message is needed.
-      assertFalse(ti1.isGuaranteed());
-      assertFalse(ti1.getLastSetGuaranteed());
-      assertFalse(ti1.isUpdateInProgress());
-
-      // Concurrent revocation and increase - before the message is sent.
-      // First, actually give it a duck.
-      tsWrapper.ts.updateGuaranteedCount(1);
-      tsWrapper.ts.handleUpdateResult(ti1, true);
-      tsWrapper.ts.clearTestCounts();
-      assertTrue(ti1.isGuaranteed() && ti1.getLastSetGuaranteed());
-
-      tsWrapper.ts.setDelayCheckAndSend(true);
-      updateThread = new Thread(new Runnable() {
-        @Override
-        public void run() {
-          tsWrapper.ts.updateGuaranteedCount(0);
-        }
-      }, "test-update-thread");
-      updateThread.start(); // This should eventually hang in the delay code.
-      tsWrapper.ts.waitForCheckAndSendCall(1);
-      assertFalse(ti1.isGuaranteed());
-      assertTrue(ti1.isUpdateInProgress());
-      assertTrue(ti1.getLastSetGuaranteed());
-      tsWrapper.ts.updateGuaranteedCount(1); // This won't go into checkAndSend.
-      tsWrapper.ts.assertNoMessagesSent();
-      // Release the background thread.
-      tsWrapper.ts.setDelayCheckAndSend(false);
-      updateThread.join();
-      tsWrapper.ts.assertNoMessagesSent(); // No message is needed.
-      assertTrue(ti1.isGuaranteed());
-      assertTrue(ti1.getLastSetGuaranteed());
-      assertFalse(ti1.isUpdateInProgress());
-
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      tsWrapper.deallocateTask(task2, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertEquals(1, tsWrapper.ts.getUnusedGuaranteedCount());
-    } finally {
-      tsWrapper.shutdown();
-    }
-  }
-
-  @Test(timeout = 10000)
-  public void testHeartbeatInconsistency() throws IOException, InterruptedException {
-    final TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper();
-    // Guaranteed flag is inconsistent based on heartbeat - another message should be send.
-    try {
-      Priority highPri = Priority.newInstance(1);
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
-      tsWrapper.ts.updateGuaranteedCount(0);
-      tsWrapper.controlScheduler(true);
-      tsWrapper.allocateTask(task1, null, highPri, new Object());
-      tsWrapper.awaitTotalTaskAllocations(1);
-      TaskInfo ti1 = tsWrapper.ts.getTaskInfo(task1);
-      assertFalse(ti1.isGuaranteed());
-
-      // Heartbeat indicates task has a duck - this must be reverted.
-      tsWrapper.ts.taskInfoUpdated(task1, true);
-      tsWrapper.ts.waitForMessagesSent(1);
-      assertTrue(ti1.getLastSetGuaranteed());
-      assertTrue(ti1.isUpdateInProgress());
-      assertFalse(ti1.isGuaranteed());
-      tsWrapper.ts.handleUpdateResult(ti1, true);
-      assertFalse(ti1.getLastSetGuaranteed());
-
-      tsWrapper.deallocateTask(task1, true, TaskAttemptEndReason.CONTAINER_EXITED);
-      assertEquals(0, tsWrapper.ts.getUnusedGuaranteedCount());
+      assertEquals(1, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numAllocationsPerHost.get(HOST1).get());
     } finally {
       tsWrapper.shutdown();
     }
@@ -589,13 +106,13 @@ public class TestLlapTaskSchedulerService {
     try {
       Priority priority1 = Priority.newInstance(1);
 
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = new Object();
       Object clientCookie1 = new Object();
       tsWrapper.controlScheduler(true);
       tsWrapper.allocateTask(task1, null, priority1, clientCookie1);
       tsWrapper.awaitTotalTaskAllocations(1);
       verify(tsWrapper.mockAppCallback).taskAllocated(eq(task1), eq(clientCookie1), any(Container.class));
-      assertEquals(1, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
+      assertEquals(1, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
     } finally {
       tsWrapper.shutdown();
     }
@@ -611,13 +128,13 @@ public class TestLlapTaskSchedulerService {
     TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper(2000, hosts, 1, 1);
     try {
 
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
-      TezTaskAttemptID task4 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task4 = "task4";
       Object clientCookie4 = "cookie4";
 
       tsWrapper.controlScheduler(true);
@@ -627,14 +144,14 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumLocalAllocations() == 2) {
+        if (tsWrapper.ts.dagStats.numLocalAllocations == 2) {
           break;
         }
       }
       verify(tsWrapper.mockAppCallback, times(2)).taskAllocated(any(Object.class),
           any(Object.class), any(Container.class));
-      assertEquals(2, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(0, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
+      assertEquals(2, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(0, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
 
       reset(tsWrapper.mockAppCallback);
 
@@ -642,7 +159,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumPreemptedTasks() == 1) {
+        if (tsWrapper.ts.dagStats.numPreemptedTasks == 1) {
           break;
         }
       }
@@ -654,7 +171,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 3) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 3) {
           break;
         }
       }
@@ -673,23 +190,23 @@ public class TestLlapTaskSchedulerService {
     try {
       Priority priority1 = Priority.newInstance(1);
       String[] hosts1 = new String[]{HOST1};
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = new Object();
       Object clientCookie1 = new Object();
       tsWrapper.controlScheduler(true);
       tsWrapper.allocateTask(task1, hosts1, priority1, clientCookie1);
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 1) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 1) {
           break;
         }
       }
       verify(tsWrapper.mockAppCallback).taskAllocated(eq(task1), eq(clientCookie1),
           any(Container.class));
-      assertEquals(1, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(0, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
-      assertEquals(0, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumTotalAllocations());
+      assertEquals(1, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(0, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
+      assertEquals(0, tsWrapper.ts.dagStats.numNonLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numTotalAllocations);
 
       tsWrapper.resetAppCallback();
 
@@ -697,7 +214,7 @@ public class TestLlapTaskSchedulerService {
       tsWrapper.rejectExecution(task1);
 
       // Verify that the node is blacklisted
-      assertEquals(1, tsWrapper.ts.dagStats.getNumRejectedTasks());
+      assertEquals(1, tsWrapper.ts.dagStats.numRejectedTasks);
       assertEquals(3, tsWrapper.ts.instanceToNodeMap.size());
       LlapTaskSchedulerService.NodeInfo disabledNodeInfo = tsWrapper.ts.disabledNodesQueue.peek();
       assertNotNull(disabledNodeInfo);
@@ -705,21 +222,21 @@ public class TestLlapTaskSchedulerService {
       assertEquals((10000l), disabledNodeInfo.getDelay(TimeUnit.MILLISECONDS));
       assertEquals((10000l + 10000l), disabledNodeInfo.expireTimeMillis);
 
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = new Object();
       Object clientCookie2 = new Object();
       tsWrapper.allocateTask(task2, hosts1, priority1, clientCookie2);
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 2) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 2) {
           break;
         }
       }
       verify(tsWrapper.mockAppCallback).taskAllocated(eq(task2), eq(clientCookie2), any(Container.class));
-      assertEquals(1, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(0, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
-      assertEquals(2, tsWrapper.ts.dagStats.getNumTotalAllocations());
+      assertEquals(1, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(0, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
+      assertEquals(1, tsWrapper.ts.dagStats.numNonLocalAllocations);
+      assertEquals(2, tsWrapper.ts.dagStats.numTotalAllocations);
 
     } finally {
       tsWrapper.shutdown();
@@ -736,11 +253,11 @@ public class TestLlapTaskSchedulerService {
       String[] hosts2 = new String[]{HOST2};
       String[] hosts3 = new String[]{HOST3};
 
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = new Object();
       Object clientCookie1 = new Object();
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = new Object();
       Object clientCookie2 = new Object();
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = new Object();
       Object clientCookie3 = new Object();
 
       tsWrapper.controlScheduler(true);
@@ -750,14 +267,14 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 3) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 3) {
           break;
         }
       }
       verify(tsWrapper.mockAppCallback, times(3)).taskAllocated(any(Object.class), any(Object.class), any(Container.class));
-      assertEquals(3, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(0, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
-      assertEquals(3, tsWrapper.ts.dagStats.getNumTotalAllocations());
+      assertEquals(3, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(0, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
+      assertEquals(3, tsWrapper.ts.dagStats.numTotalAllocations);
 
       tsWrapper.resetAppCallback();
 
@@ -766,16 +283,16 @@ public class TestLlapTaskSchedulerService {
       tsWrapper.rejectExecution(task3);
 
       // Verify that the node is blacklisted
-      assertEquals(3, tsWrapper.ts.dagStats.getNumRejectedTasks());
+      assertEquals(3, tsWrapper.ts.dagStats.numRejectedTasks);
       assertEquals(3, tsWrapper.ts.instanceToNodeMap.size());
       assertEquals(3, tsWrapper.ts.disabledNodesQueue.size());
 
 
-      TezTaskAttemptID task4 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task4 = new Object();
       Object clientCookie4 = new Object();
-      TezTaskAttemptID task5 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task5 = new Object();
       Object clientCookie5 = new Object();
-      TezTaskAttemptID task6 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task6 = new Object();
       Object clientCookie6 = new Object();
       tsWrapper.allocateTask(task4, hosts1, priority1, clientCookie4);
       tsWrapper.allocateTask(task5, hosts2, priority1, clientCookie5);
@@ -783,7 +300,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 6) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 6) {
           break;
         }
       }
@@ -792,8 +309,8 @@ public class TestLlapTaskSchedulerService {
       verify(tsWrapper.mockAppCallback, times(3)).taskAllocated(any(Object.class), any(Object.class), argumentCaptor.capture());
 
       // which affects the locality matching
-      assertEquals(0, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
-      assertEquals(6, tsWrapper.ts.dagStats.getNumTotalAllocations());
+      assertEquals(0, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
+      assertEquals(6, tsWrapper.ts.dagStats.numTotalAllocations);
 
     } finally {
       tsWrapper.shutdown();
@@ -829,15 +346,15 @@ public class TestLlapTaskSchedulerService {
     TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper(2000, hosts, 1, 1, (forceLocality ? -1l : 0l));
 
     try {
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
-      TezTaskAttemptID task4 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task4 = "task4";
       Object clientCookie4 = "cookie4";
-      TezTaskAttemptID task5 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task5 = "task5";
       Object clientCookie5 = "cookie5";
 
       tsWrapper.controlScheduler(true);
@@ -855,7 +372,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 4) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 4) {
           break;
         }
       }
@@ -885,7 +402,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 5) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 5) {
           break;
         }
       }
@@ -914,10 +431,10 @@ public class TestLlapTaskSchedulerService {
     TestTaskSchedulerServiceWrapper tsWrapper =
         new TestTaskSchedulerServiceWrapper(2000, hostsKnown, 1, 1, -1l);
     try {
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
 
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
 
       tsWrapper.controlScheduler(true);
@@ -929,7 +446,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 2) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 2) {
           break;
         }
       }
@@ -958,16 +475,16 @@ public class TestLlapTaskSchedulerService {
     TestTaskSchedulerServiceWrapper tsWrapper =
       new TestTaskSchedulerServiceWrapper(2000, hostsKnown, 1, 1, -1l);
     try {
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
 
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
 
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
 
-      TezTaskAttemptID task4 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task4 = "task4";
       Object clientCookie4 = "cookie4";
 
       tsWrapper.controlScheduler(true);
@@ -979,7 +496,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 4) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 4) {
           break;
         }
       }
@@ -1002,9 +519,9 @@ public class TestLlapTaskSchedulerService {
       // 4rd task provided no location preference, got host2 since host1 is full and only host2 is left in random pool
       assertEquals(HOST2, argumentCaptor2.getAllValues().get(3).getNodeId().getHost());
 
-      assertEquals(1, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
-      assertEquals(2, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
+      assertEquals(1, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
+      assertEquals(2, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numNonLocalAllocations);
     } finally {
       tsWrapper.shutdown();
     }
@@ -1020,13 +537,13 @@ public class TestLlapTaskSchedulerService {
     TestTaskSchedulerServiceWrapper tsWrapper =
       new TestTaskSchedulerServiceWrapper(2000, hostsKnown, 1, 0, 0l, false, hostsLive, true);
     try {
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
 
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
 
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
 
       tsWrapper.controlScheduler(true);
@@ -1037,7 +554,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 3) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 3) {
           break;
         }
       }
@@ -1057,11 +574,11 @@ public class TestLlapTaskSchedulerService {
       // 3rd task requested host2, got host1 as host2 and host3 are full
       assertEquals(HOST1, argumentCaptor2.getAllValues().get(2).getNodeId().getHost());
 
-      verify(tsWrapper.mockServiceInstanceSet, atLeast(2)).getAllInstancesOrdered(true);
+      verify(tsWrapper.mockServiceInstanceSet, times(2)).getAllInstancesOrdered(true);
 
-      assertEquals(0, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(2, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
+      assertEquals(0, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
+      assertEquals(1, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(2, tsWrapper.ts.dagStats.numNonLocalAllocations);
     } finally {
       tsWrapper.shutdown();
     }
@@ -1078,13 +595,13 @@ public class TestLlapTaskSchedulerService {
     TestTaskSchedulerServiceWrapper tsWrapper =
       new TestTaskSchedulerServiceWrapper(2000, hostsKnown, 1, 0, 0l, false, hostsLive, true);
     try {
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
 
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
 
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
 
       tsWrapper.controlScheduler(true);
@@ -1095,7 +612,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumTotalAllocations() == 3) {
+        if (tsWrapper.ts.dagStats.numTotalAllocations == 3) {
           break;
         }
       }
@@ -1116,11 +633,11 @@ public class TestLlapTaskSchedulerService {
       // 3rd task requested host3, got host1 since host3 is dead and host4 is full
       assertEquals(HOST1, argumentCaptor2.getAllValues().get(2).getNodeId().getHost());
 
-      verify(tsWrapper.mockServiceInstanceSet, atLeast(2)).getAllInstancesOrdered(true);
+      verify(tsWrapper.mockServiceInstanceSet, times(2)).getAllInstancesOrdered(true);
 
-      assertEquals(0, tsWrapper.ts.dagStats.getNumAllocationsNoLocalityRequest());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(2, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
+      assertEquals(0, tsWrapper.ts.dagStats.numAllocationsNoLocalityRequest);
+      assertEquals(1, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(2, tsWrapper.ts.dagStats.numNonLocalAllocations);
     } finally {
       tsWrapper.shutdown();
     }
@@ -1141,13 +658,13 @@ public class TestLlapTaskSchedulerService {
     // Try running p1 task on host1 - should preempt
 
     try {
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
-      TezTaskAttemptID task4 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task4 = "task4";
       Object clientCookie4 = "cookie4";
 
       tsWrapper.controlScheduler(true);
@@ -1173,7 +690,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumPreemptedTasks() == 1) {
+        if (tsWrapper.ts.dagStats.numPreemptedTasks == 1) {
           break;
         }
       }
@@ -1204,11 +721,11 @@ public class TestLlapTaskSchedulerService {
     TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper(2000, hosts, 1, 1, -1l);
 
     try {
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
 
       tsWrapper.controlScheduler(true);
@@ -1242,7 +759,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumPreemptedTasks() == 1) {
+        if (tsWrapper.ts.dagStats.numPreemptedTasks == 1) {
           break;
         }
       }
@@ -1278,13 +795,13 @@ public class TestLlapTaskSchedulerService {
 
     try {
 
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
-      TezTaskAttemptID task4 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task4 = "task4";
       Object clientCookie4 = "cookie4";
 
       tsWrapper.controlScheduler(true);
@@ -1310,7 +827,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumPreemptedTasks() == 1) {
+        if (tsWrapper.ts.dagStats.numPreemptedTasks == 1) {
           break;
         }
       }
@@ -1342,7 +859,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumPreemptedTasks() == 2) {
+        if (tsWrapper.ts.dagStats.numPreemptedTasks == 2) {
           break;
         }
       }
@@ -1381,13 +898,13 @@ public class TestLlapTaskSchedulerService {
 
     try {
 
-      TezTaskAttemptID task1 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task1 = "task1";
       Object clientCookie1 = "cookie1";
-      TezTaskAttemptID task2 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task2 = "task2";
       Object clientCookie2 = "cookie2";
-      TezTaskAttemptID task3 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task3 = "task3";
       Object clientCookie3 = "cookie3";
-      TezTaskAttemptID task4 = TestTaskSchedulerServiceWrapper.generateTaskAttemptId();
+      Object task4 = "task4";
       Object clientCookie4 = "cookie4";
 
       tsWrapper.controlScheduler(true);
@@ -1414,7 +931,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun();
-        if (tsWrapper.ts.dagStats.getNumPreemptedTasks() == 1) {
+        if (tsWrapper.ts.dagStats.numPreemptedTasks == 1) {
           break;
         }
       }
@@ -1444,7 +961,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         tsWrapper.signalSchedulerRun();
         tsWrapper.awaitSchedulerRun(1000l);
-        if (tsWrapper.ts.dagStats.getNumPreemptedTasks() == 2) {
+        if (tsWrapper.ts.dagStats.numPreemptedTasks == 2) {
           break;
         }
       }
@@ -1521,9 +1038,9 @@ public class TestLlapTaskSchedulerService {
     // Fill up host1 with tasks. Leave host2 empty.
     try {
       tsWrapper.controlScheduler(true);
-      TezTaskAttemptID task1 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task2 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
+      Object task1 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task2 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
 
       tsWrapper.awaitLocalTaskAllocations(2);
 
@@ -1567,11 +1084,11 @@ public class TestLlapTaskSchedulerService {
       assertEquals(HOST2, assignedContainer.getNodeId().getHost());
 
 
-      assertEquals(2, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumDelayedAllocations());
-      assertEquals(2, tsWrapper.ts.dagStats.getNumAllocationsPerHost().get(HOST1).get());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumAllocationsPerHost().get(HOST2).get());
+      assertEquals(2, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numNonLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numDelayedAllocations);
+      assertEquals(2, tsWrapper.ts.dagStats.numAllocationsPerHost.get(HOST1).get());
+      assertEquals(1, tsWrapper.ts.dagStats.numAllocationsPerHost.get(HOST2).get());
 
     } finally {
       tsWrapper.shutdown();
@@ -1596,9 +1113,9 @@ public class TestLlapTaskSchedulerService {
     // Fill up host1 with tasks. Leave host2 empty.
     try {
       tsWrapper.controlScheduler(true);
-      TezTaskAttemptID task1 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task2 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
+      Object task1 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task2 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
 
       tsWrapper.awaitLocalTaskAllocations(2);
 
@@ -1644,10 +1161,10 @@ public class TestLlapTaskSchedulerService {
       assertEquals(HOST1, assignedContainer.getNodeId().getHost());
 
 
-      assertEquals(3, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(0, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumDelayedAllocations());
-      assertEquals(3, tsWrapper.ts.dagStats.getNumAllocationsPerHost().get(HOST1).get());
+      assertEquals(3, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(0, tsWrapper.ts.dagStats.numNonLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numDelayedAllocations);
+      assertEquals(3, tsWrapper.ts.dagStats.numAllocationsPerHost.get(HOST1).get());
 
     } finally {
       tsWrapper.shutdown();
@@ -1673,9 +1190,9 @@ public class TestLlapTaskSchedulerService {
     // Fill up host1 with tasks. Leave host2 empty.
     try {
       tsWrapper.controlScheduler(true);
-      TezTaskAttemptID task1 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task2 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
+      Object task1 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task2 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
 
       tsWrapper.awaitLocalTaskAllocations(2);
 
@@ -1752,7 +1269,7 @@ public class TestLlapTaskSchedulerService {
     // With a timeout of 3000.
     LlapTaskSchedulerService.TaskInfo taskInfo =
         new LlapTaskSchedulerService.TaskInfo(localityDelayConf1, clock, new Object(), new Object(),
-            mock(Priority.class), mock(Resource.class), null, null, clock.getTime(), null);
+            mock(Priority.class), mock(Resource.class), null, null, clock.getTime());
 
     assertFalse(taskInfo.shouldForceLocality());
 
@@ -1773,7 +1290,7 @@ public class TestLlapTaskSchedulerService {
         new LlapTaskSchedulerService.LocalityDelayConf(0);
     taskInfo =
         new LlapTaskSchedulerService.TaskInfo(localityDelayConf2, clock, new Object(), new Object(),
-            mock(Priority.class), mock(Resource.class), null, null, clock.getTime(), null);
+            mock(Priority.class), mock(Resource.class), null, null, clock.getTime());
     assertFalse(taskInfo.shouldDelayForLocality(clock.getTime()));
     assertFalse(taskInfo.shouldForceLocality());
     assertTrue(taskInfo.getDelay(TimeUnit.MILLISECONDS) < 0);
@@ -1783,7 +1300,7 @@ public class TestLlapTaskSchedulerService {
         new LlapTaskSchedulerService.LocalityDelayConf(-1);
     taskInfo =
         new LlapTaskSchedulerService.TaskInfo(localityDelayConf3, clock, new Object(), new Object(),
-            mock(Priority.class), mock(Resource.class), null, null, clock.getTime(), null);
+            mock(Priority.class), mock(Resource.class), null, null, clock.getTime());
     assertTrue(taskInfo.shouldDelayForLocality(clock.getTime()));
     assertTrue(taskInfo.shouldForceLocality());
     assertFalse(taskInfo.getDelay(TimeUnit.MILLISECONDS) < 0);
@@ -1802,12 +1319,12 @@ public class TestLlapTaskSchedulerService {
 
     LlapTaskSchedulerService.TaskInfo taskInfo1 =
         new LlapTaskSchedulerService.TaskInfo(localityDelayConf, clock, new Object(), new Object(),
-            mock(Priority.class), mock(Resource.class), null, null, clock.getTime(), null);
+            mock(Priority.class), mock(Resource.class), null, null, clock.getTime());
 
     clock.setTime(clock.getTime() + 1000);
     LlapTaskSchedulerService.TaskInfo taskInfo2 =
         new LlapTaskSchedulerService.TaskInfo(localityDelayConf, clock, new Object(), new Object(),
-            mock(Priority.class), mock(Resource.class), null, null, clock.getTime(), null);
+            mock(Priority.class), mock(Resource.class), null, null, clock.getTime());
 
     delayedQueue.add(taskInfo1);
     delayedQueue.add(taskInfo2);
@@ -1823,15 +1340,15 @@ public class TestLlapTaskSchedulerService {
     String [] hostsH1 = new String[] {HOST1};
 
     // Node disable timeout higher than locality delay.
-    TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper(20000, hosts, 1, 1, 9000l);
+    TestTaskSchedulerServiceWrapper tsWrapper = new TestTaskSchedulerServiceWrapper(20000, hosts, 1, 1, 10000l);
 
     // Fill up host1 with tasks. Leave host2 empty.
     try {
       long startTime = tsWrapper.getClock().getTime();
       tsWrapper.controlScheduler(true);
-      TezTaskAttemptID task1 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task2 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
+      Object task1 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task2 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
 
       tsWrapper.awaitLocalTaskAllocations(2);
 
@@ -1858,7 +1375,7 @@ public class TestLlapTaskSchedulerService {
       long thirdAllocateTime = tsWrapper.getClock().getTime();
       long diff = thirdAllocateTime - startTime;
       // diffAfterSleep < total sleepTime
-      assertTrue("Task not allocated in expected time window: duration=" + diff, diff < 9000l);
+      assertTrue("Task not allocated in expected time window: duration=" + diff, diff < 10000l);
 
       verify(tsWrapper.mockAppCallback, never()).preemptContainer(any(ContainerId.class));
       argumentCaptor = ArgumentCaptor.forClass(Object.class);
@@ -1871,11 +1388,11 @@ public class TestLlapTaskSchedulerService {
       assertEquals(HOST2, assignedContainer.getNodeId().getHost());
 
 
-      assertEquals(2, tsWrapper.ts.dagStats.getNumLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumNonLocalAllocations());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumDelayedAllocations());
-      assertEquals(2, tsWrapper.ts.dagStats.getNumAllocationsPerHost().get(HOST1).get());
-      assertEquals(1, tsWrapper.ts.dagStats.getNumAllocationsPerHost().get(HOST2).get());
+      assertEquals(2, tsWrapper.ts.dagStats.numLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numNonLocalAllocations);
+      assertEquals(1, tsWrapper.ts.dagStats.numDelayedAllocations);
+      assertEquals(2, tsWrapper.ts.dagStats.numAllocationsPerHost.get(HOST1).get());
+      assertEquals(1, tsWrapper.ts.dagStats.numAllocationsPerHost.get(HOST2).get());
 
     } finally {
       tsWrapper.shutdown();
@@ -1900,9 +1417,9 @@ public class TestLlapTaskSchedulerService {
     // Fill up host1 with tasks. Leave host2 empty.
     try {
       tsWrapper.controlScheduler(true);
-      TezTaskAttemptID task1 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task2 = tsWrapper.allocateTask(hostsH1, priority1);
-      TezTaskAttemptID task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
+      Object task1 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task2 = tsWrapper.allocateTask(hostsH1, priority1);
+      Object task3 = tsWrapper.allocateTask(hostsH1, priority1); // 1 more than capacity.
 
       tsWrapper.awaitLocalTaskAllocations(2);
 
@@ -1926,38 +1443,11 @@ public class TestLlapTaskSchedulerService {
     }
   }
 
-  @Test
-  public void testInitialGuaranteedInfoIsEncodedInContainerId() {
-    ApplicationAttemptId appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(1000, 1), 1);
-    ContainerFactory containerFactory = new ContainerFactory(appAttemptId, 15);
-    Container c1 = createDummyContainer(containerFactory, false);
-    Container c2 = createDummyContainer(containerFactory, true);
-    Container c3 = createDummyContainer(containerFactory, true);
-    Container c4 = createDummyContainer(containerFactory, false);
-    Container c5 = createDummyContainer(containerFactory, true);
-    Container c6 = createDummyContainer(containerFactory, false);
-    Container c7 = createDummyContainer(containerFactory, false);
-    Container c8 = createDummyContainer(containerFactory, true);
-
-    assertFalse(ContainerFactory.isContainerInitializedAsGuaranteed(c1.getId()));
-    assertTrue(ContainerFactory.isContainerInitializedAsGuaranteed(c2.getId()));
-    assertTrue(ContainerFactory.isContainerInitializedAsGuaranteed(c3.getId()));
-    assertFalse(ContainerFactory.isContainerInitializedAsGuaranteed(c4.getId()));
-    assertTrue(ContainerFactory.isContainerInitializedAsGuaranteed(c5.getId()));
-    assertFalse(ContainerFactory.isContainerInitializedAsGuaranteed(c6.getId()));
-    assertFalse(ContainerFactory.isContainerInitializedAsGuaranteed(c7.getId()));
-    assertTrue(ContainerFactory.isContainerInitializedAsGuaranteed(c8.getId()));
-  }
-
-  private Container createDummyContainer(ContainerFactory containerFactory, boolean isGuaranteed) {
-    return containerFactory.createContainer(mock(Resource.class), mock(Priority.class), "hostname", 0, null, isGuaranteed);
-  }
-
   private static class TestTaskSchedulerServiceWrapper {
     static final Resource resource = Resource.newInstance(1024, 1);
     Configuration conf;
     TaskSchedulerContext mockAppCallback = mock(TaskSchedulerContext.class);
-    LlapServiceInstanceSet mockServiceInstanceSet = mock(LlapServiceInstanceSet.class);
+    ServiceInstanceSet mockServiceInstanceSet = mock(ServiceInstanceSet.class);
     ControlledClock clock = new ControlledClock(new MonotonicClock());
     ApplicationAttemptId appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(1000, 1), 1);
     LlapTaskSchedulerServiceForTest ts;
@@ -2002,7 +1492,6 @@ public class TestLlapTaskSchedulerService {
         nodeDisableTimeoutMillis + "ms");
       conf.setBoolean(LlapFixedRegistryImpl.FIXED_REGISTRY_RESOLVE_HOST_NAMES, false);
       conf.setLong(ConfVars.LLAP_TASK_SCHEDULER_LOCALITY_DELAY.varname, localityDelayMs);
-      conf.set(ConfVars.LLAP_TASK_SCHEDULER_AM_REGISTRY_NAME.varname, "");
 
       doReturn(appAttemptId).when(mockAppCallback).getApplicationAttemptId();
       doReturn(11111l).when(mockAppCallback).getCustomClusterIdentifier();
@@ -2010,19 +1499,17 @@ public class TestLlapTaskSchedulerService {
       doReturn(userPayload).when(mockAppCallback).getInitialUserPayload();
 
       if (useMockRegistry) {
-        List<LlapServiceInstance> liveInstances = new ArrayList<>();
+        List<ServiceInstance> liveInstances = new ArrayList<>();
         for (String host : liveHosts) {
           if (host == null) {
-            LlapServiceInstance mockInactive = mock(InactiveServiceInstance.class);
+            ServiceInstance mockInactive = mock(InactiveServiceInstance.class);
             doReturn(host).when(mockInactive).getHost();
-            doReturn(Resource.newInstance(100, 1)).when(mockInactive).getResource();
             doReturn("inactive-host-" + host).when(mockInactive).getWorkerIdentity();
             doReturn(ImmutableSet.builder().add(mockInactive).build()).when(mockServiceInstanceSet).getByHost(host);
             liveInstances.add(mockInactive);
           } else {
-            LlapServiceInstance mockActive = mock(LlapServiceInstance.class);
+            ServiceInstance mockActive = mock(ServiceInstance.class);
             doReturn(host).when(mockActive).getHost();
-            doReturn(Resource.newInstance(100, 1)).when(mockActive).getResource();
             doReturn("host-" + host).when(mockActive).getWorkerIdentity();
             doReturn(ImmutableSet.builder().add(mockActive).build()).when(mockServiceInstanceSet).getByHost(host);
             liveInstances.add(mockActive);
@@ -2030,9 +1517,9 @@ public class TestLlapTaskSchedulerService {
         }
         doReturn(liveInstances).when(mockServiceInstanceSet).getAllInstancesOrdered(true);
 
-        List<LlapServiceInstance> allInstances = new ArrayList<>();
+        List<ServiceInstance> allInstances = new ArrayList<>();
         for (String host : hosts) {
-          LlapServiceInstance mockActive = mock(LlapServiceInstance.class);
+          ServiceInstance mockActive = mock(ServiceInstance.class);
           doReturn(host).when(mockActive).getHost();
           doReturn(Resource.newInstance(100, 1)).when(mockActive).getResource();
           doReturn("host-" + host).when(mockActive).getWorkerIdentity();
@@ -2091,17 +1578,10 @@ public class TestLlapTaskSchedulerService {
       ts.shutdown();
     }
 
-    void allocateTask(TezTaskAttemptID task, String[] hosts, Priority priority, Object clientCookie) {
+    void allocateTask(Object task, String[] hosts, Priority priority, Object clientCookie) {
       ts.allocateTask(task, resource, hosts, null, priority, null, clientCookie);
     }
 
-    private static final AtomicInteger TASK_COUNTER = new AtomicInteger(0);
-    private static final TezVertexID VERTEX_ID = TezVertexID.getInstance(
-        TezDAGID.getInstance(ApplicationId.newInstance(1, 1), 0), 0);
-    public static TezTaskAttemptID generateTaskAttemptId() {
-      int taskId = TASK_COUNTER.getAndIncrement();
-      return TezTaskAttemptID.getInstance(TezTaskID.getInstance(VERTEX_ID, taskId), 0);
-    }
 
 
     void deallocateTask(Object task, boolean succeeded, TaskAttemptEndReason endReason) {
@@ -2114,8 +1594,8 @@ public class TestLlapTaskSchedulerService {
 
 
     // More complex methods which may wrap multiple operations
-    TezTaskAttemptID allocateTask(String[] hosts, Priority priority) {
-      TezTaskAttemptID task = generateTaskAttemptId();
+    Object allocateTask(String[] hosts, Priority priority) {
+      Object task = new Object();
       Object clientCookie = new Object();
       allocateTask(task, hosts, priority, clientCookie);
       return task;
@@ -2125,7 +1605,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         signalSchedulerRun();
         awaitSchedulerRun();
-        if (ts.dagStats.getNumTotalAllocations() == numTasks) {
+        if (ts.dagStats.numTotalAllocations == numTasks) {
           break;
         }
       }
@@ -2135,7 +1615,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         signalSchedulerRun();
         awaitSchedulerRun();
-        if (ts.dagStats.getNumLocalAllocations() == numTasks) {
+        if (ts.dagStats.numLocalAllocations == numTasks) {
           break;
         }
       }
@@ -2145,7 +1625,7 @@ public class TestLlapTaskSchedulerService {
       while (true) {
         signalSchedulerRun();
         awaitSchedulerRun();
-        if (ts.dagStats.getNumTotalAllocations() > previousAllocations) {
+        if (ts.dagStats.numTotalAllocations > previousAllocations) {
           break;
         }
         Thread.sleep(200l);
@@ -2159,8 +1639,8 @@ public class TestLlapTaskSchedulerService {
       while (timeLeft > 0) {
         signalSchedulerRun();
         awaitSchedulerRun(Math.min(200, timeLeft));
-        if (ts.dagStats.getNumTotalAllocations() != previousAllocations) {
-          throw new IllegalStateException("NumTotalAllocations expected to stay at " + previousAllocations + ". Actual=" + ts.dagStats.getNumTotalAllocations());
+        if (ts.dagStats.numTotalAllocations != previousAllocations) {
+          throw new IllegalStateException("NumTotalAllocations expected to stay at " + previousAllocations + ". Actual=" + ts.dagStats.numTotalAllocations);
         }
         timeLeft = (startTime + timeout) - Time.monotonicNow();
       }
@@ -2176,10 +1656,7 @@ public class TestLlapTaskSchedulerService {
     private final Condition triggerSchedulingCondition = testLock.newCondition();
     private boolean schedulingTriggered = false;
     private final AtomicInteger numSchedulerRuns = new AtomicInteger(0);
-    private final Object messageLock = new Object();
-    private int sentCount = 0, checkAndSendCount = 0;
-    private final Object checkDelay = new Object();
-    private boolean doDelayCheckAndSend = false;
+
 
     public LlapTaskSchedulerServiceForTest(
         TaskSchedulerContext appClient, Clock clock) {
@@ -2187,104 +1664,7 @@ public class TestLlapTaskSchedulerService {
     }
 
     @Override
-    protected void registerRunningTask(TaskInfo taskInfo) {
-      super.registerRunningTask(taskInfo);
-      notifyStarted(taskInfo.getAttemptId()); // Do this here; normally communicator does this.
-    }
-
-    @Override
-    protected void checkAndSendGuaranteedStateUpdate(TaskInfo ti) {
-      // A test-specific delay just before the check happens.
-      synchronized (checkDelay) {
-        boolean isFirst = true;
-        while (doDelayCheckAndSend) {
-          if (isFirst) {
-            synchronized (messageLock) {
-              ++checkAndSendCount;
-              messageLock.notifyAll();
-            }
-            isFirst = false;
-          }
-          try {
-            checkDelay.wait(100);
-          } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-          }
-        }
-      }
-      super.checkAndSendGuaranteedStateUpdate(ti);
-    }
-
-    public void setDelayCheckAndSend(boolean value) {
-      synchronized (checkDelay) {
-        doDelayCheckAndSend = value;
-        if (!value) {
-          checkDelay.notifyAll();
-        }
-      }
-    }
-
-    @Override
-    public void handleUpdateResult(TaskInfo ti, boolean isOk) {
-      super.handleUpdateResult(ti, isOk);
-    }
-
-    public void clearTestCounts() {
-      synchronized (messageLock) {
-        sentCount = checkAndSendCount = 0;
-      }
-    }
-
-    public void waitForMessagesSent(int count) throws InterruptedException {
-      while (true) {
-        synchronized (messageLock) {
-          assert sentCount <= count;
-          if (sentCount == count) {
-            sentCount = 0;
-            return;
-          }
-          messageLock.wait(200);
-        }
-      }
-    }
-
-    /** Note: this only works for testing the lack of invocations from the main thread. */
-    public void assertNoMessagesSent() {
-      synchronized (messageLock) {
-        assert sentCount == 0;
-      }
-    }
-
-    public void waitForCheckAndSendCall(int count) throws InterruptedException {
-      while (true) {
-        synchronized (messageLock) {
-          assert checkAndSendCount <= count;
-          if (checkAndSendCount == count) {
-            checkAndSendCount = 0;
-            return;
-          }
-          messageLock.wait(200);
-        }
-      }
-    }
-    @Override
-    protected void sendUpdateMessageAsync(TaskInfo ti, boolean newState) {
-      synchronized (messageLock) {
-        ++sentCount;
-        messageLock.notifyAll();
-      }
-    }
-
-    @Override
-    protected TezTaskAttemptID getTaskAttemptId(Object task) {
-      if (task instanceof TezTaskAttemptID) {
-        return (TezTaskAttemptID)task;
-      }
-      return null;
-    }
-
-    @Override
-    protected void schedulePendingTasks() throws InterruptedException {
+    protected void schedulePendingTasks() {
       LOG.info("Attempted schedulPendingTasks");
       testLock.lock();
       try {

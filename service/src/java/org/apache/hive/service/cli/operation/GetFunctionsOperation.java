@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +19,8 @@
 package org.apache.hive.service.cli.operation;
 
 import java.sql.DatabaseMetaData;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -40,17 +41,12 @@ import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.thrift.TException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * GetFunctionsOperation.
  *
  */
 public class GetFunctionsOperation extends MetadataOperation {
-
-  private static final Logger LOG = LoggerFactory.getLogger(GetFunctionsOperation.class.getName());
-
   private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addPrimitiveColumn("FUNCTION_CAT", Type.STRING_TYPE,
       "Function catalog (may be null)")
@@ -78,15 +74,11 @@ public class GetFunctionsOperation extends MetadataOperation {
     this.schemaName = schemaName;
     this.functionName = functionName;
     this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
-    LOG.info(
-        "Starting GetFunctionsOperation with the following parameters: catalogName={}, schemaName={}, functionName={}",
-        catalogName, schemaName, functionName);
   }
 
   @Override
   public void runInternal() throws HiveSQLException {
     setState(OperationState.RUNNING);
-    LOG.info("Fetching function metadata");
     if (isAuthV2Enabled()) {
       // get databases for schema pattern
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
@@ -123,30 +115,22 @@ public class GetFunctionsOperation extends MetadataOperation {
              functionInfo.getClass().getCanonicalName()
           };
           rowSet.addRow(rowData);
-
-          if (LOG.isDebugEnabled()) {
-            String debugMessage = getDebugMessage("function", RESULT_SET_SCHEMA);
-            LOG.debug(debugMessage, rowData);
-          }
         }
       }
-      if (LOG.isDebugEnabled() && rowSet.numRows() == 0) {
-        LOG.debug("No function metadata has been returned");
-      }
       setState(OperationState.FINISHED);
-      LOG.info("Fetching function metadata has been successfully finished");
     } catch (Exception e) {
       setState(OperationState.ERROR);
       throw new HiveSQLException(e);
     }
   }
 
+
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
   public TableSchema getResultSetSchema() throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     return RESULT_SET_SCHEMA;
   }
 
@@ -155,7 +139,7 @@ public class GetFunctionsOperation extends MetadataOperation {
    */
   @Override
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
-    assertState(Collections.singleton(OperationState.FINISHED));
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);

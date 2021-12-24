@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer.ReusableGetAdaptor;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinBytesHashSet;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashSetResult;
-import org.apache.hadoop.hive.ql.plan.TableDesc;
 
 /*
  * An multi-key hash map based on the BytesBytesMultiHashSet.
@@ -56,17 +55,9 @@ public class VectorMapJoinOptimizedStringHashSet
 
   }
 
-  public VectorMapJoinOptimizedStringHashSet(boolean isOuterJoin, MapJoinTableContainer originalTableContainer,
-                                             ReusableGetAdaptor hashMapRowGetter, TableDesc tableDesc) {
+  public VectorMapJoinOptimizedStringHashSet(boolean isOuterJoin,
+      MapJoinTableContainer originalTableContainer, ReusableGetAdaptor hashMapRowGetter) {
     super(originalTableContainer, hashMapRowGetter);
-    stringCommon =  new VectorMapJoinOptimizedStringCommon(isOuterJoin, tableDesc);
-  }
-
-  @Override
-  public long getEstimatedMemorySize() {
-    // adding 16KB constant memory for stringCommon as the rabit hole is deep to implement
-    // MemoryEstimate interface, also it is constant overhead
-    long size = (16 * 1024L);
-    return super.getEstimatedMemorySize() + size;
+    stringCommon =  new VectorMapJoinOptimizedStringCommon(isOuterJoin);
   }
 }

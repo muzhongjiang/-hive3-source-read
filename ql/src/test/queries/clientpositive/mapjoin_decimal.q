@@ -1,4 +1,3 @@
-SET hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.auto.convert.join=true;
@@ -7,7 +6,7 @@ set hive.auto.convert.join.noconditionaltask.size=10000000;
 
 -- SORT_QUERY_RESULTS
 
-CREATE TABLE over1k_n5(t tinyint,
+CREATE TABLE over1k(t tinyint,
            si smallint,
            i int,
            b bigint,
@@ -16,25 +15,25 @@ CREATE TABLE over1k_n5(t tinyint,
            bo boolean,
            s string,
            ts timestamp,
-           `dec` decimal(4,2),
+           dec decimal(4,2),
            bin binary)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE over1k_n5;
+LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE over1k;
 
-CREATE TABLE t1_n95(`dec` decimal(4,2)) STORED AS ORC;
-INSERT INTO TABLE t1_n95 select `dec` from over1k_n5;
-CREATE TABLE t2_n59(`dec` decimal(4,0)) STORED AS ORC;
-INSERT INTO TABLE t2_n59 select `dec` from over1k_n5;
+CREATE TABLE t1(dec decimal(4,2)) STORED AS ORC;
+INSERT INTO TABLE t1 select dec from over1k;
+CREATE TABLE t2(dec decimal(4,0)) STORED AS ORC;
+INSERT INTO TABLE t2 select dec from over1k;
 
 explain
-select t1_n95.`dec`, t2_n59.`dec` from t1_n95 join t2_n59 on (t1_n95.`dec`=t2_n59.`dec`) order by t1_n95.`dec`;
+select t1.dec, t2.dec from t1 join t2 on (t1.dec=t2.dec) order by t1.dec;
 
 set hive.mapjoin.optimized.hashtable=false;
 
-select t1_n95.`dec`, t2_n59.`dec` from t1_n95 join t2_n59 on (t1_n95.`dec`=t2_n59.`dec`) order by t1_n95.`dec`;
+select t1.dec, t2.dec from t1 join t2 on (t1.dec=t2.dec) order by t1.dec;
 
 set hive.mapjoin.optimized.hashtable=true;
 
-select t1_n95.`dec`, t2_n59.`dec` from t1_n95 join t2_n59 on (t1_n95.`dec`=t2_n59.`dec`) order by t1_n95.`dec`;
+select t1.dec, t2.dec from t1 join t2 on (t1.dec=t2.dec) order by t1.dec;

@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,21 +18,15 @@
 
 package org.apache.hadoop.hive.common;
 
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.security.AccessControlException;
 import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -47,20 +41,20 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.GlobFilter;
 import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.conf.HiveConfUtil;
+import org.apache.hadoop.hive.io.HdfsUtils;
 import org.apache.hadoop.hive.shims.HadoopShims;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hive.common.util.ShutdownHookManager;
-import org.apache.hive.common.util.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,7 +64,6 @@ import org.slf4j.LoggerFactory;
 public final class FileUtils {
   private static final Logger LOG = LoggerFactory.getLogger(FileUtils.class.getName());
   private static final Random random = new Random();
-  public static final int IO_ERROR_SLEEP_TIME = 100;
 
   public static final PathFilter HIDDEN_FILES_PATH_FILTER = new PathFilter() {
     @Override
@@ -253,7 +246,7 @@ public final class FileUtils {
   }
 
   static boolean needsEscaping(char c) {
-    return c < charToEscape.size() && charToEscape.get(c);
+    return c >= 0 && c < charToEscape.size() && charToEscape.get(c);
   }
 
   public static String escapePathName(String path) {
@@ -331,45 +324,13 @@ public final class FileUtils {
    */
   public static void listStatusRecursively(FileSystem fs, FileStatus fileStatus,
       List<FileStatus> results) throws IOException {
-    if (isS3a(fs)) {
-      // S3A file system has an optimized recursive directory listing implementation however it doesn't support filtering.
-      // Therefore we filter the result set afterwards. This might be not so optimal in HDFS case (which does a tree walking) where a filter could have been used.
-      listS3FilesRecursive(fileStatus, fs, results);
-    } else {
-      generalListStatusRecursively(fs, fileStatus, results);
-    }
-  }
 
-  private static void generalListStatusRecursively(FileSystem fs, FileStatus fileStatus, List<FileStatus> results) throws IOException {
-    if (fileStatus.isDirectory()) {
+    if (fileStatus.isDir()) {
       for (FileStatus stat : fs.listStatus(fileStatus.getPath(), HIDDEN_FILES_PATH_FILTER)) {
-        generalListStatusRecursively(fs, stat, results);
+        listStatusRecursively(fs, stat, results);
       }
     } else {
       results.add(fileStatus);
-    }
-  }
-
-  private static void listS3FilesRecursive(FileStatus base, FileSystem fs, List<FileStatus> results) throws IOException {
-    if (!base.isDirectory()) {
-      results.add(base);
-      return;
-    }
-    RemoteIterator<LocatedFileStatus> remoteIterator = fs.listFiles(base.getPath(), true);
-    while (remoteIterator.hasNext()) {
-      LocatedFileStatus each = remoteIterator.next();
-      Path relativePath = new Path(each.getPath().toString().replace(base.toString(), ""));
-      if (org.apache.hadoop.hive.metastore.utils.FileUtils.RemoteIteratorWithFilter.HIDDEN_FILES_FULL_PATH_FILTER.accept(relativePath)) {
-        results.add(each);
-      }
-    }
-  }
-
-  public static boolean isS3a(FileSystem fs) {
-    try {
-      return "s3a".equalsIgnoreCase(fs.getScheme());
-    } catch (UnsupportedOperationException ex) {
-      return false;
     }
   }
 
@@ -391,12 +352,6 @@ public final class FileUtils {
     return getPathOrParentThatExists(fs, parentPath);
   }
 
-  public static void checkFileAccessWithImpersonation(final FileSystem fs, final FileStatus stat,
-      final FsAction action, final String user)
-      throws IOException, AccessControlException, InterruptedException, Exception {
-    checkFileAccessWithImpersonation(fs, stat, action, user, null);
-  }
-
   /**
    * Perform a check to determine if the user is able to access the file passed in.
    * If the user name passed in is different from the current user, this method will
@@ -411,15 +366,13 @@ public final class FileUtils {
    *             check will be performed within a doAs() block to use the access privileges
    *             of this user. In this case the user must be configured to impersonate other
    *             users, otherwise this check will fail with error.
-   * @param children List of children to be collected. If this is null, no children are collected.
-   *        To be set only if this is a directory
    * @throws IOException
    * @throws AccessControlException
    * @throws InterruptedException
    * @throws Exception
    */
   public static void checkFileAccessWithImpersonation(final FileSystem fs,
-      final FileStatus stat, final FsAction action, final String user, final List<FileStatus> children)
+      final FileStatus stat, final FsAction action, final String user)
           throws IOException, AccessControlException, InterruptedException, Exception {
     UserGroupInformation ugi = Utils.getUGI();
     String currentUser = ugi.getShortUserName();
@@ -427,7 +380,6 @@ public final class FileUtils {
     if (user == null || currentUser.equals(user)) {
       // No need to impersonate user, do the checks as the currently configured user.
       ShimLoader.getHadoopShims().checkFileAccess(fs, stat, action);
-      addChildren(fs, stat.getPath(), children);
       return;
     }
 
@@ -440,26 +392,11 @@ public final class FileUtils {
         public Object run() throws Exception {
           FileSystem fsAsUser = FileSystem.get(fs.getUri(), fs.getConf());
           ShimLoader.getHadoopShims().checkFileAccess(fsAsUser, stat, action);
-          addChildren(fsAsUser, stat.getPath(), children);
           return null;
         }
       });
     } finally {
       FileSystem.closeAllForUGI(proxyUser);
-    }
-  }
-
-  private static void addChildren(FileSystem fsAsUser, Path path, List<FileStatus> children)
-      throws IOException {
-    if (children != null) {
-      FileStatus[] listStatus;
-      try {
-        listStatus = fsAsUser.listStatus(path);
-      } catch (IOException e) {
-        LOG.warn("Unable to list files under " + path + " : " + e);
-        throw e;
-      }
-      children.addAll(Arrays.asList(listStatus));
     }
   }
 
@@ -479,34 +416,30 @@ public final class FileUtils {
     return isActionPermittedForFileHierarchy(fs,fileStatus,userName, action, true);
   }
 
-  @SuppressFBWarnings(value = "DLS_DEAD_LOCAL_STORE", justification = "Intended, dir privilege all-around bug")
   public static boolean isActionPermittedForFileHierarchy(FileSystem fs, FileStatus fileStatus,
       String userName, FsAction action, boolean recurse) throws Exception {
-    boolean isDir = fileStatus.isDirectory();
+    boolean isDir = fileStatus.isDir();
 
-    // for dirs user needs execute privileges as well
-    FsAction dirActionNeeded = (isDir) ? action.and(FsAction.EXECUTE) : action;
-
-    List<FileStatus> subDirsToCheck = null;
-    if (isDir && recurse) {
-      subDirsToCheck = new ArrayList<FileStatus>();
+    FsAction dirActionNeeded = action;
+    if (isDir) {
+      // for dirs user needs execute privileges as well
+      dirActionNeeded.and(FsAction.EXECUTE);
     }
 
     try {
-      checkFileAccessWithImpersonation(fs, fileStatus, action, userName, subDirsToCheck);
+      checkFileAccessWithImpersonation(fs, fileStatus, action, userName);
     } catch (AccessControlException err) {
       // Action not permitted for user
-      LOG.warn("Action " + action + " denied on " + fileStatus.getPath() + " for user " + userName);
       return false;
     }
 
-    if (subDirsToCheck == null || subDirsToCheck.isEmpty()) {
+    if ((!isDir) || (!recurse)) {
       // no sub dirs to be checked
       return true;
     }
-
     // check all children
-    for (FileStatus childStatus : subDirsToCheck) {
+    FileStatus[] childStatuses = fs.listStatus(fileStatus.getPath());
+    for (FileStatus childStatus : childStatuses) {
       // check children recursively - recurse is true if we're here.
       if (!isActionPermittedForFileHierarchy(fs, childStatus, userName, action, true)) {
         return false;
@@ -548,51 +481,26 @@ public final class FileUtils {
     return false;
   }
   public static boolean isOwnerOfFileHierarchy(FileSystem fs, FileStatus fileStatus, String userName)
-      throws IOException, InterruptedException {
+      throws IOException {
     return isOwnerOfFileHierarchy(fs, fileStatus, userName, true);
   }
 
-  public static boolean isOwnerOfFileHierarchy(final FileSystem fs,
-      final FileStatus fileStatus, final String userName, final boolean recurse)
-      throws IOException, InterruptedException {
-    UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(userName,
-        UserGroupInformation.getLoginUser());
-    try {
-      boolean isOwner = proxyUser.doAs(new PrivilegedExceptionAction<Boolean>() {
-        @Override
-        public Boolean run() throws Exception {
-          FileSystem fsAsUser = FileSystem.get(fs.getUri(), fs.getConf());
-          return checkIsOwnerOfFileHierarchy(fsAsUser, fileStatus, userName, recurse);
-        }
-      });
-      return isOwner;
-    } finally {
-      FileSystem.closeAllForUGI(proxyUser);
-    }
-  }
-
-  public static boolean checkIsOwnerOfFileHierarchy(FileSystem fs, FileStatus fileStatus,
+  public static boolean isOwnerOfFileHierarchy(FileSystem fs, FileStatus fileStatus,
       String userName, boolean recurse)
       throws IOException {
     if (!fileStatus.getOwner().equals(userName)) {
       return false;
     }
 
-    if ((!fileStatus.isDirectory()) || (!recurse)) {
+    if ((!fileStatus.isDir()) || (!recurse)) {
       // no sub dirs to be checked
       return true;
     }
     // check all children
-    FileStatus[] childStatuses = null;
-    try {
-      childStatuses = fs.listStatus(fileStatus.getPath());
-    } catch (FileNotFoundException fe) {
-      LOG.debug("Skipping child access check since the directory is already removed");
-      return true;
-    }
+    FileStatus[] childStatuses = fs.listStatus(fileStatus.getPath());
     for (FileStatus childStatus : childStatuses) {
       // check children recursively - recurse is true if we're here.
-      if (!checkIsOwnerOfFileHierarchy(fs, childStatus, userName, true)) {
+      if (!isOwnerOfFileHierarchy(fs, childStatus, userName, true)) {
         return false;
       }
     }
@@ -603,13 +511,43 @@ public final class FileUtils {
    * Creates the directory and all necessary parent directories.
    * @param fs FileSystem to use
    * @param f path to create.
+   * @param inheritPerms whether directory inherits the permission of the last-existing parent path
    * @param conf Hive configuration
    * @return true if directory created successfully.  False otherwise, including if it exists.
    * @throws IOException exception in creating the directory
    */
-  public static boolean mkdir(FileSystem fs, Path f, Configuration conf) throws IOException {
+  public static boolean mkdir(FileSystem fs, Path f, boolean inheritPerms, Configuration conf) throws IOException {
     LOG.info("Creating directory if it doesn't exist: " + f);
-    return fs.mkdirs(f);
+    if (!inheritPerms) {
+      //just create the directory
+      return fs.mkdirs(f);
+    } else {
+      //Check if the directory already exists. We want to change the permission
+      //to that of the parent directory only for newly created directories.
+      try {
+        return fs.getFileStatus(f).isDir();
+      } catch (FileNotFoundException ignore) {
+      }
+      //inherit perms: need to find last existing parent path, and apply its permission on entire subtree.
+      Path lastExistingParent = f;
+      Path firstNonExistentParent = null;
+      while (!fs.exists(lastExistingParent)) {
+        firstNonExistentParent = lastExistingParent;
+        lastExistingParent = lastExistingParent.getParent();
+      }
+      boolean success = fs.mkdirs(f);
+      if (!success) {
+        return false;
+      } else {
+        //set on the entire subtree
+        if (inheritPerms) {
+          HdfsUtils.setFullFileStatus(conf,
+                  new HdfsUtils.HadoopFileStatus(conf, fs, lastExistingParent), fs,
+                  firstNonExistentParent, true);
+        }
+        return true;
+      }
+    }
   }
 
   public static Path makeAbsolute(FileSystem fileSystem, Path path) throws IOException {
@@ -624,10 +562,10 @@ public final class FileUtils {
    * Copies files between filesystems.
    */
   public static boolean copy(FileSystem srcFS, Path src,
-      FileSystem dstFS, Path dst,
-      boolean deleteSource,
-      boolean overwrite,
-      HiveConf conf) throws IOException {
+    FileSystem dstFS, Path dst,
+    boolean deleteSource,
+    boolean overwrite,
+    HiveConf conf) throws IOException {
     return copy(srcFS, src, dstFS, dst, deleteSource, overwrite, conf, ShimLoader.getHadoopShims());
   }
 
@@ -653,58 +591,19 @@ public final class FileUtils {
                 HiveConf.ConfVars.HIVE_EXEC_COPYFILE_MAXNUMFILES) + ")");
         LOG.info("Launch distributed copy (distcp) job.");
         triedDistcp = true;
-        copied = distCp(srcFS, Collections.singletonList(src), dst, deleteSource, null, conf, shims);
+        copied = shims.runDistCp(src, dst, conf);
+        if (copied && deleteSource) {
+          srcFS.delete(src, true);
+        }
       }
     }
     if (!triedDistcp) {
-      // Note : Currently, this implementation does not "fall back" to regular copy if distcp
-      // is tried and it fails. We depend upon that behaviour in cases like replication,
-      // wherein if distcp fails, there is good reason to not plod along with a trivial
-      // implementation, and fail instead.
       copied = FileUtil.copy(srcFS, src, dstFS, dst, deleteSource, overwrite, conf);
     }
-    return copied;
-  }
 
-  public static boolean distCp(FileSystem srcFS, List<Path> srcPaths, Path dst,
-      boolean deleteSource, UserGroupInformation proxyUser,
-      HiveConf conf, HadoopShims shims) throws IOException {
-    LOG.debug("copying srcPaths : {}, to DestPath :{} ,with doAs: {}",
-        StringUtils.join(",", srcPaths), dst.toString(), proxyUser);
-    boolean copied = false;
-    if (proxyUser == null){
-      copied = shims.runDistCp(srcPaths, dst, conf);
-    } else {
-      copied = shims.runDistCpAs(srcPaths, dst, conf, proxyUser);
-    }
-    if (copied && deleteSource) {
-      if (proxyUser != null) {
-        // if distcp is done using doAsUser, delete also should be done using same user.
-        //TODO : Need to change the delete execution within doAs if doAsUser is given.
-        throw new IOException("Distcp is called with doAsUser and delete source set as true");
-      }
-      for (Path path : srcPaths) {
-        srcFS.delete(path, true);
-      }
-    }
-    return copied;
-  }
-
-  public static boolean distCpWithSnapshot(String oldSnapshot, String newSnapshot, List<Path> srcPaths, Path dst,
-      boolean overwriteTarget, HiveConf conf, HadoopShims shims, UserGroupInformation proxyUser) {
-    boolean copied = false;
-    try {
-      if (proxyUser == null) {
-        copied = shims.runDistCpWithSnapshots(oldSnapshot, newSnapshot, srcPaths, dst, overwriteTarget, conf);
-      } else {
-        copied =
-            shims.runDistCpWithSnapshotsAs(oldSnapshot, newSnapshot, srcPaths, dst, overwriteTarget, proxyUser, conf);
-      }
-      if (copied)
-        LOG.info("Successfully copied using snapshots source {} and dest {} using snapshots {} and {}", srcPaths, dst,
-            oldSnapshot, newSnapshot);
-    } catch (IOException e) {
-      LOG.error("Can not copy using snapshot from source: {}, target: {}", srcPaths, dst);
+    boolean inheritPerms = conf.getBoolVar(HiveConf.ConfVars.HIVE_WAREHOUSE_SUBDIR_INHERIT_PERMS);
+    if (copied && inheritPerms) {
+      HdfsUtils.setFullFileStatus(conf, new HdfsUtils.HadoopFileStatus(conf, dstFS, dst.getParent()), dstFS, dst, true);
     }
     return copied;
   }
@@ -744,8 +643,9 @@ public final class FileUtils {
     return result;
   }
 
-  public static boolean rename(FileSystem fs, Path sourcePath,
-                               Path destPath, Configuration conf) throws IOException {
+  public static boolean renameWithPerms(FileSystem fs, Path sourcePath,
+                               Path destPath, boolean inheritPerms,
+                               Configuration conf) throws IOException {
     LOG.info("Renaming " + sourcePath + " to " + destPath);
 
     // If destPath directory exists, rename call will move the sourcePath
@@ -754,7 +654,20 @@ public final class FileUtils {
       throw new IOException("Cannot rename the source path. The destination "
           + "path already exists.");
     }
-    return fs.rename(sourcePath, destPath);
+
+    if (!inheritPerms) {
+      //just rename the directory
+      return fs.rename(sourcePath, destPath);
+    } else {
+      //rename the directory
+      if (fs.rename(sourcePath, destPath)) {
+        HdfsUtils.setFullFileStatus(conf, new HdfsUtils.HadoopFileStatus(conf, fs, destPath.getParent()), fs, destPath,
+                true);
+        return true;
+      }
+
+      return false;
+    }
   }
 
   /**
@@ -942,7 +855,6 @@ public final class FileUtils {
   /**
    * delete a temporary file and remove it from delete-on-exit hook.
    */
-  @SuppressFBWarnings(value = "RV_RETURN_VALUE_IGNORED_BAD_PRACTICE", justification = "Intended")
   public static boolean deleteTmpFile(File tempFile) {
     if (tempFile != null) {
       tempFile.delete();
@@ -951,11 +863,11 @@ public final class FileUtils {
     }
     return false;
   }
-
-
+  
+  
   /**
    * Return whenever all paths in the collection are schemaless
-   *
+   * 
    * @param paths
    * @return
    */
@@ -970,16 +882,16 @@ public final class FileUtils {
 
   /**
    * Returns the deepest candidate path for the given path.
-   *
+   * 
    * prioritizes on paths including schema / then includes matches without schema
-   *
+   * 
    * @param path
    * @param candidates  the candidate paths
    * @return
    */
   public static Path getParentRegardlessOfScheme(Path path, Collection<Path> candidates) {
     Path schemalessPath = Path.getPathWithoutSchemeAndAuthority(path);
-
+    
     for(;path!=null && schemalessPath!=null; path=path.getParent(),schemalessPath=schemalessPath.getParent()){
       if(candidates.contains(path))
         return path;
@@ -992,13 +904,13 @@ public final class FileUtils {
 
   /**
    * Checks whenever path is inside the given subtree
-   *
+   * 
    * return true iff
    *  * path = subtree
    *  * subtreeContains(path,d) for any descendant of the subtree node
    * @param path    the path in question
    * @param subtree
-   *
+   * 
    * @return
    */
   public static boolean isPathWithinSubtree(Path path, Path subtree) {
@@ -1052,85 +964,34 @@ public final class FileUtils {
    * @return            the list of the file names in the format of URI formats.
    */
   public static Set<String> getJarFilesByPath(String pathString, Configuration conf) {
-    if (org.apache.commons.lang3.StringUtils.isBlank(pathString)) {
-      return Collections.emptySet();
+    Set<String> result = new HashSet<String>();
+    if (pathString == null || org.apache.commons.lang.StringUtils.isBlank(pathString)) {
+        return result;
     }
-    Set<String> result = new HashSet<>();
+
     String[] paths = pathString.split(",");
-    for (final String path : paths) {
+    for(String path : paths) {
       try {
         Path p = new Path(getURI(path));
         FileSystem fs = p.getFileSystem(conf);
-        FileStatus fileStatus = fs.getFileStatus(p);
-        if (fileStatus.isDirectory()) {
+        if (!fs.exists(p)) {
+          LOG.error("The jar file path " + path + " doesn't exist");
+          continue;
+        }
+        if (fs.isDirectory(p)) {
           // add all jar files under the folder
           FileStatus[] files = fs.listStatus(p, new GlobFilter("*.jar"));
-          for (FileStatus file : files) {
+          for(FileStatus file : files) {
             result.add(file.getPath().toUri().toString());
           }
         } else {
           result.add(p.toUri().toString());
         }
-      } catch (FileNotFoundException fnfe) {
-        LOG.error("The jar file path {} does not exist", path);
-      } catch (URISyntaxException | IOException e) {
-        LOG.error("Invalid file path {}", path, e);
+      } catch(URISyntaxException | IOException e) {
+        LOG.error("Invalid file path " + path, e);
       }
     }
     return result;
   }
 
-  /**
-   * Reads length bytes of data from the stream into the byte buffer.
-   * @param stream Stream to read from.
-   * @param length The number of bytes to read.
-   * @param bb The buffer to read into; the data is written at current position and then the
-   *           position is incremented by length.
-   * @throws EOFException the length bytes cannot be read. The buffer position is not modified.
-   */
-  public static void readFully(InputStream stream, int length, ByteBuffer bb) throws IOException {
-    byte[] b = null;
-    int offset = 0;
-    if (bb.hasArray()) {
-      b = bb.array();
-      offset = bb.arrayOffset() + bb.position();
-    } else {
-      b = new byte[bb.remaining()];
-    }
-    int fullLen = length;
-    while (length > 0) {
-      int result = stream.read(b, offset, length);
-      if (result < 0) {
-        throw new EOFException("Reading " + fullLen + " bytes");
-      }
-      offset += result;
-      length -= result;
-    }
-    if (!bb.hasArray()) {
-      bb.put(b);
-    } else {
-      bb.position(bb.position() + fullLen);
-    }
-  }
-
-  /**
-   * Returns the incremented sleep time in milli seconds.
-   * @param repeatNum number of retry done so far.
-   */
-  public static int getSleepTime(int repeatNum) {
-    return IO_ERROR_SLEEP_TIME * (int)(Math.pow(2.0, repeatNum));
-  }
-
-  /**
-   * Attempts to delete a file if it exists.
-   * @param fs FileSystem
-   * @param path Path to be deleted.
-   */
-  public static void deleteIfExists(FileSystem fs, Path path) {
-    try {
-      fs.delete(path, true);
-    } catch (IOException e) {
-      LOG.debug("Unable to delete {}", path, e);
-    }
-  }
 }

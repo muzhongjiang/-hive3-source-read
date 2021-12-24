@@ -20,10 +20,12 @@ if [ -z "$PATCH_FILE" ]; then
   exit 1
 fi
 
+PATCH=${PATCH:-patch} # allow overriding patch binary
+
 # Cleanup handler for temporary files
 TOCLEAN=""
 cleanup() {
-  [ "x$TOCLEAN" != "x" ] && rm $TOCLEAN
+  rm $TOCLEAN
   exit $1
 }
 trap "cleanup 1" HUP INT QUIT TERM
@@ -35,26 +37,29 @@ if [ "$PATCH_FILE" == "-" ]; then
   TOCLEAN="$TOCLEAN $PATCH_FILE"
 fi
 
-if echo "Trying to apply the patch with -p0"; git apply -p0 -3 --check $PATCH_FILE 2>&1 > /dev/null; then
-  PLEVEL=0
+# Come up with a list of changed files into $TMP
+TMP=/tmp/tmp.paths.$$
+TOCLEAN="$TOCLEAN $TMP"
 
-  # if the patch applied at P0 there is the possibility that all we are doing
+if $PATCH -p0 -E --dry-run < $PATCH_FILE 2>&1 > $TMP; then
+  PLEVEL=0
+  #if the patch applied at P0 there is the possability that all we are doing
   # is adding new files and they would apply anywhere. So try to guess the
   # correct place to put those files.
 
-  CHANGED_FILES=/tmp/tmp.paths.2.$$
-  TOCLEAN="$TOCLEAN $CHANGED_FILES"
+  TMP2=/tmp/tmp.paths.2.$$
+  TOCLEAN="$TOCLEAN $TMP2"
 
-  git apply -p0 -3 --stat $PATCH_FILE | head -1 | awk '{print $1}' > $CHANGED_FILES
+  egrep '^patching file |^checking file ' $TMP | awk '{print $3}' | grep -v /dev/null | sort | uniq > $TMP2
 
-  if [ ! -s $CHANGED_FILES ]; then
+  if [ ! -s $TMP2 ]; then
     echo "Error: Patch dryrun couldn't detect changes the patch would make. Exiting."
     cleanup 1
   fi
 
   #first off check that all of the files do not exist
   FOUND_ANY=0
-  for CHECK_FILE in $(cat $CHANGED_FILES)
+  for CHECK_FILE in $(cat $TMP2)
   do
     if [[ -f $CHECK_FILE ]]; then
       FOUND_ANY=1
@@ -66,18 +71,21 @@ if echo "Trying to apply the patch with -p0"; git apply -p0 -3 --check $PATCH_FI
 
     # if all of the lines start with a/ or b/, then this is a git patch that
     # was generated without --no-prefix
-    if ! grep -qv '^a/\|^b/' $CHANGED_FILES ; then
+    if ! grep -qv '^a/\|^b/' $TMP2 ; then
       echo Looks like this is a git patch. Stripping a/ and b/ prefixes
       echo and incrementing PLEVEL
       PLEVEL=$[$PLEVEL + 1]
-      sed -i -e 's,^[ab]/,,' $CHANGED_FILES
+      sed -i -e 's,^[ab]/,,' $TMP2
     fi
 
   fi
-elif echo "Trying to apply the patch with -p1"; git apply -p1 -3 --check $PATCH_FILE 2>&1 > /dev/null; then
+elif $PATCH -p1 -E --dry-run < $PATCH_FILE 2>&1 > /dev/null; then
   PLEVEL=1
-elif echo "Trying to apply the patch with -p2"; git apply -p2 -3 --check $PATCH_FILE 2>&1 > /dev/null; then
+elif $PATCH -p2 -E --dry-run < $PATCH_FILE 2>&1 > /dev/null; then
   PLEVEL=2
+elif git apply -p0 --check $PATCH_FILE 2>&1 > /dev/null; then
+  git apply -p0 $PATCH_FILE
+  cleanup $?
 else
   echo "The patch does not appear to apply with p0, p1, or p2";
   cleanup 1;
@@ -88,14 +96,7 @@ if [[ -n $DRY_RUN ]]; then
   cleanup 0;
 fi
 
-echo Going to apply patch with: git apply -p$PLEVEL
-git apply -p$PLEVEL -3 $PATCH_FILE
-ret=$?
+echo Going to apply patch with: $PATCH -p$PLEVEL
+$PATCH -p$PLEVEL -E < $PATCH_FILE
 
-# Fail if patch was empty
-if [[ -z $(git status --porcelain) ]]; then
-  echo "The patch had no effect. Was this change committed in another patch? Are you using the correct branch?"
-  cleanup 1
-fi
-
-cleanup $ret
+cleanup $?

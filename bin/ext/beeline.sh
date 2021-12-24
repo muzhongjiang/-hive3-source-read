@@ -20,6 +20,7 @@ export SERVICE_LIST="${SERVICE_LIST}${THISSERVICE} "
 beeline () {
   CLASS=org.apache.hive.beeline.BeeLine;
 
+  # include only the beeline client jar and its dependencies
   beelineJarPath=`ls ${HIVE_LIB}/hive-beeline-*.jar`
   superCsvJarPath=`ls ${HIVE_LIB}/super-csv-*.jar`
   jlineJarPath=`ls ${HIVE_LIB}/jline-*.jar`
@@ -31,21 +32,7 @@ beeline () {
   export HADOOP_CLASSPATH="${hadoopClasspath}${HIVE_CONF_DIR}:${beelineJarPath}:${superCsvJarPath}:${jlineJarPath}"
   export HADOOP_CLIENT_OPTS="$HADOOP_CLIENT_OPTS -Dlog4j.configurationFile=beeline-log4j2.properties "
 
-  if [ "$EXECUTE_WITH_JAVA" != "true" ] ; then
-    # if CLIUSER is not empty, then pass it as user id / password during beeline redirect
-    if [ -z $CLIUSER ] ; then
-      exec $HADOOP jar ${beelineJarPath} $CLASS $HIVE_OPTS "$@"
-    else
-      exec $HADOOP jar ${beelineJarPath} $CLASS $HIVE_OPTS "$@" -n "${CLIUSER}" -p "${CLIUSER}"
-    fi
-  else
-    # if CLIUSER is not empty, then pass it as user id / password during beeline redirect
-    if [ -z $CLIUSER ] ; then
-      $JAVAEXE -cp ${HADOOP_CLASSPATH} $CLASS $HIVE_OPTS "$@"
-    else
-      $JAVAEXE -cp ${HADOOP_CLASSPATH} $CLASS $HIVE_OPTS "$@" -n "${CLIUSER}" -p "${CLIUSER}"
-    fi
-  fi
+  exec $HADOOP jar ${beelineJarPath} $CLASS $HIVE_OPTS "$@"
 }
 
 beeline_help () {

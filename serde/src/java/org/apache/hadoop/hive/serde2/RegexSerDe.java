@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,15 +17,17 @@
  */
 package org.apache.hadoop.hive.serde2;
 
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.hadoop.hive.common.type.Date;
-import org.apache.hadoop.hive.common.type.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
@@ -39,6 +41,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.VarcharTypeInfo;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -71,6 +74,8 @@ import com.google.common.collect.Lists;
     RegexSerDe.INPUT_REGEX, RegexSerDe.INPUT_REGEX_CASE_SENSITIVE })
 public class RegexSerDe extends AbstractSerDe {
 
+  public static final Logger LOG = LoggerFactory.getLogger(RegexSerDe.class.getName());
+
   public static final String INPUT_REGEX = "input.regex";
   public static final String INPUT_REGEX_CASE_SENSITIVE = "input.regex.case.insensitive";
 
@@ -81,6 +86,7 @@ public class RegexSerDe extends AbstractSerDe {
 
   StructObjectInspector rowOI;
   List<Object> row;
+  List<TypeInfo> columnTypes;
   Object[] outputFields;
   Text outputRowText;
 
@@ -88,20 +94,21 @@ public class RegexSerDe extends AbstractSerDe {
   boolean alreadyLoggedPartialMatch = false;
 
   @Override
-  public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
+  public void initialize(Configuration conf, Properties tbl)
       throws SerDeException {
-    super.initialize(configuration, tableProperties, partitionProperties);
 
-    numColumns = getColumnNames().size();
+    // We can get the table definition from tbl.
 
     // Read the configuration parameters
-    inputRegex = properties.getProperty(INPUT_REGEX);
-    boolean inputRegexIgnoreCase = "true".equalsIgnoreCase(properties
+    inputRegex = tbl.getProperty(INPUT_REGEX);
+    String columnNameProperty = tbl.getProperty(serdeConstants.LIST_COLUMNS);
+    String columnTypeProperty = tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES);
+    boolean inputRegexIgnoreCase = "true".equalsIgnoreCase(tbl
         .getProperty(INPUT_REGEX_CASE_SENSITIVE));
 
     // output format string is not supported anymore, warn user of deprecation
-    if (null != properties.getProperty("output.format.string")) {
-      log.warn("output.format.string has been deprecated");
+    if (null != tbl.getProperty("output.format.string")) {
+      LOG.warn("output.format.string has been deprecated");
     }
 
     // Parse the configuration parameters
@@ -114,31 +121,42 @@ public class RegexSerDe extends AbstractSerDe {
           "This table does not have serde property \"input.regex\"!");
     }
 
+    final String columnNameDelimiter = tbl.containsKey(serdeConstants.COLUMN_NAME_DELIMITER) ? tbl
+        .getProperty(serdeConstants.COLUMN_NAME_DELIMITER) : String.valueOf(SerDeUtils.COMMA);
+    List<String> columnNames = Arrays.asList(columnNameProperty.split(columnNameDelimiter));
+    columnTypes = TypeInfoUtils
+        .getTypeInfosFromTypeString(columnTypeProperty);
+    assert columnNames.size() == columnTypes.size();
+    numColumns = columnNames.size();
+
     /* Constructing the row ObjectInspector:
      * The row consists of some set of primitive columns, each column will
      * be a java object of primitive type.
      */
-    List<ObjectInspector> columnOIs = new ArrayList<>(getColumnNames().size());
+    List<ObjectInspector> columnOIs = new ArrayList<ObjectInspector>(columnNames.size());
     for (int c = 0; c < numColumns; c++) {
-      TypeInfo typeInfo = getColumnTypes().get(c);
+      TypeInfo typeInfo = columnTypes.get(c);
       if (typeInfo instanceof PrimitiveTypeInfo) {
-        PrimitiveTypeInfo pti = (PrimitiveTypeInfo) typeInfo;
+        PrimitiveTypeInfo pti = (PrimitiveTypeInfo) columnTypes.get(c);
         AbstractPrimitiveJavaObjectInspector oi =
             PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(pti);
         columnOIs.add(oi);
       } else {
         throw new SerDeException(getClass().getName()
             + " doesn't allow column [" + c + "] named "
-            + getColumnNames().get(c) + " with type " + typeInfo);
+            + columnNames.get(c) + " with type " + columnTypes.get(c));
       }
      }
 
     // StandardStruct uses ArrayList to store the row.
-    rowOI = ObjectInspectorFactory.getStandardStructObjectInspector(getColumnNames(), columnOIs,
-        Lists.newArrayList(Splitter.on('\0').split(properties.getProperty("columns.comments"))));
+    rowOI = ObjectInspectorFactory.getStandardStructObjectInspector(
+        columnNames,columnOIs,Lists.newArrayList(Splitter.on('\0').split(tbl.getProperty("columns.comments"))));
 
+    row = new ArrayList<Object>(numColumns);
     // Constructing the row object, etc, which will be reused for all rows.
-    row = new ArrayList<>(Collections.nCopies(numColumns, null));
+    for (int c = 0; c < numColumns; c++) {
+      row.add(null);
+    }
     outputFields = new Object[numColumns];
     outputRowText = new Text();
   }
@@ -173,7 +191,7 @@ public class RegexSerDe extends AbstractSerDe {
       unmatchedRowsCount++;
         if (!alreadyLoggedNoMatch) {
          // Report the row if its the first time
-         log.warn("" + unmatchedRowsCount + " unmatched rows are found: " + rowText);
+         LOG.warn("" + unmatchedRowsCount + " unmatched rows are found: " + rowText);
          alreadyLoggedNoMatch = true;
       }
       return null;
@@ -183,7 +201,7 @@ public class RegexSerDe extends AbstractSerDe {
     for (int c = 0; c < numColumns; c++) {
       try {
         String t = m.group(c+1);
-        TypeInfo typeInfo = getColumnTypes().get(c);
+        TypeInfo typeInfo = columnTypes.get(c);
 
         // Convert the column to the correct type when needed and set in row obj
         PrimitiveTypeInfo pti = (PrimitiveTypeInfo) typeInfo;
@@ -255,7 +273,7 @@ public class RegexSerDe extends AbstractSerDe {
          partialMatchedRowsCount++;
          if (!alreadyLoggedPartialMatch) {
          // Report the row if its the first row
-         log.warn("" + partialMatchedRowsCount
+         LOG.warn("" + partialMatchedRowsCount
             + " partially unmatched rows are found, " + " cannot find group "
             + c + ": " + rowText);
            alreadyLoggedPartialMatch = true;
@@ -271,5 +289,11 @@ public class RegexSerDe extends AbstractSerDe {
       throws SerDeException {
         throw new UnsupportedOperationException(
           "Regex SerDe doesn't support the serialize() method");
+  }
+
+  @Override
+  public SerDeStats getSerDeStats() {
+    // no support for statistics
+    return null;
   }
 }

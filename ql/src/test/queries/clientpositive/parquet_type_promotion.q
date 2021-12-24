@@ -1,5 +1,3 @@
-set hive.vectorized.execution.enabled=false;
-
 DROP TABLE parquet_type_promotion_staging;
 DROP TABLE parquet_type_promotion;
 

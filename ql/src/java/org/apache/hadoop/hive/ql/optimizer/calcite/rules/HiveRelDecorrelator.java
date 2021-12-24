@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,23 +16,6 @@
  * limitations under the License.
  */
 package org.apache.hadoop.hive.ql.optimizer.calcite.rules;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
-import java.util.Objects;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.TreeSet;
-
-import javax.annotation.Nonnull;
 
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.function.Function2;
@@ -53,14 +36,21 @@ import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.Filter;
-import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Values;
+import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.rel.logical.LogicalCorrelate;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.metadata.RelMdUtil;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.rel.rules.FilterCorrelateRule;
+import org.apache.calcite.rel.rules.FilterJoinRule;
+import org.apache.calcite.rel.rules.FilterProjectTransposeRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -71,7 +61,6 @@ import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexShuttle;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexUtil;
@@ -84,6 +73,7 @@ import org.apache.calcite.sql.fun.SqlSingleValueAggFunction;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.util.Bug;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Litmus;
@@ -93,21 +83,12 @@ import org.apache.calcite.util.ReflectiveVisitor;
 import org.apache.calcite.util.Stacks;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.mapping.Mappings;
-import org.apache.hadoop.hive.ql.optimizer.calcite.Bug;
-import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelFactories;
-import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelOptUtil;
-import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelShuttleImpl;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveAggregate;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveAntiJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveFilter;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveIntersect;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveRelNode;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSemiJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSortLimit;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveUnion;
-import org.apache.hadoop.hive.ql.parse.SemanticException;
+import org.apache.hadoop.hive.ql.parse.SemanticAnalyzer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,16 +104,32 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.SortedSetMultimap;
+import org.apache.hadoop.hive.ql.parse.SemanticException;
+import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelShuttleImpl;
 
-import java.util.Stack;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.Objects;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import javax.annotation.Nonnull;
 
 /**
  * NOTE: this whole logic is replicated from Calcite's RelDecorrelator
  *  and is exteneded to make it suitable for HIVE
+ *  TODO:
  *    We should get rid of this and replace it with Calcite's RelDecorrelator
- *    once that works with Join, Project etc instead of Join, Project.
- *    At this point this has differed from Calcite's version significantly so cannot
- *    get rid of this.
+ *    once that works with Join, Project etc instead of LogicalJoin, LogicalProject.
+ *    Also we need to have CALCITE-1511 fixed
  *
  * RelDecorrelator replaces all correlated expressions (corExp) in a relational
  * expression (RelNode) tree with non-correlated expressions that are produced
@@ -149,15 +146,12 @@ import java.util.Stack;
  *   de-correlator</li>
  * </ul>
  */
-public final class HiveRelDecorrelator implements ReflectiveVisitor {
+public class HiveRelDecorrelator implements ReflectiveVisitor {
   //~ Static fields/initializers ---------------------------------------------
 
   protected static final Logger LOG = LoggerFactory.getLogger(
           HiveRelDecorrelator.class);
-  
-  private static final FilterFlattenCorrelatedConditionRule FLATTEN_CORRELATED_CONDITION_RULE =
-      new FilterFlattenCorrelatedConditionRule(HiveFilter.class, HiveRelFactories.HIVE_BUILDER,
-          "HiveFilterFlattenCorrelatedConditionRule");
+
   //~ Instance fields --------------------------------------------------------
 
   private final RelBuilder relBuilder;
@@ -183,18 +177,17 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
   private final HashSet<LogicalCorrelate> generatedCorRels = Sets.newHashSet();
 
-  private Stack valueGen = new Stack();
-
   //~ Constructors -----------------------------------------------------------
 
-  private HiveRelDecorrelator(
+  private HiveRelDecorrelator (
           RelOptCluster cluster,
           CorelMap cm,
           Context context) {
     this.cm = cm;
     this.rexBuilder = cluster.getRexBuilder();
     this.context = context;
-    relBuilder = HiveRelFactories.HIVE_BUILDER.create(cluster, null);
+    relBuilder = RelFactories.LOGICAL_BUILDER.create(cluster, null);
+
   }
 
   //~ Methods ----------------------------------------------------------------
@@ -240,28 +233,19 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     HepProgram program = HepProgram.builder()
             .addRuleInstance(new AdjustProjectForCountAggregateRule(false))
             .addRuleInstance(new AdjustProjectForCountAggregateRule(true))
-            .addRuleInstance(HiveFilterJoinRule.JOIN)
-            .addRuleInstance(HiveFilterJoinRule.FILTER_ON_JOIN)
-            .addRuleInstance(HiveFilterProjectTransposeRule.INSTANCE)
-            .addRuleInstance(FLATTEN_CORRELATED_CONDITION_RULE)
+            .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
+            .addRuleInstance(FilterProjectTransposeRule.INSTANCE)
             // FilterCorrelateRule rule mistakenly pushes a FILTER, consiting of correlated vars,
             // on top of LogicalCorrelate to within  left input for scalar corr queries
             // which causes exception during decorrelation. This has been disabled for now.
             //.addRuleInstance(FilterCorrelateRule.INSTANCE)
             .build();
+
     HepPlanner planner = createPlanner(program);
 
     planner.setRoot(root);
     root = planner.findBestExp();
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Plan before extracting correlated computations:\n" + RelOptUtil.toString(root));
-    }
-    root = root.accept(new CorrelateProjectExtractor(HiveRelFactories.HIVE_BUILDER));
-    // Necessary to update cm (CorrelMap) since CorrelateProjectExtractor above may modify the plan
-    this.cm = new CorelMapBuilder().build(root);
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Plan after extracting correlated computations:\n" + RelOptUtil.toString(root));
-    }
+
     // Perform decorrelation.
     map.clear();
 
@@ -269,8 +253,8 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     if (frame != null) {
       // has been rewritten; apply rules post-decorrelation
       final HepProgram program2 = HepProgram.builder()
-              .addRuleInstance(HiveFilterJoinRule.FILTER_ON_JOIN)
-              .addRuleInstance(HiveFilterJoinRule.JOIN)
+              .addRuleInstance(FilterJoinRule.FILTER_ON_JOIN)
+              .addRuleInstance(FilterJoinRule.JOIN)
               .build();
 
       final HepPlanner planner2 = createPlanner(program2);
@@ -279,14 +263,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       return planner2.findBestExp();
     }
 
-    assert(valueGen.isEmpty());
-
     return root;
   }
 
   private Function2<RelNode, RelNode, Void> createCopyHook() {
     return new Function2<RelNode, RelNode, Void>() {
-      @Override
       public Void apply(RelNode oldNode, RelNode newNode) {
         if (cm.mapRefRelToCorRef.containsKey(oldNode)) {
           final CorelMap corelMap = new CorelMapBuilder().build(newNode);
@@ -340,42 +321,37 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
   }
 
   protected RexNode decorrelateExpr(RexNode exp) {
-    return decorrelateExpr(exp, true);
-  }
-
-  protected RexNode decorrelateExpr(RexNode exp, boolean valueGenerator) {
     DecorrelateRexShuttle shuttle = new DecorrelateRexShuttle();
-    shuttle.setValueGenerator(valueGenerator);
     return exp.accept(shuttle);
   }
 
   protected RexNode removeCorrelationExpr(
           RexNode exp,
           boolean projectPulledAboveLeftCorrelator) {
-    return removeCorrelationExpr(exp, projectPulledAboveLeftCorrelator, ImmutableSet.of());
+    RemoveCorrelationRexShuttle shuttle =
+            new RemoveCorrelationRexShuttle(rexBuilder,
+                    projectPulledAboveLeftCorrelator, null, ImmutableSet.<Integer>of());
+    return exp.accept(shuttle);
   }
 
   protected RexNode removeCorrelationExpr(
           RexNode exp,
           boolean projectPulledAboveLeftCorrelator,
           RexInputRef nullIndicator) {
-    return removeCorrelationExpr(exp, projectPulledAboveLeftCorrelator, nullIndicator, ImmutableSet.of());
+    RemoveCorrelationRexShuttle shuttle =
+            new RemoveCorrelationRexShuttle(rexBuilder,
+                    projectPulledAboveLeftCorrelator, nullIndicator,
+                    ImmutableSet.<Integer>of());
+    return exp.accept(shuttle);
   }
 
   protected RexNode removeCorrelationExpr(
           RexNode exp,
           boolean projectPulledAboveLeftCorrelator,
-          Set<Integer> isCount) {
-    return removeCorrelationExpr(exp, projectPulledAboveLeftCorrelator, null, isCount);
-  }
-
-  protected RexNode removeCorrelationExpr(
-          RexNode exp,
-          boolean projectPulledAboveLeftCorrelator,
-          RexInputRef nullIndicator,
           Set<Integer> isCount) {
     RemoveCorrelationRexShuttle shuttle =
-            new RemoveCorrelationRexShuttle(rexBuilder, projectPulledAboveLeftCorrelator, nullIndicator, isCount);
+            new RemoveCorrelationRexShuttle(rexBuilder,
+                    projectPulledAboveLeftCorrelator, null, isCount);
     return exp.accept(shuttle);
   }
 
@@ -414,7 +390,43 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * @param rel Sort to be rewritten
    */
   public Frame decorrelateRel(HiveSortLimit rel) {
-    return decorrelateRel((Sort) rel);
+    //
+    // Rewrite logic:
+    //
+    // 1. change the collations field to reference the new input.
+    //
+
+    // Sort itself should not reference cor vars.
+    assert !cm.mapRefRelToCorRef.containsKey(rel);
+
+    // Sort only references field positions in collations field.
+    // The collations field in the newRel now need to refer to the
+    // new output positions in its input.
+    // Its output does not change the input ordering, so there's no
+    // need to call propagateExpr.
+
+    final RelNode oldInput = rel.getInput();
+    final Frame frame = getInvoke(oldInput, rel);
+    if (frame == null) {
+      // If input has not been rewritten, do not rewrite this rel.
+      return null;
+    }
+    final RelNode newInput = frame.r;
+
+    Mappings.TargetMapping mapping =
+            Mappings.target(
+                    frame.oldToNewOutputs,
+                    oldInput.getRowType().getFieldCount(),
+                    newInput.getRowType().getFieldCount());
+
+    RelCollation oldCollation = rel.getCollation();
+    RelCollation newCollation = RexUtil.apply(mapping, oldCollation);
+
+    final RelNode newSort = HiveSortLimit.create(newInput, newCollation, rel.offset, rel.fetch);
+
+    // Sort does not change input ordering
+    return register(rel, newSort, frame.oldToNewOutputs,
+            frame.corDefOutputs);
   }
   /**
    * Rewrite Sort.
@@ -472,11 +484,14 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
   }
 
   /**
-   * Rewrites a {@link Aggregate}.
+   * Rewrites a {@link LogicalAggregate}.
    *
    * @param rel Aggregate to rewrite
    */
-  public Frame decorrelateRel(Aggregate rel) throws SemanticException {
+  public Frame decorrelateRel(LogicalAggregate rel) throws SemanticException{
+    if (rel.getGroupType() != Aggregate.Group.SIMPLE) {
+      throw new AssertionError(Bug.CALCITE_461_FIXED);
+    }
     //
     // Rewrite logic:
     //
@@ -619,8 +634,12 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
               newInputOutputFieldCount + i);
     }
 
-    relBuilder.push(newProject)
-        .aggregate(relBuilder.groupKey(newGroupSet, null), newAggCalls);
+    relBuilder.push(
+            LogicalAggregate.create(newProject,
+                    false,
+                    newGroupSet,
+                    null,
+                    newAggCalls));
 
     if (!omittedConstants.isEmpty()) {
       final List<RexNode> postProjects = new ArrayList<>(relBuilder.fields());
@@ -658,166 +677,233 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     return null;
   }
 
-  public Frame decorrelateRel(HiveAggregate rel) throws SemanticException {
-    //
-    // Rewrite logic:
-    //
-    // 1. Permute the group by keys to the front.
-    // 2. If the input of an aggregate produces correlated variables,
-    //    add them to the group list.
-    // 3. Change aggCalls to reference the new project.
-    //
+  public Frame decorrelateRel(HiveAggregate rel) throws SemanticException{
+    {
+      if (rel.getGroupType() != Aggregate.Group.SIMPLE) {
+        throw new AssertionError(Bug.CALCITE_461_FIXED);
+      }
+      //
+      // Rewrite logic:
+      //
+      // 1. Permute the group by keys to the front.
+      // 2. If the input of an aggregate produces correlated variables,
+      //    add them to the group list.
+      // 3. Change aggCalls to reference the new project.
+      //
 
-    // Aggregate itself should not reference cor vars.
-    assert !cm.mapRefRelToCorRef.containsKey(rel);
+      // Aggregate itself should not reference cor vars.
+      assert !cm.mapRefRelToCorRef.containsKey(rel);
 
-    final RelNode oldInput = rel.getInput();
-    final Frame frame = getInvoke(oldInput, rel);
-    if (frame == null) {
-      // If input has not been rewritten, do not rewrite this rel.
-      return null;
+      final RelNode oldInput = rel.getInput();
+      final Frame frame = getInvoke(oldInput, rel);
+      if (frame == null) {
+        // If input has not been rewritten, do not rewrite this rel.
+        return null;
+      }
+      //assert !frame.corVarOutputPos.isEmpty();
+      final RelNode newInput = frame.r;
+
+      // map from newInput
+      Map<Integer, Integer> mapNewInputToProjOutputs =  new HashMap<>();
+      final int oldGroupKeyCount = rel.getGroupSet().cardinality();
+
+      // Project projects the original expressions,
+      // plus any correlated variables the input wants to pass along.
+      final List<Pair<RexNode, String>> projects = Lists.newArrayList();
+
+      List<RelDataTypeField> newInputOutput =
+              newInput.getRowType().getFieldList();
+
+      int newPos = 0;
+
+      // oldInput has the original group by keys in the front.
+      final NavigableMap<Integer, RexLiteral> omittedConstants = new TreeMap<>();
+      for (int i = 0; i < oldGroupKeyCount; i++) {
+        final RexLiteral constant = projectedLiteral(newInput, i);
+        if (constant != null) {
+          // Exclude constants. Aggregate({true}) occurs because Aggregate({})
+          // would generate 1 row even when applied to an empty table.
+          omittedConstants.put(i, constant);
+          continue;
+        }
+        int newInputPos = frame.oldToNewOutputs.get(i);
+        projects.add(RexInputRef.of2(newInputPos, newInputOutput));
+        mapNewInputToProjOutputs.put(newInputPos, newPos);
+        newPos++;
+      }
+
+      final SortedMap<CorDef, Integer> corDefOutputs = new TreeMap<>();
+      if (!frame.corDefOutputs.isEmpty()) {
+        // If input produces correlated variables, move them to the front,
+        // right after any existing GROUP BY fields.
+
+        // Now add the corVars from the input, starting from
+        // position oldGroupKeyCount.
+        for (Map.Entry<CorDef, Integer> entry
+                : frame.corDefOutputs.entrySet()) {
+          projects.add(RexInputRef.of2(entry.getValue(), newInputOutput));
+
+          corDefOutputs.put(entry.getKey(), newPos);
+          mapNewInputToProjOutputs.put(entry.getValue(), newPos);
+          newPos++;
+        }
+      }
+
+      // add the remaining fields
+      final int newGroupKeyCount = newPos;
+      for (int i = 0; i < newInputOutput.size(); i++) {
+        if (!mapNewInputToProjOutputs.containsKey(i)) {
+          projects.add(RexInputRef.of2(i, newInputOutput));
+          mapNewInputToProjOutputs.put(i, newPos);
+          newPos++;
+        }
+      }
+
+      assert newPos == newInputOutput.size();
+
+      // This Project will be what the old input maps to,
+      // replacing any previous mapping from old input).
+      RelNode newProject = HiveProject.create(newInput, Pair.left(projects), Pair.right(projects));
+
+      // update mappings:
+      // oldInput ----> newInput
+      //
+      //                newProject
+      //                   |
+      // oldInput ----> newInput
+      //
+      // is transformed to
+      //
+      // oldInput ----> newProject
+      //                   |
+      //                newInput
+      Map<Integer, Integer> combinedMap = Maps.newHashMap();
+
+      for (Integer oldInputPos : frame.oldToNewOutputs.keySet()) {
+        combinedMap.put(oldInputPos,
+                mapNewInputToProjOutputs.get(
+                        frame.oldToNewOutputs.get(oldInputPos)));
+      }
+
+      register(oldInput, newProject, combinedMap, corDefOutputs);
+
+      // now it's time to rewrite the Aggregate
+      final ImmutableBitSet newGroupSet = ImmutableBitSet.range(newGroupKeyCount);
+      List<AggregateCall> newAggCalls = Lists.newArrayList();
+      List<AggregateCall> oldAggCalls = rel.getAggCallList();
+
+      int oldInputOutputFieldCount = rel.getGroupSet().cardinality();
+      int newInputOutputFieldCount = newGroupSet.cardinality();
+
+      int i = -1;
+      for (AggregateCall oldAggCall : oldAggCalls) {
+        ++i;
+        List<Integer> oldAggArgs = oldAggCall.getArgList();
+
+        List<Integer> aggArgs = Lists.newArrayList();
+
+        // Adjust the aggregator argument positions.
+        // Note aggregator does not change input ordering, so the input
+        // output position mapping can be used to derive the new positions
+        // for the argument.
+        for (int oldPos : oldAggArgs) {
+          aggArgs.add(combinedMap.get(oldPos));
+        }
+        final int filterArg = oldAggCall.filterArg < 0 ? oldAggCall.filterArg
+                : combinedMap.get(oldAggCall.filterArg);
+
+        newAggCalls.add(
+                oldAggCall.adaptTo(newProject, aggArgs, filterArg,
+                        oldGroupKeyCount, newGroupKeyCount));
+
+        // The old to new output position mapping will be the same as that
+        // of newProject, plus any aggregates that the oldAgg produces.
+        combinedMap.put(
+                oldInputOutputFieldCount + i,
+                newInputOutputFieldCount + i);
+      }
+
+      relBuilder.push(
+              new HiveAggregate(rel.getCluster(), rel.getTraitSet(), newProject, false, newGroupSet, null, newAggCalls) );
+
+      if (!omittedConstants.isEmpty()) {
+        final List<RexNode> postProjects = new ArrayList<>(relBuilder.fields());
+        for (Map.Entry<Integer, RexLiteral> entry
+                : omittedConstants.descendingMap().entrySet()) {
+          postProjects.add(entry.getKey() + frame.corDefOutputs.size(),
+                  entry.getValue());
+        }
+        relBuilder.project(postProjects);
+      }
+
+      // Aggregate does not change input ordering so corVars will be
+      // located at the same position as the input newProject.
+      return register(rel, relBuilder.build(), combinedMap, corDefOutputs);
     }
-    //assert !frame.corVarOutputPos.isEmpty();
-    final RelNode newInput = frame.r;
+  }
 
-    // map from newInput
-    Map<Integer, Integer> mapNewInputToProjOutputs =  new HashMap<>();
-    final int oldGroupKeyCount = rel.getGroupSet().cardinality();
+  public Frame decorrelateRel(HiveProject rel) throws SemanticException{
+    {
+      //
+      // Rewrite logic:
+      //
+      // 1. Pass along any correlated variables coming from the input.
+      //
 
-    // Project projects the original expressions,
-    // plus any correlated variables the input wants to pass along.
-    final List<Pair<RexNode, String>> projects = Lists.newArrayList();
+      final RelNode oldInput = rel.getInput();
+      Frame frame = getInvoke(oldInput, rel);
+      if (frame == null) {
+        // If input has not been rewritten, do not rewrite this rel.
+        return null;
+      }
+      final List<RexNode> oldProjects = rel.getProjects();
+      final List<RelDataTypeField> relOutput = rel.getRowType().getFieldList();
 
-    List<RelDataTypeField> newInputOutput =
-        newInput.getRowType().getFieldList();
+      // LogicalProject projects the original expressions,
+      // plus any correlated variables the input wants to pass along.
+      final List<Pair<RexNode, String>> projects = Lists.newArrayList();
 
-    int newPos = 0;
+      // If this LogicalProject has correlated reference, create value generator
+      // and produce the correlated variables in the new output.
+      if (cm.mapRefRelToCorRef.containsKey(rel)) {
+        frame = decorrelateInputWithValueGenerator(rel);
+      }
 
-    // oldInput has the original group by keys in the front.
-    final NavigableMap<Integer, RexLiteral> omittedConstants = new TreeMap<>();
-    for (int i = 0; i < oldGroupKeyCount; i++) {
-      final RexLiteral constant = projectedLiteral(newInput, i);
-      int newInputPos = frame.oldToNewOutputs.get(i);
-      projects.add(RexInputRef.of2(newInputPos, newInputOutput));
-      mapNewInputToProjOutputs.put(newInputPos, newPos);
-      newPos++;
-    }
+      // LogicalProject projects the original expressions
+      final Map<Integer, Integer> mapOldToNewOutputs =  new HashMap<>();
+      int newPos;
+      for (newPos = 0; newPos < oldProjects.size(); newPos++) {
+        projects.add(
+                newPos,
+                Pair.of(
+                        decorrelateExpr(oldProjects.get(newPos)),
+                        relOutput.get(newPos).getName()));
+        mapOldToNewOutputs.put(newPos, newPos);
+      }
 
-    final SortedMap<CorDef, Integer> corDefOutputs = new TreeMap<>();
-    if (!frame.corDefOutputs.isEmpty()) {
-      // If input produces correlated variables, move them to the front,
-      // right after any existing GROUP BY fields.
 
-      // Now add the corVars from the input, starting from
-      // position oldGroupKeyCount.
-      for (Map.Entry<CorDef, Integer> entry
-          : frame.corDefOutputs.entrySet()) {
-        projects.add(RexInputRef.of2(entry.getValue(), newInputOutput));
-
+      // Project any correlated variables the input wants to pass along.
+      final SortedMap<CorDef, Integer> corDefOutputs = new TreeMap<>();
+      for (Map.Entry<CorDef, Integer> entry : frame.corDefOutputs.entrySet()) {
+        projects.add(
+                RexInputRef.of2(entry.getValue(),
+                        frame.r.getRowType().getFieldList()));
         corDefOutputs.put(entry.getKey(), newPos);
-        mapNewInputToProjOutputs.put(entry.getValue(), newPos);
         newPos++;
       }
+
+      RelNode newProject = HiveProject.create(frame.r, Pair.left(projects), SqlValidatorUtil.uniquify(Pair.right(projects)));
+
+      return register(rel, newProject, mapOldToNewOutputs,
+              corDefOutputs);
     }
-
-    // add the remaining fields
-    final int newGroupKeyCount = newPos;
-    for (int i = 0; i < newInputOutput.size(); i++) {
-      if (!mapNewInputToProjOutputs.containsKey(i)) {
-        projects.add(RexInputRef.of2(i, newInputOutput));
-        mapNewInputToProjOutputs.put(i, newPos);
-        newPos++;
-      }
-    }
-
-    assert newPos == newInputOutput.size();
-
-    // This Project will be what the old input maps to,
-    // replacing any previous mapping from old input).
-    RelNode newProject = HiveProject.create(newInput, Pair.left(projects), Pair.right(projects));
-
-    // update mappings:
-    // oldInput ----> newInput
-    //
-    //                newProject
-    //                   |
-    // oldInput ----> newInput
-    //
-    // is transformed to
-    //
-    // oldInput ----> newProject
-    //                   |
-    //                newInput
-    Map<Integer, Integer> combinedMap = Maps.newHashMap();
-
-    for (Integer oldInputPos : frame.oldToNewOutputs.keySet()) {
-      combinedMap.put(oldInputPos,
-          mapNewInputToProjOutputs.get(
-              frame.oldToNewOutputs.get(oldInputPos)));
-    }
-
-    register(oldInput, newProject, combinedMap, corDefOutputs);
-
-    // now it's time to rewrite the Aggregate
-    final ImmutableBitSet newGroupSet = ImmutableBitSet.range(newGroupKeyCount);
-    List<AggregateCall> newAggCalls = Lists.newArrayList();
-    List<AggregateCall> oldAggCalls = rel.getAggCallList();
-
-    int oldInputOutputFieldCount = rel.getGroupSet().cardinality();
-    int newInputOutputFieldCount = newGroupSet.cardinality();
-
-    int i = -1;
-    for (AggregateCall oldAggCall : oldAggCalls) {
-      ++i;
-      List<Integer> oldAggArgs = oldAggCall.getArgList();
-
-      List<Integer> aggArgs = Lists.newArrayList();
-
-      // Adjust the aggregator argument positions.
-      // Note aggregator does not change input ordering, so the input
-      // output position mapping can be used to derive the new positions
-      // for the argument.
-      for (int oldPos : oldAggArgs) {
-        aggArgs.add(combinedMap.get(oldPos));
-      }
-      final int filterArg = oldAggCall.filterArg < 0 ? oldAggCall.filterArg
-          : combinedMap.get(oldAggCall.filterArg);
-
-      newAggCalls.add(
-          oldAggCall.adaptTo(newProject, aggArgs, filterArg,
-              oldGroupKeyCount, newGroupKeyCount));
-
-      // The old to new output position mapping will be the same as that
-      // of newProject, plus any aggregates that the oldAgg produces.
-      combinedMap.put(
-          oldInputOutputFieldCount + i,
-          newInputOutputFieldCount + i);
-    }
-
-    relBuilder.push(
-        new HiveAggregate(rel.getCluster(), rel.getTraitSet(), newProject,
-            newGroupSet, null, newAggCalls));
-
-    if (!omittedConstants.isEmpty()) {
-      final List<RexNode> postProjects = new ArrayList<>(relBuilder.fields());
-      for (Map.Entry<Integer, RexLiteral> entry
-          : omittedConstants.descendingMap().entrySet()) {
-        postProjects.add(entry.getKey() + frame.corDefOutputs.size(),
-            entry.getValue());
-      }
-      relBuilder.project(postProjects);
-    }
-
-    // Aggregate does not change input ordering so corVars will be
-    // located at the same position as the input newProject.
-    return register(rel, relBuilder.build(), combinedMap, corDefOutputs);
   }
-
-  public Frame decorrelateRel(HiveProject rel) throws SemanticException {
-    return decorrelateRel((Project) rel);
-  }
-
-  public Frame decorrelateRel(Project rel) throws SemanticException {
+  /**
+   * Rewrite LogicalProject.
+   *
+   * @param rel the project rel to rewrite
+   */
+  public Frame decorrelateRel(LogicalProject rel) throws SemanticException{
     //
     // Rewrite logic:
     //
@@ -833,48 +919,53 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     final List<RexNode> oldProjects = rel.getProjects();
     final List<RelDataTypeField> relOutput = rel.getRowType().getFieldList();
 
-    // Project projects the original expressions,
+    // LogicalProject projects the original expressions,
     // plus any correlated variables the input wants to pass along.
     final List<Pair<RexNode, String>> projects = Lists.newArrayList();
 
-    // If this Project has correlated reference, create value generator
+    // If this LogicalProject has correlated reference, create value generator
     // and produce the correlated variables in the new output.
     if (cm.mapRefRelToCorRef.containsKey(rel)) {
       frame = decorrelateInputWithValueGenerator(rel);
     }
 
-    // Project projects the original expressions
-    final Map<Integer, Integer> mapOldToNewOutputs =  new HashMap<>();
+    // LogicalProject projects the original expressions
+    final Map<Integer, Integer> mapOldToNewOutputs = new HashMap<>();
     int newPos;
     for (newPos = 0; newPos < oldProjects.size(); newPos++) {
       projects.add(
-          newPos,
-          Pair.of(
-              decorrelateExpr(oldProjects.get(newPos)),
-              relOutput.get(newPos).getName()));
+              newPos,
+              Pair.of(
+                      decorrelateExpr(oldProjects.get(newPos)),
+                      relOutput.get(newPos).getName()));
       mapOldToNewOutputs.put(newPos, newPos);
     }
-
 
     // Project any correlated variables the input wants to pass along.
     final SortedMap<CorDef, Integer> corDefOutputs = new TreeMap<>();
     for (Map.Entry<CorDef, Integer> entry : frame.corDefOutputs.entrySet()) {
       projects.add(
-          RexInputRef.of2(entry.getValue(),
-              frame.r.getRowType().getFieldList()));
+              RexInputRef.of2(entry.getValue(),
+                      frame.r.getRowType().getFieldList()));
       corDefOutputs.put(entry.getKey(), newPos);
       newPos++;
     }
 
-    RelNode newProject = HiveProject.create(frame.r, Pair.left(projects),
-        SqlValidatorUtil.uniquify(Pair.right(projects)));
+    RelNode newProject = HiveProject.create(frame.r, Pair.left(projects), Pair.right(projects));
 
     return register(rel, newProject, mapOldToNewOutputs,
-        corDefOutputs);
+            corDefOutputs);
   }
 
   /**
    * Create RelNode tree that produces a list of correlated variables.
+   *
+   * @param correlations         correlated variables to generate
+   * @param valueGenFieldOffset  offset in the output that generated columns
+   *                             will start
+   * @param mapCorVarToOutputPos output positions for the correlated variables
+   *                             generated
+   * @return RelNode the root of the resultant RelNode tree
    */
   private RelNode createValueGenerator(
           Iterable<CorRef> correlations,
@@ -930,9 +1021,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       assert newInput != null;
 
       if (!joinedInputs.contains(newInput)) {
-        RelNode project = RelOptUtil.createProject(
-            HiveRelFactories.HIVE_PROJECT_FACTORY, newInput, mapNewInputToOutputs.get(newInput));
-        RelNode distinct = relBuilder.push(project).distinct().build();
+        RelNode project =
+                RelOptUtil.createProject(
+                        newInput,
+                        mapNewInputToOutputs.get(newInput));
+        RelNode distinct = RelOptUtil.createDistinctRel(project);
         RelOptCluster cluster = distinct.getCluster();
 
         joinedInputs.add(newInput);
@@ -942,8 +1035,10 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         if (r == null) {
           r = distinct;
         } else {
-          r = relBuilder.push(r).push(distinct)
-              .join(JoinRelType.INNER, cluster.getRexBuilder().makeLiteral(true)).build();
+          r =
+                  LogicalJoin.create(r, distinct,
+                          cluster.getRexBuilder().makeLiteral(true),
+                          ImmutableSet.<CorrelationId>of(), JoinRelType.INNER);
         }
       }
     }
@@ -1003,40 +1098,24 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     // Try to populate correlation variables using local fields.
     // This means that we do not need a value generator.
     if (rel instanceof Filter) {
-      SortedMap<CorDef, Integer> coreMap = new TreeMap<>();
+      SortedMap<CorDef, Integer> map = new TreeMap<>();
       for (CorRef correlation : corVarList) {
         final CorDef def = correlation.def();
-        // If the correlation/variable is already provided by the input
-        // then we don't have to look for equivalent expressions and 
-        // we don't need to create value generator for them.
-        if (corDefOutputs.containsKey(def)) {
-          coreMap.put(def, corDefOutputs.get(def));
-          continue;
-        }
-        // If the correlation/variable is in the map then we already
-        // seen this before in this loop so we don't need to treat it again.
-        if (coreMap.containsKey(def)) {
+        if (corDefOutputs.containsKey(def) || map.containsKey(def)) {
           continue;
         }
         try {
           findCorrelationEquivalent(correlation, ((Filter) rel).getCondition());
         } catch (Util.FoundOne e) {
-          // we need to keep predicate kind e.g. EQUAL or NOT EQUAL
-          // so that later while decorrelating LogicalCorrelate appropriate join predicate
-          // is generated
-          def.setPredicateKind((SqlOperator) ((Pair)((Pair)e.getNode()).getValue()).getKey());
-          def.setIsLeft((boolean)((Pair)((Pair) e.getNode()).getValue()).getValue());
-          final Integer oldInputRef = (Integer) ((Pair) e.getNode()).getKey();
-          final Integer newInputRef = frame.oldToNewOutputs.get(oldInputRef);
-          coreMap.put(def, newInputRef);
+          map.put(def, (Integer) e.getNode());
         }
       }
       // If all correlation variables are now satisfied, skip creating a value
       // generator.
-      if (coreMap.size() == corVarList.size()) {
-        coreMap.putAll(frame.corDefOutputs);
+      if (map.size() == corVarList.size()) {
+        map.putAll(frame.corDefOutputs);
         return register(oldInput, frame.r,
-                frame.oldToNewOutputs, coreMap);
+                frame.oldToNewOutputs, map);
       }
     }
 
@@ -1045,18 +1124,19 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
     // can directly add positions into corDefOutputs since join
     // does not change the output ordering from the inputs.
-    RelNode valueGenRel =
+    RelNode valueGen =
             createValueGenerator(
                     corVarList,
                     leftInputOutputCount,
                     corDefOutputs);
 
-    RelNode join = relBuilder.push(frame.r).push(valueGenRel)
-        .join(JoinRelType.INNER, rexBuilder.makeLiteral(true)).build();
+    RelNode join =
+            LogicalJoin.create(frame.r, valueGen, rexBuilder.makeLiteral(true),
+                    ImmutableSet.<CorrelationId>of(), JoinRelType.INNER);
 
-    // Join or Filter does not change the old input ordering. All
+    // LogicalJoin or LogicalFilter does not change the old input ordering. All
     // input fields from newLeftInput(i.e. the original input to the old
-    // Filter) are in the output and in the same position.
+    // LogicalFilter) are in the output and in the same position.
     return register(oldInput, join, frame.oldToNewOutputs, corDefOutputs);
   }
 
@@ -1065,61 +1145,45 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * and if found, throws a {@link Util.FoundOne}. */
   private void findCorrelationEquivalent(CorRef correlation, RexNode e)
           throws Util.FoundOne {
-    if(e instanceof RexCall){
-      switch (e.getKind()) {
+    switch (e.getKind()) {
+      case EQUALS:
+        final RexCall call = (RexCall) e;
+        final List<RexNode> operands = call.getOperands();
+        if (references(operands.get(0), correlation)
+                && operands.get(1) instanceof RexInputRef) {
+          throw new Util.FoundOne(((RexInputRef) operands.get(1)).getIndex());
+        }
+        if (references(operands.get(1), correlation)
+                && operands.get(0) instanceof RexInputRef) {
+          throw new Util.FoundOne(((RexInputRef) operands.get(0)).getIndex());
+        }
+        break;
       case AND:
         for (RexNode operand : ((RexCall) e).getOperands()) {
           findCorrelationEquivalent(correlation, operand);
         }
-      default:
-        final RexCall call = (RexCall) e;
-        final List<RexNode> operands = call.getOperands();
-        if(operands.size() == 2) {
-          if (references(operands.get(0), correlation)
-              && operands.get(1) instanceof RexInputRef) {
-            // if call isn't EQUAL type and it has been determined that value generate might be
-            // required we should rather generate value generator
-            if(e.getKind() != SqlKind.EQUALS && (boolean)valueGen.peek()) {
-              return;
-            }
-            throw new Util.FoundOne(Pair.of(((RexInputRef) operands.get(1)).getIndex(),
-                Pair.of(((RexCall) e).getOperator(), true)));
-          }
-          if (references(operands.get(1), correlation)
-              && operands.get(0) instanceof RexInputRef) {
-            // if call isn't EQUAL type and it has been determined that value generate might be
-            // required we should rather generate value generator
-            if(e.getKind() != SqlKind.EQUALS && (boolean)valueGen.peek()) {
-              return;
-            }
-            throw new Util.FoundOne(Pair.of(((RexInputRef) operands.get(0)).getIndex(),
-                Pair.of(((RexCall) e).getOperator(), false)));
-          }
-          break;
-        }
-      }
     }
   }
 
   private boolean references(RexNode e, CorRef correlation) {
     switch (e.getKind()) {
-    case CAST:
-      final RexNode operand = ((RexCall) e).getOperands().get(0);
-      if (isWidening(e.getType(), operand.getType())) {
-        return references(operand, correlation);
-      }
-      return false;
-    case FIELD_ACCESS:
-      final RexFieldAccess f = (RexFieldAccess) e;
-      if (f.getField().getIndex() == correlation.field
-          && f.getReferenceExpr() instanceof RexCorrelVariable) {
-        if (((RexCorrelVariable) f.getReferenceExpr()).id.equals(correlation.corr)) {
-          return true;
+      case CAST:
+        final RexNode operand = ((RexCall) e).getOperands().get(0);
+        if (isWidening(e.getType(), operand.getType())) {
+          return references(operand, correlation);
         }
-      }
-      // fall through
-    default:
-      return false;
+        return false;
+      case FIELD_ACCESS:
+        final RexFieldAccess f = (RexFieldAccess) e;
+        if (f.getField().getIndex() == correlation.field
+                && f.getReferenceExpr() instanceof RexCorrelVariable) {
+          if (((RexCorrelVariable) f.getReferenceExpr()).id == correlation.corr) {
+            return true;
+          }
+        }
+        // fall through
+      default:
+        return false;
     }
   }
 
@@ -1135,24 +1199,69 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
             && type.getPrecision() >= type1.getPrecision();
   }
 
-  public Frame decorrelateRel(HiveFilter rel) {
-    return decorrelateRel((Filter) rel);
+  public Frame decorrelateRel(HiveFilter rel) throws SemanticException {
+    {
+      //
+      // Rewrite logic:
+      //
+      // 1. If a LogicalFilter references a correlated field in its filter
+      // condition, rewrite the LogicalFilter to be
+      //   LogicalFilter
+      //     LogicalJoin(cross product)
+      //       OriginalFilterInput
+      //       ValueGenerator(produces distinct sets of correlated variables)
+      // and rewrite the correlated fieldAccess in the filter condition to
+      // reference the LogicalJoin output.
+      //
+      // 2. If LogicalFilter does not reference correlated variables, simply
+      // rewrite the filter condition using new input.
+      //
+
+      final RelNode oldInput = rel.getInput();
+      Frame frame = getInvoke(oldInput, rel);
+      if (frame == null) {
+        // If input has not been rewritten, do not rewrite this rel.
+        return null;
+      }
+
+      // If this LogicalFilter has correlated reference, create value generator
+      // and produce the correlated variables in the new output.
+      if (cm.mapRefRelToCorRef.containsKey(rel)) {
+        frame = decorrelateInputWithValueGenerator(rel);
+      }
+
+      // Replace the filter expression to reference output of the join
+      // Map filter to the new filter over join
+      relBuilder.push(frame.r).filter(decorrelateExpr(rel.getCondition()));
+
+      // Filter does not change the input ordering.
+      // Filter rel does not permute the input.
+      // All corvars produced by filter will have the same output positions in the
+      // input rel.
+      return register(rel, relBuilder.build(), frame.oldToNewOutputs,
+              frame.corDefOutputs);
+    }
   }
 
-  public Frame decorrelateRel(Filter rel) {
+  /**
+   * Rewrite LogicalFilter.
+   *
+   * @param rel the filter rel to rewrite
+   */
+  public Frame decorrelateRel(LogicalFilter rel) {
     //
     // Rewrite logic:
     //
-    // 1. If a Filter references a correlated field in its filter
-    // condition, rewrite the Filter to be
-    //   Filter
-    //     Join(cross product)
+    // 1. If a LogicalFilter references a correlated field in its filter
+    // condition, rewrite the LogicalFilter to be
+    //   LogicalFilter
+    //     LogicalJoin(cross product)
     //       OriginalFilterInput
     //       ValueGenerator(produces distinct sets of correlated variables)
     // and rewrite the correlated fieldAccess in the filter condition to
-    // reference the Join output.
+    // reference the LogicalJoin output.
     //
-    // 2. If Filter does not reference correlated variables, simply
+    // 2. If LogicalFilter does not reference correlated variables, simply
     // rewrite the filter condition using new input.
     //
 
@@ -1163,57 +1272,24 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       return null;
     }
 
-    Frame oldInputFrame = frame;
-    // If this Filter has correlated reference, create value generator
+    // If this LogicalFilter has correlated reference, create value generator
     // and produce the correlated variables in the new output.
     if (cm.mapRefRelToCorRef.containsKey(rel)) {
       frame = decorrelateInputWithValueGenerator(rel);
+
     }
 
-    boolean valueGenerator = true;
-    if(frame.r == oldInputFrame.r) {
-      // this means correated value generator wasn't generated
-      valueGenerator = false;
-    }
-
-    boolean isSemiJoin = false;
-    if (oldInput instanceof LogicalCorrelate) {
-      isSemiJoin = ((LogicalCorrelate) oldInput).getJoinType() == JoinRelType.SEMI ||
-              ((LogicalCorrelate) oldInput).getJoinType() == JoinRelType.ANTI;
-    }
-
-    if(isSemiJoin && !cm.mapRefRelToCorRef.containsKey(rel)) {
-      // this conditions need to be pushed into semi-join since this condition
-      // corresponds to IN
-      Join join = ((Join)frame.r);
-      final List<RexNode> conditions = new ArrayList<>();
-      RexNode joinCond = join.getCondition();
-      conditions.add(joinCond);
-      conditions.add(decorrelateExpr(rel.getCondition(), valueGenerator));
-      final RexNode condition =
-          RexUtil.composeConjunction(rexBuilder, conditions, false);
-
-      RelNode newRel;
-      if (((LogicalCorrelate) oldInput).getJoinType() == JoinRelType.SEMI) {
-        newRel = HiveSemiJoin.getSemiJoin(frame.r.getCluster(), frame.r.getTraitSet(),
-                join.getLeft(), join.getRight(), condition);
-      } else {
-        newRel = HiveAntiJoin.getAntiJoin(frame.r.getCluster(), frame.r.getTraitSet(),
-                join.getLeft(), join.getRight(), condition);
-      }
-
-      return register(rel, newRel, frame.oldToNewOutputs, frame.corDefOutputs);
-    }
     // Replace the filter expression to reference output of the join
     // Map filter to the new filter over join
-    relBuilder.push(frame.r).filter(
-        (decorrelateExpr(rel.getCondition(), valueGenerator)));
+    relBuilder.push(frame.r).filter(decorrelateExpr(rel.getCondition()));
+
+
     // Filter does not change the input ordering.
     // Filter rel does not permute the input.
     // All corvars produced by filter will have the same output positions in the
     // input rel.
     return register(rel, relBuilder.build(), frame.oldToNewOutputs,
-        frame.corDefOutputs);
+            frame.corDefOutputs);
   }
 
   /**
@@ -1235,20 +1311,15 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     final RelNode oldLeft = rel.getInput(0);
     final RelNode oldRight = rel.getInput(1);
 
-    boolean mightRequireValueGen = new findIfValueGenRequired().traverse(oldRight);
-    valueGen.push(mightRequireValueGen);
-
     final Frame leftFrame = getInvoke(oldLeft, rel);
     final Frame rightFrame = getInvoke(oldRight, rel);
 
     if (leftFrame == null || rightFrame == null) {
       // If any input has not been rewritten, do not rewrite this rel.
-      valueGen.pop();
       return null;
     }
 
     if (rightFrame.corDefOutputs.isEmpty()) {
-      valueGen.pop();
       return null;
     }
 
@@ -1276,21 +1347,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       }
       final int newLeftPos = leftFrame.oldToNewOutputs.get(corDef.field);
       final int newRightPos = rightOutput.getValue();
-      SqlOperator callOp = corDef.getPredicateKind() == null ?
-          SqlStdOperatorTable.EQUALS: corDef.getPredicateKind();
-      if(corDef.isLeft) {
-        conditions.add(
-            rexBuilder.makeCall(callOp,
-                RexInputRef.of(newLeftPos, newLeftOutput),
-                new RexInputRef(newLeftFieldCount + newRightPos,
-                    newRightOutput.get(newRightPos).getType())));
-      } else {
-        conditions.add(
-            rexBuilder.makeCall(callOp,
-                new RexInputRef(newLeftFieldCount + newRightPos,
-                    newRightOutput.get(newRightPos).getType()),
-                RexInputRef.of(newLeftPos, newLeftOutput)));
-      }
+      conditions.add(
+              rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                      RexInputRef.of(newLeftPos, newLeftOutput),
+                      new RexInputRef(newLeftFieldCount + newRightPos,
+                              newRightOutput.get(newRightPos).getType())));
 
       // remove this cor var from output position mapping
       corDefOutputs.remove(corDef);
@@ -1314,61 +1375,29 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     int oldLeftFieldCount = oldLeft.getRowType().getFieldCount();
 
     int oldRightFieldCount = oldRight.getRowType().getFieldCount();
+    assert rel.getRowType().getFieldCount()
+            == oldLeftFieldCount + oldRightFieldCount;
 
     // Left input positions are not changed.
     mapOldToNewOutputs.putAll(leftFrame.oldToNewOutputs);
 
-
-    final RexNode condition =
-        RexUtil.composeConjunction(rexBuilder, conditions, false);
-    RelNode newJoin = null;
-
-    // this indicates original query was either correlated EXISTS or IN
-    if(rel.getJoinType() == JoinRelType.SEMI || rel.getJoinType() == JoinRelType.ANTI) {
-      final List<Integer> leftKeys = new ArrayList<Integer>();
-      final List<Integer> rightKeys = new ArrayList<Integer>();
-
-      RelNode[] inputRels = new RelNode[] {leftFrame.r, rightFrame.r};
-      if (rel.getJoinType() == JoinRelType.ANTI) {
-        newJoin = HiveAntiJoin.getAntiJoin(rel.getCluster(),
-                rel.getCluster().traitSetOf(HiveRelNode.CONVENTION), leftFrame.r, rightFrame.r, condition);
-      } else {
-        newJoin = HiveSemiJoin.getSemiJoin(rel.getCluster(),
-                rel.getCluster().traitSetOf(HiveRelNode.CONVENTION), leftFrame.r, rightFrame.r, condition);
-      }
-    } else {
-      // Right input positions are shifted by newLeftFieldCount.
-      for (int i = 0; i < oldRightFieldCount; i++) {
-        mapOldToNewOutputs.put(
-            i + oldLeftFieldCount,
-            rightFrame.oldToNewOutputs.get(i) + newLeftFieldCount);
-      }
-
-      newJoin = relBuilder.push(leftFrame.r).push(rightFrame.r)
-          .join(rel.getJoinType(), condition).build();
+    // Right input positions are shifted by newLeftFieldCount.
+    for (int i = 0; i < oldRightFieldCount; i++) {
+      mapOldToNewOutputs.put(
+              i + oldLeftFieldCount,
+              rightFrame.oldToNewOutputs.get(i) + newLeftFieldCount);
     }
 
-    valueGen.pop();
+    final RexNode condition =
+            RexUtil.composeConjunction(rexBuilder, conditions, false);
+    RelNode newJoin =
+            LogicalJoin.create(leftFrame.r, rightFrame.r, condition,
+                    ImmutableSet.<CorrelationId>of(), rel.getJoinType().toJoinType());
 
     return register(rel, newJoin, mapOldToNewOutputs, corDefOutputs);
   }
 
-  public Frame decorrelateRel(HiveJoin rel) {
-    return decorrelateRel((Join) rel);
-  }
-
-  public Frame decorrelateRel(Join rel) {
-    // For SEMI/ANTI join decorrelate it's input directly,
-    // because the correlate variables can only be propagated from
-    // the left side, which is not supported yet.
-    if (cm != null && cm.mapRefRelToCorRef != null &&
-      cm.mapRefRelToCorRef.containsKey(rel) && rel.getJoinType().isOuterJoin()) {
-      throw new UnsupportedOperationException("Correlated subqueries in outer join conditions not supported yet." +
-        " Join condition: " + rel.getCondition());
-    }
-    if (!rel.getJoinType().projectsRight()) {
-      return decorrelateRel((RelNode) rel);
-    }
+  public Frame decorrelateRel(HiveJoin rel) throws SemanticException{
     //
     // Rewrite logic:
     //
@@ -1387,8 +1416,65 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       return null;
     }
 
-    final RelNode newJoin = HiveJoin.getJoin(rel.getCluster(), leftFrame.r, rightFrame.r,
-        decorrelateExpr(rel.getCondition()), rel.getJoinType());
+    final RelNode newJoin = HiveJoin.getJoin(rel.getCluster(), leftFrame.r, rightFrame.r, decorrelateExpr(rel.getCondition()), rel.getJoinType() );
+
+    // Create the mapping between the output of the old correlation rel
+    // and the new join rel
+    Map<Integer, Integer> mapOldToNewOutputs = Maps.newHashMap();
+
+    int oldLeftFieldCount = oldLeft.getRowType().getFieldCount();
+    int newLeftFieldCount = leftFrame.r.getRowType().getFieldCount();
+
+    int oldRightFieldCount = oldRight.getRowType().getFieldCount();
+    assert rel.getRowType().getFieldCount()
+            == oldLeftFieldCount + oldRightFieldCount;
+
+    // Left input positions are not changed.
+    mapOldToNewOutputs.putAll(leftFrame.oldToNewOutputs);
+
+    // Right input positions are shifted by newLeftFieldCount.
+    for (int i = 0; i < oldRightFieldCount; i++) {
+      mapOldToNewOutputs.put(i + oldLeftFieldCount,
+              rightFrame.oldToNewOutputs.get(i) + newLeftFieldCount);
+    }
+
+    final SortedMap<CorDef, Integer> corDefOutputs =
+            new TreeMap<>(leftFrame.corDefOutputs);
+
+    // Right input positions are shifted by newLeftFieldCount.
+    for (Map.Entry<CorDef, Integer> entry
+            : rightFrame.corDefOutputs.entrySet()) {
+      corDefOutputs.put(entry.getKey(),
+              entry.getValue() + newLeftFieldCount);
+    }
+    return register(rel, newJoin, mapOldToNewOutputs, corDefOutputs);
+  }
+  /**
+   * Rewrite LogicalJoin.
+   *
+   * @param rel LogicalJoin
+   */
+  public Frame decorrelateRel(LogicalJoin rel) {
+    //
+    // Rewrite logic:
+    //
+    // 1. rewrite join condition.
+    // 2. map output positions and produce cor vars if any.
+    //
+
+    final RelNode oldLeft = rel.getInput(0);
+    final RelNode oldRight = rel.getInput(1);
+
+    final Frame leftFrame = getInvoke(oldLeft, rel);
+    final Frame rightFrame = getInvoke(oldRight, rel);
+
+    if (leftFrame == null || rightFrame == null) {
+      // If any input has not been rewritten, do not rewrite this rel.
+      return null;
+    }
+
+    final RelNode newJoin = HiveJoin.getJoin(rel.getCluster(), leftFrame.r,
+            rightFrame.r, decorrelateExpr(rel.getCondition()), rel.getJoinType() );
 
     // Create the mapping between the output of the old correlation rel
     // and the new join rel
@@ -1426,7 +1512,6 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     assert currentRel != null;
 
     int oldOrdinal = oldInputRef.getIndex();
-    int oldOrdinalNo = oldOrdinal;
     int newOrdinal = 0;
 
     // determine which input rel oldOrdinal references, and adjust
@@ -1473,11 +1558,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * @param join          Join
    * @param project       Original project as the right-hand input of the join
    * @param nullIndicatorPos Position of null indicator
-   * @return the subtree with the new Project at the root
+   * @return the subtree with the new LogicalProject at the root
    */
   private RelNode projectJoinOutputWithNullability(
-          Join join,
-          Project project,
+          LogicalJoin join,
+          LogicalProject project,
           int nullIndicatorPos) {
     final RelDataTypeFactory typeFactory = join.getCluster().getTypeFactory();
     final RelNode left = join.getLeft();
@@ -1519,8 +1604,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       newProjExprs.add(Pair.of(newProjExpr, pair.right));
     }
 
-    return RelOptUtil.createProject(join, Pair.left(newProjExprs), Pair.right(newProjExprs),
-        false, relBuilder);
+    return RelOptUtil.createProject(join, newProjExprs, false);
   }
 
   /**
@@ -1531,14 +1615,14 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * @param project the original project as the RHS input of the join
    * @param isCount Positions which are calls to the <code>COUNT</code>
    *                aggregation function
-   * @return the subtree with the new Project at the root
+   * @return the subtree with the new LogicalProject at the root
    */
   private RelNode aggregateCorrelatorOutput(
           Correlate correlate,
-          Project project,
+          LogicalProject project,
           Set<Integer> isCount) {
     final RelNode left = correlate.getLeft();
-    final JoinRelType joinType = correlate.getJoinType();
+    final JoinRelType joinType = correlate.getJoinType().toJoinType();
 
     // now create the new project
     final List<Pair<RexNode, String>> newProjects = Lists.newArrayList();
@@ -1567,8 +1651,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       newProjects.add(Pair.of(newProjExpr, pair.right));
     }
 
-    return RelOptUtil.createProject(correlate, Pair.left(newProjects), Pair.right(newProjects),
-        false, relBuilder);
+    return RelOptUtil.createProject(correlate, newProjects, false);
   }
 
   /**
@@ -1583,8 +1666,8 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    */
   private boolean checkCorVars(
           LogicalCorrelate correlate,
-          Project project,
-          Filter filter,
+          LogicalProject project,
+          LogicalFilter filter,
           List<RexFieldAccess> correlatedJoinKeys) {
     if (filter != null) {
       assert correlatedJoinKeys != null;
@@ -1628,7 +1711,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
   }
 
   /**
-   * Remove correlated variables from the tree at root corRel.
+   * Remove correlated variables from the tree at root corRel
    *
    * @param correlate Correlator
    */
@@ -1643,7 +1726,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    *
    * @param input        Input relational expression
    * @param additionalExprs Additional expressions and names
-   * @return the new Project
+   * @return the new LogicalProject
    */
   private RelNode createProjectWithAdditionalExprs(
           RelNode input,
@@ -1659,8 +1742,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
                       field.e.getName()));
     }
     projects.addAll(additionalExprs);
-    return RelOptUtil.createProject(input, Pair.left(projects), Pair.right(projects),
-        false, relBuilder);
+    return RelOptUtil.createProject(input, projects, false);
   }
 
   /* Returns an immutable map with the identity [0: 0, .., count-1: count-1]. */
@@ -1704,67 +1786,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
   /** Shuttle that decorrelates. */
   private class DecorrelateRexShuttle extends RexShuttle {
-    private boolean valueGenerator;
-    public void setValueGenerator(boolean valueGenerator) {
-      this.valueGenerator = valueGenerator;
-    }
-
-    @Override  public RexNode visitCall(final RexCall call) {
-      if (Bug.CALCITE_1851_FIXED) {
-        throw new AssertionError("Overriding should be removed");
-      }
-      if (valueGenerator) {
-        return super.visitCall(call);
-      }
-      switch (call.getKind()) {
-      case EQUALS:
-      case NOT_EQUALS:
-      case GREATER_THAN:
-      case GREATER_THAN_OR_EQUAL:
-      case LESS_THAN:
-      case LESS_THAN_OR_EQUAL:
-        // Expressions of the form OP(cor.col1, $4) are transformed to OP($4, $4) where OP in (<,<=,=,>,>=,<>).
-        // OP($4, $4) can be further simplified to TRUE/FALSE (e.g., $4 <> $4) that is wrong and messes up the tree.
-        // To prevent this simplifications we rewrite OP($4, $4) to IS_NOT_NULL($4).
-        // This should be done only for correlated predicates and not user specified explicit predicates  
-        if (hasCorrelation(call)) {
-          List<RexNode> ops = visitList(call.operands, new boolean[] { false });
-          assert ops.size() == 2;
-          RexNode o0 = ops.get(0);
-          RexNode o1 = ops.get(1);
-          if (o0.equals(o1)) {
-            return relBuilder.call(SqlStdOperatorTable.IS_NOT_NULL, o0);
-          } else {
-            return relBuilder.call(call.getOperator(), ops);
-          }
-        }
-      default:
-        return super.visitCall(call);
-      }
-    }
-
-    private boolean hasCorrelation(RexCall call) {
-      for (RexNode n : call.operands) {
-        if (n instanceof RexFieldAccess && cm.mapFieldAccessToCorRef.containsKey(n)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    
     @Override public RexNode visitFieldAccess(RexFieldAccess fieldAccess) {
-      return decorrFieldAccess(fieldAccess);
-    }
-
-    @Override public RexNode visitInputRef(RexInputRef inputRef) {
-      final RexInputRef ref = getNewForOldInputRef(inputRef);
-      if (ref.getIndex() == inputRef.getIndex()
-              && ref.getType() == inputRef.getType()) {
-        return inputRef; // re-use old object, to prevent needless expr cloning
-      }
-      return ref;
-    }
-    private RexNode decorrFieldAccess(RexFieldAccess fieldAccess) {
       int newInputOutputOffset = 0;
       for (RelNode input : currentRel.getInputs()) {
         final Frame frame = map.get(input);
@@ -1779,7 +1801,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
               // This input rel does produce the cor var referenced.
               // Assume fieldAccess has the correct type info.
               return new RexInputRef(newInputPos + newInputOutputOffset,
-                  frame.r.getRowType().getFieldList().get(newInputPos)
+                      frame.r.getRowType().getFieldList().get(newInputPos)
                       .getType());
             }
           }
@@ -1793,17 +1815,26 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       }
       return fieldAccess;
     }
+
+    @Override public RexNode visitInputRef(RexInputRef inputRef) {
+      final RexInputRef ref = getNewForOldInputRef(inputRef);
+      if (ref.getIndex() == inputRef.getIndex()
+              && ref.getType() == inputRef.getType()) {
+        return inputRef; // re-use old object, to prevent needless expr cloning
+      }
+      return ref;
+    }
   }
 
   /** Shuttle that removes correlations. */
   private class RemoveCorrelationRexShuttle extends RexShuttle {
-    private final RexBuilder rexBuilder;
-    private final RelDataTypeFactory typeFactory;
-    private final boolean projectPulledAboveLeftCorrelator;
-    private final RexInputRef nullIndicator;
-    private final ImmutableSet<Integer> isCount;
+    final RexBuilder rexBuilder;
+    final RelDataTypeFactory typeFactory;
+    final boolean projectPulledAboveLeftCorrelator;
+    final RexInputRef nullIndicator;
+    final ImmutableSet<Integer> isCount;
 
-    RemoveCorrelationRexShuttle(
+    public RemoveCorrelationRexShuttle(
             RexBuilder rexBuilder,
             boolean projectPulledAboveLeftCorrelator,
             RexInputRef nullIndicator,
@@ -1952,6 +1983,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
           }
         }
 
+        final RelDataType newType;
         if (!isSpecialCast) {
           // TODO: ideally this only needs to be called if the result
           // type will also change. However, since that requires
@@ -1959,11 +1991,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
           // decides return type based on input types, for now all
           // operators will be recreated with new type if any operand
           // changed, unless the operator has "built-in" type.
-          newCall = rexBuilder.ensureType(
-              call.getType(),
-              rexBuilder.makeCall(
-                  rexBuilder.deriveReturnType(operator, clonedOperands), operator, clonedOperands),
-              true);
+          newType = rexBuilder.deriveReturnType(operator, clonedOperands);
         } else {
           // Use the current return type when creating a new call, for
           // operators with return type built into the operator
@@ -1973,12 +2001,13 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
           // TODO: Comments in RexShuttle.visitCall() mention other
           // types in this category. Need to resolve those together
           // and preferably in the base class RexShuttle.
-          newCall =
-              rexBuilder.makeCall(
-                  call.getType(),
-                  operator,
-                  clonedOperands);
+          newType = call.getType();
         }
+        newCall =
+                rexBuilder.makeCall(
+                        newType,
+                        operator,
+                        clonedOperands);
       } else {
         newCall = call;
       }
@@ -2000,20 +2029,19 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * AggRel single group</blockquote>
    */
   private final class RemoveSingleAggregateRule extends RelOptRule {
-    RemoveSingleAggregateRule() {
+    public RemoveSingleAggregateRule() {
       super(
               operand(
-                      Aggregate.class,
+                      LogicalAggregate.class,
                       operand(
-                              Project.class,
-                              operand(Aggregate.class, any()))));
+                              LogicalProject.class,
+                              operand(LogicalAggregate.class, any()))));
     }
 
-    @Override
     public void onMatch(RelOptRuleCall call) {
-      Aggregate singleAggregate = call.rel(0);
-      Project project = call.rel(1);
-      Aggregate aggregate = call.rel(2);
+      LogicalAggregate singleAggregate = call.rel(0);
+      LogicalProject project = call.rel(1);
+      LogicalAggregate aggregate = call.rel(2);
 
       // check singleAggRel is single_value agg
       if ((!singleAggregate.getGroupSet().isEmpty())
@@ -2039,32 +2067,35 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       // singleAggRel produces a nullable type, so create the new
       // projection that casts proj expr to a nullable type.
       final RelOptCluster cluster = project.getCluster();
-      RelNode newProject = RelOptUtil.createProject(aggregate,
-          ImmutableList.of(rexBuilder.makeCast(
-                  cluster.getTypeFactory().createTypeWithNullability(projExprs.get(0).getType(), true),
-                  projExprs.get(0))),
-          null, false, relBuilder);
+      RelNode newProject =
+              RelOptUtil.createProject(aggregate,
+                      ImmutableList.of(
+                              rexBuilder.makeCast(
+                                      cluster.getTypeFactory().createTypeWithNullability(
+                                              projExprs.get(0).getType(),
+                                              true),
+                                      projExprs.get(0))),
+                      null);
       call.transformTo(newProject);
     }
   }
 
   /** Planner rule that removes correlations for scalar projects. */
   private final class RemoveCorrelationForScalarProjectRule extends RelOptRule {
-    RemoveCorrelationForScalarProjectRule() {
+    public RemoveCorrelationForScalarProjectRule() {
       super(
               operand(LogicalCorrelate.class,
                       operand(RelNode.class, any()),
-                      operand(Aggregate.class,
-                              operand(Project.class,
+                      operand(LogicalAggregate.class,
+                              operand(LogicalProject.class,
                                       operand(RelNode.class, any())))));
     }
 
-    @Override
     public void onMatch(RelOptRuleCall call) {
       final LogicalCorrelate correlate = call.rel(0);
       final RelNode left = call.rel(1);
-      final Aggregate aggregate = call.rel(2);
-      final Project project = call.rel(3);
+      final LogicalAggregate aggregate = call.rel(2);
+      final LogicalProject project = call.rel(3);
       RelNode right = call.rel(4);
       final RelOptCluster cluster = correlate.getCluster();
 
@@ -2076,13 +2107,10 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       //
       // CorrelateRel(left correlation, condition = true)
       //   LeftInputRel
-      //   Aggregate (groupby (0) single_value())
-      //     Project-A (may reference coVar)
+      //   LogicalAggregate (groupby (0) single_value())
+      //     LogicalProject-A (may reference coVar)
       //       RightInputRel
-      if(correlate.getJoinType() != JoinRelType.LEFT) {
-        return;
-      }
-      final JoinRelType joinType = correlate.getJoinType();
+      final JoinRelType joinType = correlate.getJoinType().toJoinType();
 
       // corRel.getCondition was here, however Correlate was updated so it
       // never includes a join condition. The code was not modified for brevity.
@@ -2109,18 +2137,18 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
       int nullIndicatorPos;
 
-      if ((right instanceof Filter)
+      if ((right instanceof LogicalFilter)
               && cm.mapRefRelToCorRef.containsKey(right)) {
         // rightInputRel has this shape:
         //
-        //       Filter (references corvar)
+        //       LogicalFilter (references corvar)
         //         FilterInputRel
 
         // If rightInputRel is a filter and contains correlated
         // reference, make sure the correlated keys in the filter
         // condition forms a unique key of the RHS.
 
-        Filter filter = (Filter) right;
+        LogicalFilter filter = (LogicalFilter) right;
         right = filter.getInput();
 
         assert right instanceof HepRelVertex;
@@ -2140,7 +2168,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         // refs. These comparisons are AND'ed together.
         List<RexNode> tmpRightJoinKeys = Lists.newArrayList();
         List<RexNode> correlatedJoinKeys = Lists.newArrayList();
-        HiveRelOptUtil.splitCorrelatedFilterCondition(
+        RelOptUtil.splitCorrelatedFilterCondition(
                 filter,
                 tmpRightJoinKeys,
                 correlatedJoinKeys,
@@ -2162,7 +2190,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
         // The join filters out the nulls.  So, it's ok if there are
         // nulls in the join keys.
-        final RelMetadataQuery mq = call.getMetadataQuery();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         if (!RelMdUtil.areColumnsDefinitelyUniqueWhenNullsFiltered(mq, right,
                 rightJoinKeys)) {
           //SQL2REL_LOGGER.fine(rightJoinKeys.toString()
@@ -2184,8 +2212,8 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         // Change the plan to this structure.
         // Note that the aggregateRel is removed.
         //
-        // Project-A' (replace corvar to input ref from the Join)
-        //   Join (replace corvar to input ref from LeftInputRel)
+        // LogicalProject-A' (replace corvar to input ref from the LogicalJoin)
+        //   LogicalJoin (replace corvar to input ref from LeftInputRel)
         //     LeftInputRel
         //     RightInputRel(oreviously FilterInputRel)
 
@@ -2208,11 +2236,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
         // Change the plan to this structure.
         //
-        // Project-A' (replace corvar to input ref from Join)
-        //   Join (left, condition = true)
+        // LogicalProject-A' (replace corvar to input ref from LogicalJoin)
+        //   LogicalJoin (left, condition = true)
         //     LeftInputRel
-        //     Aggregate(groupby(0), single_value(0), s_v(1)....)
-        //       Project-B (everything from input plus literal true)
+        //     LogicalAggregate(groupby(0), single_value(0), s_v(1)....)
+        //       LogicalProject-B (everything from input plus literal true)
         //         ProjInputRel
 
         // make the new projRel to provide a null indicator
@@ -2224,7 +2252,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
         // make the new aggRel
         right =
-                HiveRelOptUtil.createSingleValueAggRel(cluster, right, HiveRelFactories.HIVE_AGGREGATE_FACTORY);
+                RelOptUtil.createSingleValueAggRel(cluster, right);
 
         // The last field:
         //     single_value(true)
@@ -2237,8 +2265,9 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       }
 
       // make the new join rel
-      Join join = (Join) relBuilder.push(left).push(right)
-          .join(joinType, joinCond).build();
+      LogicalJoin join =
+              LogicalJoin.create(left, right, joinCond,
+                      ImmutableSet.<CorrelationId>of(), joinType);
 
       RelNode newProject =
               projectJoinOutputWithNullability(join, project, nullIndicatorPos);
@@ -2252,23 +2281,22 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
   /** Planner rule that removes correlations for scalar aggregates. */
   private final class RemoveCorrelationForScalarAggregateRule
           extends RelOptRule {
-    RemoveCorrelationForScalarAggregateRule() {
+    public RemoveCorrelationForScalarAggregateRule() {
       super(
               operand(LogicalCorrelate.class,
                       operand(RelNode.class, any()),
-                      operand(Project.class,
-                              operandJ(Aggregate.class, null, Aggregate::isSimple,
-                                      operand(Project.class,
+                      operand(LogicalProject.class,
+                              operand(LogicalAggregate.class, null, Aggregate.IS_SIMPLE,
+                                      operand(LogicalProject.class,
                                               operand(RelNode.class, any()))))));
     }
 
-    @Override
     public void onMatch(RelOptRuleCall call) {
       final LogicalCorrelate correlate = call.rel(0);
       final RelNode left = call.rel(1);
-      final Project aggOutputProject = call.rel(2);
-      final Aggregate aggregate = call.rel(3);
-      final Project aggInputProject = call.rel(4);
+      final LogicalProject aggOutputProject = call.rel(2);
+      final LogicalAggregate aggregate = call.rel(3);
+      final LogicalProject aggInputProject = call.rel(4);
       RelNode right = call.rel(5);
       final RelOptCluster cluster = correlate.getCluster();
 
@@ -2280,9 +2308,9 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       //
       // CorrelateRel(left correlation, condition = true)
       //   LeftInputRel
-      //   Project-A (a RexNode)
-      //     Aggregate (groupby (0), agg0(), agg1()...)
-      //       Project-B (references coVar)
+      //   LogicalProject-A (a RexNode)
+      //     LogicalAggregate (groupby (0), agg0(), agg1()...)
+      //       LogicalProject-B (references coVar)
       //         rightInputRel
 
       // check aggOutputProject projects only one expression
@@ -2291,11 +2319,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         return;
       }
 
-      if(correlate.getJoinType() != JoinRelType.LEFT) {
-        return;
-      }
-
-      final JoinRelType joinType = correlate.getJoinType();
+      final JoinRelType joinType = correlate.getJoinType().toJoinType();
       // corRel.getCondition was here, however Correlate was updated so it
       // never includes a join condition. The code was not modified for brevity.
       RexNode joinCond = rexBuilder.makeLiteral(true);
@@ -2325,13 +2349,13 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         }
       }
 
-      if ((right instanceof Filter)
+      if ((right instanceof LogicalFilter)
               && cm.mapRefRelToCorRef.containsKey(right)) {
         // rightInputRel has this shape:
         //
-        //       Filter (references corvar)
+        //       LogicalFilter (references corvar)
         //         FilterInputRel
-        Filter filter = (Filter) right;
+        LogicalFilter filter = (LogicalFilter) right;
         right = filter.getInput();
 
         assert right instanceof HepRelVertex;
@@ -2352,7 +2376,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         // expressions. These comparisons are AND'ed together.
         List<RexNode> rightJoinKeys = Lists.newArrayList();
         List<RexNode> tmpCorrelatedJoinKeys = Lists.newArrayList();
-        HiveRelOptUtil.splitCorrelatedFilterCondition(
+        RelOptUtil.splitCorrelatedFilterCondition(
                 filter,
                 rightJoinKeys,
                 tmpCorrelatedJoinKeys,
@@ -2381,7 +2405,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
         // The join filters out the nulls.  So, it's ok if there are
         // nulls in the join keys.
-        final RelMetadataQuery mq = call.getMetadataQuery();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         if (!RelMdUtil.areColumnsDefinitelyUniqueWhenNullsFiltered(mq, left,
                 correlatedInputRefJoinKeys)) {
           //SQL2REL_LOGGER.fine(correlatedJoinKeys.toString()
@@ -2402,21 +2426,21 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         //
         // CorrelateRel(left correlation, condition = true)
         //   LeftInputRel
-        //   Project-A (a RexNode)
-        //     Aggregate (groupby(0), agg0(),agg1()...)
-        //       Project-B (may reference coVar)
-        //         Filter (references corVar)
+        //   LogicalProject-A (a RexNode)
+        //     LogicalAggregate (groupby(0), agg0(),agg1()...)
+        //       LogicalProject-B (may reference coVar)
+        //         LogicalFilter (references corVar)
         //           RightInputRel (no correlated reference)
         //
 
         // to this plan:
         //
-        // Project-A' (all gby keys + rewritten nullable ProjExpr)
-        //   Aggregate (groupby(all left input refs)
+        // LogicalProject-A' (all gby keys + rewritten nullable ProjExpr)
+        //   LogicalAggregate (groupby(all left input refs)
         //                 agg0(rewritten expression),
         //                 agg1()...)
-        //     Project-B' (rewriten original projected exprs)
-        //       Join(replace corvar w/ input ref from LeftInputRel)
+        //     LogicalProject-B' (rewriten original projected exprs)
+        //       LogicalJoin(replace corvar w/ input ref from LeftInputRel)
         //         LeftInputRel
         //         RightInputRel
         //
@@ -2428,14 +2452,14 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         // projection list from the RHS for simplicity to avoid
         // searching for non-null fields.
         //
-        // Project-A' (all gby keys + rewritten nullable ProjExpr)
-        //   Aggregate (groupby(all left input refs),
+        // LogicalProject-A' (all gby keys + rewritten nullable ProjExpr)
+        //   LogicalAggregate (groupby(all left input refs),
         //                 count(nullIndicator), other aggs...)
-        //     Project-B' (all left input refs plus
+        //     LogicalProject-B' (all left input refs plus
         //                    the rewritten original projected exprs)
-        //       Join(replace corvar to input ref from LeftInputRel)
+        //       LogicalJoin(replace corvar to input ref from LeftInputRel)
         //         LeftInputRel
-        //         Project (everything from RightInputRel plus
+        //         LogicalProject (everything from RightInputRel plus
         //                     the nullIndicator "true")
         //           RightInputRel
         //
@@ -2460,7 +2484,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         // leftInputRel contains unique keys
         // i.e. each row is distinct and can group by on all the left
         // fields
-        final RelMetadataQuery mq = call.getMetadataQuery();
+        final RelMetadataQuery mq = RelMetadataQuery.instance();
         if (!RelMdUtil.areColumnsDefinitelyUnique(mq, left, allCols)) {
           //SQL2REL_LOGGER.fine("There are no unique keys for " + left);
           return;
@@ -2470,20 +2494,20 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         //
         // CorrelateRel(left correlation, condition = true)
         //   LeftInputRel
-        //   Project-A (a RexNode)
-        //     Aggregate (groupby(0), agg0(), agg1()...)
-        //       Project-B (references coVar)
+        //   LogicalProject-A (a RexNode)
+        //     LogicalAggregate (groupby(0), agg0(), agg1()...)
+        //       LogicalProject-B (references coVar)
         //         RightInputRel (no correlated reference)
         //
 
         // to this plan:
         //
-        // Project-A' (all gby keys + rewritten nullable ProjExpr)
-        //   Aggregate (groupby(all left input refs)
+        // LogicalProject-A' (all gby keys + rewritten nullable ProjExpr)
+        //   LogicalAggregate (groupby(all left input refs)
         //                 agg0(rewritten expression),
         //                 agg1()...)
-        //     Project-B' (rewriten original projected exprs)
-        //       Join (LOJ cond = true)
+        //     LogicalProject-B' (rewriten original projected exprs)
+        //       LogicalJoin (LOJ cond = true)
         //         LeftInputRel
         //         RightInputRel
         //
@@ -2495,14 +2519,14 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         // projection list from the RHS for simplicity to avoid
         // searching for non-null fields.
         //
-        // Project-A' (all gby keys + rewritten nullable ProjExpr)
-        //   Aggregate (groupby(all left input refs),
+        // LogicalProject-A' (all gby keys + rewritten nullable ProjExpr)
+        //   LogicalAggregate (groupby(all left input refs),
         //                 count(nullIndicator), other aggs...)
-        //     Project-B' (all left input refs plus
+        //     LogicalProject-B' (all left input refs plus
         //                    the rewritten original projected exprs)
-        //       Join(replace corvar to input ref from LeftInputRel)
+        //       LogicalJoin(replace corvar to input ref from LeftInputRel)
         //         LeftInputRel
-        //         Project (everything from RightInputRel plus
+        //         LogicalProject (everything from RightInputRel plus
         //                     the nullIndicator "true")
         //           RightInputRel
       } else {
@@ -2520,8 +2544,9 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
                               Pair.<RexNode, String>of(rexBuilder.makeLiteral(true),
                                       "nullIndicator")));
 
-      Join join = (Join) relBuilder.push(left).push(right)
-          .join(joinType, joinCond).build();
+      LogicalJoin join =
+              LogicalJoin.create(left, right, joinCond,
+                      ImmutableSet.<CorrelationId>of(), joinType);
 
       // To the consumer of joinOutputProjRel, nullIndicator is located
       // at the end
@@ -2555,8 +2580,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       joinOutputProjects.add(
               rexBuilder.makeInputRef(join, nullIndicatorPos));
 
-      RelNode joinOutputProject = RelOptUtil.createProject(
-          join, joinOutputProjects, null, false, relBuilder);
+      RelNode joinOutputProject =
+              RelOptUtil.createProject(
+                      join,
+                      joinOutputProjects,
+                      null);
 
       // nullIndicator is now at a different location in the output of
       // the join
@@ -2591,9 +2619,12 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
       ImmutableBitSet groupSet =
               ImmutableBitSet.range(groupCount);
-      Aggregate newAggregate =
-          (Aggregate) relBuilder.push(joinOutputProject)
-              .aggregate(relBuilder.groupKey(groupSet, null), newAggCalls).build();
+      LogicalAggregate newAggregate =
+              LogicalAggregate.create(joinOutputProject,
+                      false,
+                      groupSet,
+                      null,
+                      newAggCalls);
 
       List<RexNode> newAggOutputProjectList = Lists.newArrayList();
       for (int i : groupSet) {
@@ -2610,8 +2641,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
                               true),
                       newAggOutputProjects));
 
-      RelNode newAggOutputProject = RelOptUtil.createProject(
-          newAggregate, newAggOutputProjectList, null, false, relBuilder);
+      RelNode newAggOutputProject =
+              RelOptUtil.createProject(
+                      newAggregate,
+                      newAggOutputProjectList,
+                      null);
 
       call.transformTo(newAggOutputProject);
 
@@ -2629,27 +2663,26 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
   /** Planner rule that adjusts projects when counts are added. */
   private final class AdjustProjectForCountAggregateRule extends RelOptRule {
-    private final boolean flavor;
+    final boolean flavor;
 
-    AdjustProjectForCountAggregateRule(boolean flavor) {
+    public AdjustProjectForCountAggregateRule(boolean flavor) {
       super(
               flavor
                       ? operand(LogicalCorrelate.class,
                       operand(RelNode.class, any()),
-                      operand(Project.class,
-                              operand(Aggregate.class, any())))
+                      operand(LogicalProject.class,
+                              operand(LogicalAggregate.class, any())))
                       : operand(LogicalCorrelate.class,
                       operand(RelNode.class, any()),
-                      operand(Aggregate.class, any())));
+                      operand(LogicalAggregate.class, any())));
       this.flavor = flavor;
     }
 
-    @Override
     public void onMatch(RelOptRuleCall call) {
       final LogicalCorrelate correlate = call.rel(0);
       final RelNode left = call.rel(1);
-      final Project aggOutputProject;
-      final Aggregate aggregate;
+      final LogicalProject aggOutputProject;
+      final LogicalAggregate aggregate;
       if (flavor) {
         aggOutputProject = call.rel(2);
         aggregate = call.rel(3);
@@ -2663,8 +2696,11 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         for (int i = 0; i < fields.size(); i++) {
           projects.add(RexInputRef.of2(projects.size(), fields));
         }
-        aggOutputProject = (Project) RelOptUtil.createProject(
-            aggregate, Pair.left(projects), Pair.right(projects), false, relBuilder);
+        aggOutputProject =
+                (LogicalProject) RelOptUtil.createProject(
+                        aggregate,
+                        projects,
+                        false);
       }
       onMatch2(call, correlate, left, aggOutputProject, aggregate);
     }
@@ -2673,8 +2709,8 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
             RelOptRuleCall call,
             LogicalCorrelate correlate,
             RelNode leftInput,
-            Project aggOutputProject,
-            Aggregate aggregate) {
+            LogicalProject aggOutputProject,
+            LogicalAggregate aggregate) {
       if (generatedCorRels.contains(correlate)) {
         // This correlator was generated by a previous invocation of
         // this rule. No further work to do.
@@ -2689,8 +2725,8 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       //
       // CorrelateRel(left correlation, condition = true)
       //   LeftInputRel
-      //   Project-A (a RexNode)
-      //     Aggregate (groupby (0), agg0(), agg1()...)
+      //   LogicalProject-A (a RexNode)
+      //     LogicalAggregate (groupby (0), agg0(), agg1()...)
 
       // check aggOutputProj projects only one expression
       List<RexNode> aggOutputProjExprs = aggOutputProject.getProjects();
@@ -2698,11 +2734,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         return;
       }
 
-      if(correlate.getJoinType() != JoinRelType.LEFT) {
-        return;
-      }
-
-      JoinRelType joinType = correlate.getJoinType();
+      JoinRelType joinType = correlate.getJoinType().toJoinType();
       // corRel.getCondition was here, however Correlate was updated so it
       // never includes a join condition. The code was not modified for brevity.
       RexNode joinCond = rexBuilder.makeLiteral(true);
@@ -2734,7 +2766,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       //             replacing references to count() with case statement)
       //   Correlator(left correlation, condition = true)
       //     LeftInputRel
-      //     Aggregate (groupby (0), agg0(), agg1()...)
+      //     LogicalAggregate (groupby (0), agg0(), agg1()...)
       //
       LogicalCorrelate newCorrelate =
               LogicalCorrelate.create(leftInput, aggregate,
@@ -2769,9 +2801,9 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * {@link CorRef#uniqueKey}.
    */
   static class CorRef implements Comparable<CorRef> {
-    private final int uniqueKey;
-    private final CorrelationId corr;
-    private final int field;
+    public final int uniqueKey;
+    public final CorrelationId corr;
+    public final int field;
 
     CorRef(CorrelationId corr, int field, int uniqueKey) {
       this.corr = corr;
@@ -2795,7 +2827,6 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
           && field == ((CorRef) o).field;
     }
 
-    @Override
     public int compareTo(@Nonnull CorRef o) {
       int c = corr.compareTo(o.corr);
       if (c != 0) {
@@ -2815,20 +2846,12 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
 
   /** A correlation and a field. */
   static class CorDef implements Comparable<CorDef> {
-    private final CorrelationId corr;
-    private final int field;
-
-    private SqlOperator predicateKind;
-    // this indicates if corr var is left operand of rex call or not
-    // this is used in decorrelate(logical correlate) to appropriately
-    // create Rex node expression
-    private boolean isLeft;
+    public final CorrelationId corr;
+    public final int field;
 
     CorDef(CorrelationId corr, int field) {
       this.corr = corr;
       this.field = field;
-      this.predicateKind = null;
-      this.isLeft=false;
     }
 
     @Override public String toString() {
@@ -2846,7 +2869,6 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
           && field == ((CorDef) o).field;
     }
 
-    @Override
     public int compareTo(@Nonnull CorDef o) {
       int c = corr.compareTo(o.corr);
       if (c != 0) {
@@ -2854,24 +2876,6 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       }
       return Integer.compare(field, o.field);
     }
-
-    public SqlOperator getPredicateKind() {
-      return predicateKind;
-    }
-
-    public void setPredicateKind(SqlOperator predKind) {
-      this.predicateKind = predKind;
-
-    }
-
-    public boolean getIsLeft() {
-      return this.isLeft;
-    }
-
-    public void setIsLeft(boolean isLeft) {
-      this.isLeft = isLeft;
-    }
-
   }
 
   /** A map of the locations of
@@ -2895,7 +2899,7 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * updated.
    *
    * </ol> */
-  private static final class CorelMap {
+  private static class CorelMap {
     private final Multimap<RelNode, CorRef> mapRefRelToCorRef;
     private final SortedMap<CorrelationId, RelNode> mapCorToCorRel;
     private final Map<RexFieldAccess, CorRef> mapFieldAccessToCorRef;
@@ -2949,90 +2953,27 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
     }
   }
 
-  private static class findIfValueGenRequired extends HiveRelShuttleImpl {
-    private boolean mightRequireValueGen;
-    findIfValueGenRequired() {
-      this.mightRequireValueGen = true;
-    }
-
-    private boolean hasRexOver(List<RexNode> projects) {
-      for(RexNode expr : projects) {
-        if(expr instanceof  RexOver) {
-          return true;
-        }
-      }
-      return false;
-    }
-    @Override public RelNode visit(HiveJoin rel) {
-      mightRequireValueGen = true;
-      return rel;
-    }
-    public RelNode visit(HiveSortLimit rel) {
-      mightRequireValueGen = true;
-      return rel;
-    }
-    public RelNode visit(HiveUnion rel) {
-      mightRequireValueGen = true;
-      return rel;
-    }
-    public RelNode visit(HiveIntersect rel) {
-      mightRequireValueGen = true;
-      return rel;
-    }
-    @Override public RelNode visit(HiveProject rel) {
-      if(!(hasRexOver(rel.getProjects()))) {
-        mightRequireValueGen = false;
-        return super.visit(rel);
-      } else {
-        mightRequireValueGen = true;
-        return rel;
-      }
-    }
-    @Override public RelNode visit(HiveAggregate rel) {
-      // if there are aggregate functions or grouping sets we will need
-      // value generator
-      if(rel.getAggCallList().isEmpty() && !rel.indicator) {
-        this.mightRequireValueGen = false;
-        return super.visit(rel);
-      } else {
-        // need to reset to true in case previous aggregate/project
-        // has set it to false
-        this.mightRequireValueGen = true;
-        return rel;
-      }
-    }
-    @Override public RelNode visit(LogicalCorrelate rel) {
-      // this means we are hitting nested subquery so don't
-      // need to go further
-      return rel;
-    }
-
-    public boolean traverse(RelNode root) {
-      root.accept(this);
-      return mightRequireValueGen;
-    }
-  }
   /** Builds a {@link org.apache.calcite.sql2rel.RelDecorrelator.CorelMap}. */
   private static class CorelMapBuilder extends HiveRelShuttleImpl {
-    private final SortedMap<CorrelationId, RelNode> mapCorToCorRel =
+    final SortedMap<CorrelationId, RelNode> mapCorToCorRel =
         new TreeMap<>();
 
-    private final SortedSetMultimap<RelNode, CorRef> mapRefRelToCorRef =
+    final SortedSetMultimap<RelNode, CorRef> mapRefRelToCorRef =
         Multimaps.newSortedSetMultimap(
             new HashMap<RelNode, Collection<CorRef>>(),
             new Supplier<TreeSet<CorRef>>() {
-              @Override
               public TreeSet<CorRef> get() {
+                Bug.upgrade("use MultimapBuilder when we're on Guava-16");
                 return Sets.newTreeSet();
               }
             });
 
-    private final Map<RexFieldAccess, CorRef> mapFieldAccessToCorVar = new HashMap<>();
+    final Map<RexFieldAccess, CorRef> mapFieldAccessToCorVar = new HashMap<>();
 
-    private final Holder<Integer> offset = Holder.of(0);
-    private int corrIdGenerator = 0;
+    final Holder<Integer> offset = Holder.of(0);
+    int corrIdGenerator = 0;
 
-    private final List<RelNode> stack = new ArrayList<>();
+    final List<RelNode> stack = new ArrayList<>();
 
     /** Creates a CorelMap by iterating over a {@link RelNode} tree. */
     CorelMap build(RelNode rel) {
@@ -3041,7 +2982,16 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
               mapFieldAccessToCorVar);
     }
 
-    @Override
+    @Override public RelNode visit(LogicalJoin join) {
+      try {
+        Stacks.push(stack, join);
+        join.getCondition().accept(rexVisitor(join));
+      } finally {
+        Stacks.pop(stack, join);
+      }
+      return visitJoin(join);
+    }
+
     public RelNode visit(HiveJoin join) {
       try {
         Stacks.push(stack, join);
@@ -3071,7 +3021,6 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       return join;
     }
 
-    @Override
     public RelNode visit(final HiveProject project) {
       try {
         Stacks.push(stack, project);
@@ -3083,8 +3032,6 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
       }
       return super.visit(project);
     }
-
-    @Override
     public RelNode visit(final HiveFilter filter) {
       try {
         Stacks.push(stack, filter);
@@ -3093,6 +3040,27 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
         Stacks.pop(stack, filter);
       }
       return super.visit(filter);
+    }
+    @Override public RelNode visit(final LogicalFilter filter) {
+      try {
+        Stacks.push(stack, filter);
+        filter.getCondition().accept(rexVisitor(filter));
+      } finally {
+        Stacks.pop(stack, filter);
+      }
+      return super.visit(filter);
+    }
+
+    @Override public RelNode visit(LogicalProject project) {
+      try {
+        Stacks.push(stack, project);
+        for (RexNode node : project.getProjects()) {
+          node.accept(rexVisitor(project));
+        }
+      } finally {
+        Stacks.pop(stack, project);
+      }
+      return super.visit(project);
     }
 
     private RexVisitorImpl<Void> rexVisitor(final RelNode rel) {
@@ -3131,9 +3099,9 @@ public final class HiveRelDecorrelator implements ReflectiveVisitor {
    * and where to find the output fields and correlation variables
    * among its output fields. */
   static class Frame {
-    private final RelNode r;
-    private final ImmutableSortedMap<CorDef, Integer> corDefOutputs;
-    private final ImmutableSortedMap<Integer, Integer> oldToNewOutputs;
+    final RelNode r;
+    final ImmutableSortedMap<CorDef, Integer> corDefOutputs;
+    final ImmutableSortedMap<Integer, Integer> oldToNewOutputs;
 
     Frame(RelNode oldRel, RelNode r, SortedMap<CorDef, Integer> corDefOutputs,
           Map<Integer, Integer> oldToNewOutputs) {

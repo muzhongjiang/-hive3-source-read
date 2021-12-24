@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -31,24 +31,24 @@ import java.util.Set;
 public class RowSchema implements Serializable {
 
   private static final long serialVersionUID = 1L;
-  private List<ColumnInfo> signature = new ArrayList<ColumnInfo>();
+  private ArrayList<ColumnInfo> signature = new ArrayList<ColumnInfo>();
 
   public RowSchema() {
   }
 
   public RowSchema(RowSchema that) {
-    this.signature = new ArrayList<>(that.signature);
+    this.signature = (ArrayList<ColumnInfo>) that.signature.clone();
   }
 
-  public RowSchema(List<ColumnInfo> signature) {
+  public RowSchema(ArrayList<ColumnInfo> signature) {
     this.signature = signature;
   }
 
-  public void setSignature(List<ColumnInfo> signature) {
+  public void setSignature(ArrayList<ColumnInfo> signature) {
     this.signature = signature;
   }
 
-  public List<ColumnInfo> getSignature() {
+  public ArrayList<ColumnInfo> getSignature() {
     return signature;
   }
 
@@ -65,15 +65,16 @@ public class RowSchema implements Serializable {
     for (ColumnInfo columnInfo: this.signature) {
       if (columnInfo.getTabAlias() == null) {
         if (tabAlias == null) {
-          if(columnInfo.getAlias() != null &&
+          if(columnInfo.getAlias() != null && alias != null &&
                   columnInfo.getAlias().equals(alias)) {
             return columnInfo;
           }
         }
-      } else {
+      }
+      else {
         if (tabAlias != null) {
           if (columnInfo.getTabAlias().equals(tabAlias) &&
-                  columnInfo.getAlias() != null &&
+                  columnInfo.getAlias() != null && alias != null &&
                   columnInfo.getAlias().equals(alias)) {
             return columnInfo;
           }

@@ -68,11 +68,6 @@
 </property>
 
 <property>
-  <name>datanucleus.connectionPool.maxPoolSize</name>
-  <value>4</value>
-</property>
-
-<property>
   <name>hive.exec.local.scratchdir</name>
   <value>${test.tmp.dir}/localscratchdir/</value>
   <description>Local scratch space for Hive jobs</description>
@@ -80,7 +75,7 @@
 
 <property>
   <name>javax.jdo.option.ConnectionURL</name>
-  <value>jdbc:derby:memory:${test.tmp.dir}/junit_metastore_db;create=true</value>
+  <value>jdbc:derby:;databaseName=${test.tmp.dir}/junit_metastore_db;create=true</value>
 </property>
 
 <property>
@@ -278,39 +273,4 @@
   <value>true</value>
 </property>
 
-<property>
-  <name>hive.join.inner.residual</name>
-  <value>true</value>
-</property>
-
-<property>
-  <name>hive.stats.fetch.bitvector</name>
-  <value>true</value>
-</property>
-
-<property>
-  <name>hive.tez.cartesian-product.enabled</name>
-  <value>true</value>
-</property>
-
-<property>
-  <name>yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage</name>
-  <value>99</value>
-</property>
-
-<property>
-  <name>hive.query.results.cache.enabled</name>
-  <value>false</value>
-</property>
-
-<property>
-  <name>hive.query.reexecution.stats.persist.scope</name>
-  <value>query</value>
-</property>
-
-<property>
-  <name>hive.cbo.fallback.strategy</name>
-  <value>TEST</value>
-</property>
-  
 </configuration>

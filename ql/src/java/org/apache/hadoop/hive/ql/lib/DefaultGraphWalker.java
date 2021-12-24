@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -36,7 +36,7 @@ import org.apache.hadoop.hive.ql.parse.SemanticException;
  * (dispatchedList) and a list of operators that are discovered but not yet
  * dispatched
  */
-public class DefaultGraphWalker implements SemanticGraphWalker {
+public class DefaultGraphWalker implements GraphWalker {
 
   /**
    * opStack keeps the nodes that have been visited, but have not been
@@ -55,7 +55,7 @@ public class DefaultGraphWalker implements SemanticGraphWalker {
    */
   protected final List<Node> toWalk = new ArrayList<Node>();
   protected final IdentityHashMap<Node, Object> retMap = new  IdentityHashMap<Node, Object>();
-  protected final SemanticDispatcher dispatcher;
+  protected final Dispatcher dispatcher;
 
   /**
    * Constructor.
@@ -63,7 +63,7 @@ public class DefaultGraphWalker implements SemanticGraphWalker {
    * @param disp
    *          dispatcher to call for each op encountered
    */
-  public DefaultGraphWalker(SemanticDispatcher disp) {
+  public DefaultGraphWalker(Dispatcher disp) {
     dispatcher = disp;
     opStack = new Stack<Node>();
     opQueue = new LinkedList<Node>();
@@ -164,20 +164,9 @@ public class DefaultGraphWalker implements SemanticGraphWalker {
 
       // Add a single child and restart the loop
       for (Node childNode : node.getChildren()) {
-        // skip if already dispatched
-        if (getDispatchedList().contains(childNode)) {
-          continue;
-        }
-
-        boolean hasChildren = childNode.getChildren() != null;
-        opStack.push(childNode);
-        if (hasChildren) {
-          // exit loop to process child's children
+        if (!getDispatchedList().contains(childNode)) {
+          opStack.push(childNode);
           break;
-        } else { // no children - safe to dispatch in-line
-          dispatch(childNode, opStack);
-          opQueue.add(childNode);
-          opStack.pop();
         }
       }
     } // end while

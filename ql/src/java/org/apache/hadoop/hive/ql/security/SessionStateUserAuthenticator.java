@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,12 +18,12 @@
 
 package org.apache.hadoop.hive.ql.security;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.session.ISessionAuthState;
-import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.hive.ql.session.SessionState;
 
 /**
  * Authenticator that returns the userName set in SessionState. For use when authorizing with HS2
@@ -31,17 +31,14 @@ import org.apache.hadoop.security.UserGroupInformation;
  */
 public class SessionStateUserAuthenticator implements HiveAuthenticationProvider {
 
+  private final List<String> groupNames = new ArrayList<String>();
+
   protected Configuration conf;
-  private ISessionAuthState sessionState;
-  private List<String> groups;
+  private SessionState sessionState;
 
   @Override
   public List<String> getGroupNames() {
-       // In case of embedded hs2, sessionState.getUserName()=null
-    if (groups == null && sessionState.getUserName() != null) {
-      groups = UserGroupInformation.createRemoteUser(sessionState.getUserName()).getGroups();
-    }
-    return groups;
+    return groupNames;
   }
 
   @Override
@@ -64,7 +61,7 @@ public class SessionStateUserAuthenticator implements HiveAuthenticationProvider
   }
 
   @Override
-  public void setSessionState(ISessionAuthState sessionState) {
+  public void setSessionState(SessionState sessionState) {
     this.sessionState = sessionState;
   }
 

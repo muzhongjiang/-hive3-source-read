@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.hive.common;
 
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 
 import org.apache.hadoop.metrics2.MetricsInfo;
@@ -59,8 +58,8 @@ public enum JvmMetricsInfo implements MetricsInfo {
   @Override public String description() { return desc; }
 
   @Override public String toString() {
-    return  MoreObjects.toStringHelper(this)
-            .add("name", name()).add("description", desc)
+    return Objects.toStringHelper(this)
+        .add("name", name()).add("description", desc)
         .toString();
   }
 }

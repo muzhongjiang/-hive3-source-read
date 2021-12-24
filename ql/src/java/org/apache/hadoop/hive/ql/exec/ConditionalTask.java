@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,6 +21,9 @@ package org.apache.hadoop.hive.ql.exec;
 import java.io.Serializable;
 import java.util.List;
 
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.DriverContext;
+import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ConditionalResolver;
 import org.apache.hadoop.hive.ql.plan.ConditionalWork;
@@ -32,11 +35,11 @@ import org.apache.hadoop.hive.ql.plan.api.StageType;
 public class ConditionalTask extends Task<ConditionalWork> implements Serializable {
 
   private static final long serialVersionUID = 1L;
-  private List<Task<?>> listTasks;
+  private List<Task<? extends Serializable>> listTasks;
 
   private boolean resolved = false;
 
-  private List<Task<?>> resTasks;
+  private List<Task<? extends Serializable>> resTasks;
 
   private ConditionalResolver resolver;
   private Object resolverCtx;
@@ -48,7 +51,7 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
 
   @Override
   public boolean isMapRedTask() {
-    for (Task<?> task : listTasks) {
+    for (Task<? extends Serializable> task : listTasks) {
       if (task.isMapRedTask()) {
         return true;
       }
@@ -58,13 +61,8 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
   }
 
   @Override
-  public boolean canExecuteInParallel() {
-    return isMapRedTask();
-  }
-
-  @Override
   public boolean hasReduce() {
-    for (Task<?> task : listTasks) {
+    for (Task<? extends Serializable> task : listTasks) {
       if (task.hasReduce()) {
         return true;
       }
@@ -74,12 +72,12 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
   }
 
   @Override
-  public int execute() {
+  public int execute(DriverContext driverContext) {
     resTasks = resolver.getTasks(conf, resolverCtx);
     resolved = true;
 
     try {
-      resolveTask();
+      resolveTask(driverContext);
     } catch (Exception e) {
       setException(e);
       return 1;
@@ -87,25 +85,25 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
     return 0;
   }
 
-  private void resolveTask() throws HiveException {
-    for (Task<?> tsk : getListTasks()) {
+  private void resolveTask(DriverContext driverContext) throws HiveException {
+    for (Task<? extends Serializable> tsk : getListTasks()) {
       if (!resTasks.contains(tsk)) {
-        taskQueue.remove(tsk);
+        driverContext.remove(tsk);
         console.printInfo(tsk.getId() + " is filtered out by condition resolver.");
         if (tsk.isMapRedTask()) {
-          taskQueue.incCurJobNo(1);
+          driverContext.incCurJobNo(1);
         }
         //recursively remove this task from its children's parent task
         tsk.removeFromChildrenTasks();
       } else {
         if (getParentTasks() != null) {
           // This makes it so that we can go back up the tree later
-          for (Task<?> task : getParentTasks()) {
+          for (Task<? extends Serializable> task : getParentTasks()) {
             task.addDependentTask(tsk);
           }
         }
         // resolved task
-        if (taskQueue.addToRunnable(tsk)) {
+        if (driverContext.addToRunnable(tsk)) {
           console.printInfo(tsk.getId() + " is selected by condition resolver.");
         }
       }
@@ -139,20 +137,20 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
   @Override
   public boolean done() {
     boolean ret = true;
-    List<Task<?>> parentTasks = getParentTasks();
+    List<Task<? extends Serializable>> parentTasks = getParentTasks();
     if (parentTasks != null) {
-      for (Task<?> par : parentTasks) {
+      for (Task<? extends Serializable> par : parentTasks) {
         ret = ret && par.done();
       }
     }
-    List<Task<?>> retTasks;
+    List<Task<? extends Serializable>> retTasks;
     if (resolved) {
       retTasks = resTasks;
     } else {
       retTasks = getListTasks();
     }
     if (ret && retTasks != null) {
-      for (Task<?> tsk : retTasks) {
+      for (Task<? extends Serializable> tsk : retTasks) {
         ret = ret && tsk.done();
       }
     }
@@ -170,7 +168,7 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
   /**
    * @return the listTasks
    */
-  public List<Task<?>> getListTasks() {
+  public List<Task<? extends Serializable>> getListTasks() {
     return listTasks;
   }
 
@@ -178,7 +176,7 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
    * @param listTasks
    *          the listTasks to set
    */
-  public void setListTasks(List<Task<?>> listTasks) {
+  public void setListTasks(List<Task<? extends Serializable>> listTasks) {
     this.listTasks = listTasks;
   }
 
@@ -199,11 +197,11 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
    * @return true if the task got added false if it already existed
    */
   @Override
-  public boolean addDependentTask(Task<?> dependent) {
+  public boolean addDependentTask(Task<? extends Serializable> dependent) {
     boolean ret = false;
     if (getListTasks() != null) {
       ret = true;
-      for (Task<?> tsk : getListTasks()) {
+      for (Task<? extends Serializable> tsk : getListTasks()) {
         ret = ret & tsk.addDependentTask(dependent);
       }
     }
@@ -211,7 +209,7 @@ public class ConditionalTask extends Task<ConditionalWork> implements Serializab
   }
 
   @Override
-  public List<Task<?>> getDependentTasks() {
+  public List<Task<? extends Serializable>> getDependentTasks() {
     return listTasks;
   }
 }

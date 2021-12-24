@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,12 +19,13 @@
 package org.apache.hadoop.hive.ql.exec.vector.expressions;
 
 public class VectorUDFDateSubScalarCol extends VectorUDFDateAddScalarCol {
-  public VectorUDFDateSubScalarCol(Object object, int colNum, int outputColumnNum) {
-    super(object, colNum, outputColumnNum);
+  public VectorUDFDateSubScalarCol(Object object, int colNum, int outputColumn) {
+    super(object, colNum, outputColumn);
     isPositive = false;
   }
 
   public VectorUDFDateSubScalarCol() {
     super();
+    isPositive = false;
   }
 }

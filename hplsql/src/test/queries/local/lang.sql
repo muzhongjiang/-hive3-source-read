@@ -17,11 +17,21 @@
 
 -- Identifiers
 declare abc int;
-declare abc_abc int;
+declare abc.abc int;
+declare abc . abc1 int;
 declare "abc" int;
+declare "abc".abc int;
+declare "abc"."abc" int;
+declare "abc" . "abc1" int;
 declare [abc] int;
+declare [abc].abc int;
+declare [abc].[abc] int;
+declare [abc] . [abc1] int;
 declare `abc` int;
-declare :new_abc int;
+declare `abc`.abc int;
+declare `abc`.`abc` int;
+declare `abc` . `abc1` int;
+declare :new.abc int;
 declare @abc int;
 declare _abc int;
 declare #abc int;

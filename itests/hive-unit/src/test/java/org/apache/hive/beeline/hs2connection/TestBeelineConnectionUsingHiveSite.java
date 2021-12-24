@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,70 +17,31 @@
  */
 package org.apache.hive.beeline.hs2connection;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 import java.io.File;
-import java.util.Arrays;
-import java.util.Collection;
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hive.jdbc.miniHS2.MiniHS2;
-import org.junit.Assume;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
-/**
- * TestBeelineConnectionUsingHiveSite test.
- */
-@RunWith(Parameterized.class)
 public class TestBeelineConnectionUsingHiveSite extends BeelineWithHS2ConnectionFileTestBase {
-
-  boolean isHttpModeTest = false;
-
-  @Parameterized.Parameters(name = "{index}: tranportMode={0}")
-  public static Collection<Object[]> transportModes() {
-    return Arrays.asList(new Object[][]{{MiniHS2.HS2_BINARY_MODE}, {MiniHS2.HS2_HTTP_MODE}, {MiniHS2.HS2_ALL_MODE}});
-  }
   @Test
   public void testBeelineConnectionHttp() throws Exception {
-    Assume.assumeTrue(transportMode.equals(MiniHS2.HS2_HTTP_MODE)
-        || transportMode.equalsIgnoreCase(MiniHS2.HS2_ALL_MODE));
-    isHttpModeTest = true;
     setupHs2();
     String path = createDefaultHs2ConnectionFile();
-    assertBeelineOutputContains(path, new String[] { "-e", "show tables;" }, tableName);
-    isHttpModeTest = false;
+    testBeeLineConnection(path, new String[] { "-e", "show tables;" }, tableName);
   }
 
   @Test
   public void testBeelineConnectionSSL() throws Exception {
-    Assume.assumeTrue(transportMode.equals(MiniHS2.HS2_BINARY_MODE)
-        || transportMode.equalsIgnoreCase(MiniHS2.HS2_ALL_MODE));
     setupSSLHs2();
     String path = createDefaultHs2ConnectionFile();
-    assertBeelineOutputContains(path, new String[] { "-e", "show tables;" }, tableName);
+    testBeeLineConnection(path, new String[] { "-e", "show tables;" }, tableName);
   }
 
   @Test
   public void testBeelineConnectionNoAuth() throws Exception {
-    Assume.assumeTrue(transportMode.equals(MiniHS2.HS2_BINARY_MODE)
-        || transportMode.equalsIgnoreCase(MiniHS2.HS2_ALL_MODE));
     setupNoAuthHs2();
     String path = createDefaultHs2ConnectionFile();
-    assertBeelineOutputContains(path, new String[] { "-e", "show tables;" }, tableName);
-  }
-
-  @Test
-  public void testBeelineDoesntUseDefaultIfU() throws Exception {
-    setupNoAuthHs2();
-    String path = createDefaultHs2ConnectionFile();
-    BeelineResult res = getBeelineOutput(path, new String[] {"-u", "invalidUrl", "-e", "show tables;" });
-    assertEquals(1, res.exitCode);
-    assertFalse(tableName + " should not appear", res.output.toLowerCase().contains(tableName));
-
+    testBeeLineConnection(path, new String[] { "-e", "show tables;" }, tableName);
   }
 
   /*
@@ -89,23 +50,17 @@ public class TestBeelineConnectionUsingHiveSite extends BeelineWithHS2Connection
    */
   @Test
   public void testBeelineWithNoConnectionFile() throws Exception {
-    Assume.assumeTrue(transportMode.equals(MiniHS2.HS2_BINARY_MODE)
-        || transportMode.equalsIgnoreCase(MiniHS2.HS2_ALL_MODE));
     setupNoAuthHs2();
-    BeelineResult res = getBeelineOutput(null, new String[] {"-e", "show tables;" });
-    assertEquals(1, res.exitCode);
-    assertTrue(res.output.toLowerCase().contains("no current connection"));
+    testBeeLineConnection(null, new String[] { "-e", "show tables;" }, "no current connection");
   }
 
   @Test
   public void testBeelineUsingArgs() throws Exception {
-    Assume.assumeTrue(transportMode.equals(MiniHS2.HS2_BINARY_MODE)
-        || transportMode.equalsIgnoreCase(MiniHS2.HS2_ALL_MODE));
     setupNoAuthHs2();
     String url = miniHS2.getBaseJdbcURL() + "default";
     String args[] = new String[] { "-u", url, "-n", System.getProperty("user.name"), "-p", "foo",
         "-e", "show tables;" };
-    assertBeelineOutputContains(null, args, tableName);
+    testBeeLineConnection(null, args, tableName);
   }
 
   private void setupNoAuthHs2() throws Exception {
@@ -127,6 +82,8 @@ public class TestBeelineConnectionUsingHiveSite extends BeelineWithHS2Connection
   }
 
   private void setupHs2() throws Exception {
+    confOverlay.put(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, HS2_HTTP_MODE);
+    confOverlay.put(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH.varname, HS2_HTTP_ENDPOINT);
     confOverlay.put(ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname, "true");
     miniHS2.start(confOverlay);
     createTable();
@@ -135,9 +92,6 @@ public class TestBeelineConnectionUsingHiveSite extends BeelineWithHS2Connection
   private String createDefaultHs2ConnectionFile() throws Exception {
     Hs2ConnectionXmlConfigFileWriter writer = new Hs2ConnectionXmlConfigFileWriter();
     String baseJdbcURL = miniHS2.getBaseJdbcURL();
-    if(isHttpModeTest) {
-      baseJdbcURL = miniHS2.getBaseHttpJdbcURL();
-    }
     System.out.println(baseJdbcURL);
     writer.writeProperty(HS2ConnectionFileParser.BEELINE_CONNECTION_PROPERTY_PREFIX + "user",
         System.getProperty("user.name"));
