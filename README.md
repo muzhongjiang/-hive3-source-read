@@ -1,16 +1,14 @@
-apache-hive-2.3.9
-================
+# apache-hive-2.3.9
 
-Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理保存在分布式存储中的大型数据集。 
-它建立在 Apache Hadoop (TM) 之上，提供：
+Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理保存在分布式存储中的大型数据集。 它建立在 Apache Hadoop (TM) 之上，提供：
 
 * 通过 SQL 轻松访问数据的工具，从而启用数据仓储任务，例如提取/转换/加载 (ETL)、报告、和数据分析
 * 一种对各种数据格式强加结构的机制
 * 访问直接存储在 Apache HDFS (TM) 或其他数据存储系统（如 Apache HBase (TM) 中）的文件
 * 使用 Apache Hadoop MapReduce、Apache Tez 或 Apache Spark 框架执行查询。
 
-Getting Started
-===============
+# Getting Started
+
 - 官方文档：
   http://hive.apache.org
 
@@ -23,12 +21,9 @@ Getting Started
 - The HiveQL Language Manual:
   https://cwiki.apache.org/confluence/display/Hive/LanguageManual
 
+# Requirements
 
-Requirements
-============
-
-Java
-------
+## Java
 
 | Hive Version  | Java Version  |
 | ------------- |:-------------:|
@@ -37,14 +32,282 @@ Java
 | Hive 3.x      | Java 8        |
 | Hive 4.x      | Java 8        |
 
+## Hadoop
 
-Hadoop
-------
-
-- Hadoop 1.x, 2.x
+- Hadoop 2.x, 2.x
 - Hadoop 3.x (Hive 3.x)
 
+## 打包
 
-打包
-====================
-mvn clean package  -DskipTests -Pdist
+mvn clean package -DskipTests -Pdist
+
+# 本地调试：
+
+说明：本地调试和运行hive-sql不需要依赖和安装hadoop，表数据文件存放本地系统目录，存储不依赖hdfs、计算也不依赖yarn
+
+## thrift
+
+由于Hive的HiveServer2和Metastore组件本质上都是一个Thrift Server，可以满足跨语言间的RPC通信。 注意:Thrift有严格的版本要求，环境的版本需要与代码里保持一致,在pom.xml文件 <
+libthrift.version>标识即版本。
+
+### 1、下载thrift0.9.3的安装包，进行解压。
+
+     http://apache.mirror.cdnetworks.com/thrift/0.9.3/thrift-0.9.3.tar.gz
+
+### 2、编译、安装：
+
+#### 2.1、 执行configure（如果出现“configure: error: Bison version 2.5 or higher must be installed on the system!”， 跳到步骤3 ）
+
+	./configure --prefix=/usr/local/ --with-boost=/usr/local --with-libevent=/usr/local --without-ruby --without-perl --without-php --without-nodejs
+
+#### 2.2、
+
+	make
+	make install
+
+#### 2.3、是否成功：
+
+	thrift -version  
+
+### 3、如果出现“configure: error: Bison version 2.5 or higher must be installed on the system!”，升级bison：
+
+#### 3.1、下载并解压：bison-3.7.6 （ http://ftp.gnu.org/gnu/bison/ ）
+
+#### 3.2、编译、安装：
+
+ 	./configure && make -j$(getconf _NPROCESSORS_ONLN) && make install
+
+### 3.3、是否成功：
+
+	 bison -V
+
+## 修改配置文件hive-site.xml
+
+./hive2-source-read/conf/hive-site.xml
+
+```xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:mysql://tencent:3306/hive?createDatabaseIfNotExist=true</value>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>root</value>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value><![CDATA[root&password@168]]></value>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>com.mysql.jdbc.Driver</value>
+    </property>
+    <property>
+        <name>datanucleus.schema.autocreateall</name>
+        <value>false</value>
+        <description>如果不存在，则在启动时创建必要的schema。创建一次后将此设置为false</description>
+    </property>
+    <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>file:///Users/muzhongjiang/storage/data/hive/warehouse</value>
+    </property>
+    <property>
+        <name>fs.default.name</name>
+        <value>file:///Users/muzhongjiang/storage/data/hive</value>
+    </property>
+    <property>
+        <name>hive.security.authorization.manager</name>
+        <value>org.apache.hadoop.hive.ql.security.authorization.DefaultHiveMetastoreAuthorizationProvider</value>
+        <description>The hive client authorization manager class name.</description>
+    </property>
+    <property>
+        <name>hive.metastore.uris</name>
+        <value>thrift://127.0.0.1:9083</value>
+    </property>
+    <property>
+        <name>hive.privilege.synchronizer</name>
+        <value>false</value>
+    </property>
+</configuration>
+```
+
+## 修改pom.xml文件
+
+### vim pom.xml
+
+把上面thrift的安装路径填上去
+
+```xml
+
+<thrift.home>/usr/local/</thrift.home>
+```
+
+### vim cli/pom.xml
+
+1、把hive-site.xml等配置文件打包
+
+```xml
+
+<build>
+    <resources>
+        <resource>
+            <directory>../conf</directory>
+            <includes>
+                <include>*.*</include>
+            </includes>
+        </resource>
+    </resources>
+</build>
+```
+
+2、把 <scope>test</scope> 改成 <scope>runtime</scope>
+
+```xml
+
+<dependencies>
+    <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>${commons-io.version}</version>
+        <scope>runtime</scope>
+    </dependency>
+    <dependency>
+        <groupId>com.lmax</groupId>
+        <artifactId>disruptor</artifactId>
+        <version>${disruptor.version}</version>
+        <scope>runtime</scope>
+    </dependency>
+</dependencies>
+```
+
+### vim metastore/pom.xml
+
+1、把hive-site.xml等配置文件打包
+
+```xml
+
+<build>
+    <resources>
+        <resource>
+            <directory>../conf</directory>
+            <includes>
+                <include>*.*</include>
+            </includes>
+        </resource>
+    </resources>
+</build>
+```
+
+2、把 <scope>test</scope> 改成 <scope>runtime</scope>
+
+```xml
+
+<dependency>
+    <groupId>com.lmax</groupId>
+    <artifactId>disruptor</artifactId>
+    <version>${disruptor.version}</version>
+    <scope>runtime</scope>
+</dependency>
+```
+
+3、添加mysql jdbc驱动包依赖，我这里用的是mysql8
+
+```xml
+
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>8.0.21</version>
+</dependency>
+```
+
+### vim service/pom.xml
+
+1、hive-site.xml等配置文件打包
+
+```xml
+
+<build>
+    <resources>
+        <resource>
+            <directory>../conf</directory>
+            <includes>
+                <include>*.*</include>
+            </includes>
+        </resource>
+    </resources>
+</build>
+```
+
+### vim beeline/pom.xml
+
+1、把 <scope>test</scope> 改成 <scope>runtime</scope>
+
+```xml
+
+<dependency>
+    <groupId>org.apache.hadoop</groupId>
+    <artifactId>hadoop-mapreduce-client-core</artifactId>
+    <version>${hadoop.version}</version>
+    <scope>runtime</scope>
+</dependency>
+```
+
+
+
+## 修改HiveConf.java文件，修改参数默认值 (后面使用传参方式来修改更好) 
+hive.in.test=true
+hive.in.tez.test=true
+hive.exec.mode.local.auto=true
+
+
+
+## 修改./metastore/if/hive_metastore.thrift文件第25行  
+？？？？？？？？？？？
+
+
+
+## 初始化元数据库   
+mysql -htencent -uroot -p'root&password@168'
+create  database if not exists hive;
+use hive;
+source /Users/muzhongjiang/storage/git/github/Hive/hive2-source-read/metastore/scripts/upgrade/mysql/hive-schema-2.3.0.mysql.sql
+source /Users/muzhongjiang/storage/git/github/Hive/hive2-source-read/metastore/scripts/upgrade/mysql/hive-txn-schema-2.3.0.mysql.sql
+
+
+
+hive-txn-schema-2.3.0.mysql.sql 什么功能 ？？？？？？？？
+
+
+
+## 编译  
+mvn clean compile -Dmaven.test.skip=true -P thriftif,protobuf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

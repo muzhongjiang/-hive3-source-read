@@ -60,6 +60,7 @@
   </modules>
 
   <properties>
+    <thrift.home>/usr/local/</thrift.home>
     <hive.version.shortname>2.3.0</hive.version.shortname>
 
     <!-- Build Properties -->
