@@ -7,6 +7,11 @@ Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理�
 * 访问直接存储在 Apache HDFS (TM) 或其他数据存储系统（如 Apache HBase (TM) 中）的文件
 * 使用 Apache Hadoop MapReduce、Apache Tez 或 Apache Spark 框架执行查询。
 
+## 参考：
+[编译](https://blog.csdn.net/u013289115/article/details/112464043)
+[开发文档](https://cwiki.apache.org/confluence/display/Hive/DeveloperDocs)
+
+
 # Getting Started
 
 - 官方文档：
@@ -50,36 +55,16 @@ mvn clean package -DskipTests -Pdist
 由于Hive的HiveServer2和Metastore组件本质上都是一个Thrift Server，可以满足跨语言间的RPC通信。 注意:Thrift有严格的版本要求，环境的版本需要与代码里保持一致,在pom.xml文件 <
 libthrift.version>标识即版本。
 
-### 1、下载thrift0.9.3的安装包，进行解压。
+https://www.cnblogs.com/muzhongjiang/p/15794135.html
 
-     http://apache.mirror.cdnetworks.com/thrift/0.9.3/thrift-0.9.3.tar.gz
+## protobuf
 
-### 2、编译、安装：
+安装对应protobuf。 我本地以及安装了protobuf 3.19.3 ，所以修改了pom.xml: protobuf.version
 
-#### 2.1、 执行configure（如果出现“configure: error: Bison version 2.5 or higher must be installed on the system!”， 跳到步骤3 ）
-
-	./configure --prefix=/usr/local/ --with-boost=/usr/local --with-libevent=/usr/local --without-ruby --without-perl --without-php --without-nodejs
-
-#### 2.2、
-
-	make
-	make install
-
-#### 2.3、是否成功：
-
-	thrift -version  
-
-### 3、如果出现“configure: error: Bison version 2.5 or higher must be installed on the system!”，升级bison：
-
-#### 3.1、下载并解压：bison-3.7.6 （ http://ftp.gnu.org/gnu/bison/ ）
-
-#### 3.2、编译、安装：
-
- 	./configure && make -j$(getconf _NPROCESSORS_ONLN) && make install
-
-### 3.3、是否成功：
-
-	 bison -V
+```xml
+    <!--<protobuf.version>2.5.0</protobuf.version>-->
+<protobuf.version>3.19.3</protobuf.version>
+```
 
 ## 修改配置文件hive-site.xml
 
@@ -142,7 +127,7 @@ libthrift.version>标识即版本。
 
 ```xml
 
-<thrift.home>/usr/local/</thrift.home>
+<thrift.home>/usr/local/thrift</thrift.home>
 ```
 
 ### vim cli/pom.xml
@@ -256,35 +241,36 @@ libthrift.version>标识即版本。
 </dependency>
 ```
 
+## 修改HiveConf.java文件，修改参数默认值 (后面使用传参方式来修改更好)
+
+hive.in.test=true hive.in.tez.test=true hive.exec.mode.local.auto=true
+
+## 修改./metastore/if/hive_metastore.thrift文件第25行
 
 
-## 修改HiveConf.java文件，修改参数默认值 (后面使用传参方式来修改更好) 
-hive.in.test=true
-hive.in.tez.test=true
-hive.exec.mode.local.auto=true
+include "/usr/local/thrift/thrift-0.14.1.src/contrib/fb303/if/fb303.thrift"
 
+## 初始化元数据库
 
+1、将"CREATE TABLE" 替换为："CREATE TABLE IF NOT EXISTS"
+2、进入mysql命令行： mysql -htencent -uroot -p'root&password@168'
 
-## 修改./metastore/if/hive_metastore.thrift文件第25行  
-？？？？？？？？？？？
-
-
-
-## 初始化元数据库   
-mysql -htencent -uroot -p'root&password@168'
-create  database if not exists hive;
+```mysql
+CREATE database IF NOT EXISTS hive;
 use hive;
-source /Users/muzhongjiang/storage/git/github/Hive/hive2-source-read/metastore/scripts/upgrade/mysql/hive-schema-2.3.0.mysql.sql
-source /Users/muzhongjiang/storage/git/github/Hive/hive2-source-read/metastore/scripts/upgrade/mysql/hive-txn-schema-2.3.0.mysql.sql
+SOURCE /Users/muzhongjiang/storage/git/github/Hive/hive2-source-read/metastore/scripts/upgrade/mysql/hive-schema-2.3.0.mysql.sql ;
+```
+
+TIP："hive-schema-2.3.0.mysql.sql" 内部会执行 "hive-txn-schema-2.3.0.mysql.sql"脚本。
+
+## 编译
+
+mvn clean package -DskipTests -Pdist -X
+
+mvn clean compile -Dmaven.test.skip=true -P thrift,protobuf -X
 
 
 
-hive-txn-schema-2.3.0.mysql.sql 什么功能 ？？？？？？？？
-
-
-
-## 编译  
-mvn clean compile -Dmaven.test.skip=true -P thriftif,protobuf
 
 
 
