@@ -10,6 +10,7 @@ Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理�
 ## 参考：
 [编译](https://blog.csdn.net/u013289115/article/details/112464043)
 [开发文档](https://cwiki.apache.org/confluence/display/Hive/DeveloperDocs)
+[重要文档](https://cwiki.apache.org/confluence/display/Hive/HowToContribute)
 
 
 # Getting Started
@@ -32,7 +33,6 @@ Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理�
 
 | Hive Version  | Java Version  |
 | ------------- |:-------------:|
-| Hive 1.2      | Java 7        |
 | Hive 2.x      | Java 7        |
 | Hive 3.x      | Java 8        |
 | Hive 4.x      | Java 8        |
@@ -52,10 +52,14 @@ mvn clean package -DskipTests -Pdist
 
 ## thrift
 
-由于Hive的HiveServer2和Metastore组件本质上都是一个Thrift Server，可以满足跨语言间的RPC通信。 注意:Thrift有严格的版本要求，环境的版本需要与代码里保持一致,在pom.xml文件 <
-libthrift.version>标识即版本。
+由于Hive的HiveServer2和Metastore组件本质上都是一个Thrift Server，可以满足跨语言间的RPC通信。 
+注意:Thrift有严格的版本要求，环境的版本需要与代码里保持一致,在pom.xml文件 <libthrift.version>标识即版本。
+[thrift安装文档](https://www.cnblogs.com/muzhongjiang/p/15794135.html)
 
-https://www.cnblogs.com/muzhongjiang/p/15794135.html
+
+### 安装fb303.thrift
+
+
 
 ## protobuf
 
@@ -126,8 +130,7 @@ https://www.cnblogs.com/muzhongjiang/p/15794135.html
 把上面thrift的安装路径填上去
 
 ```xml
-
-<thrift.home>/usr/local/thrift</thrift.home>
+<thrift.home>/usr/local/Cellar/thrift@0.9/0.9.3.1</thrift.home>
 ```
 
 ### vim cli/pom.xml
@@ -243,10 +246,11 @@ https://www.cnblogs.com/muzhongjiang/p/15794135.html
 
 ## 修改HiveConf.java文件，修改参数默认值 (后面使用传参方式来修改更好)
 
-hive.in.test=true hive.in.tez.test=true hive.exec.mode.local.auto=true
+hive.in.test=true 
+hive.in.tez.test=true 
+hive.exec.mode.local.auto=true
 
 ## 修改./metastore/if/hive_metastore.thrift文件第25行
-
 
 include "/usr/local/thrift/thrift-0.14.1.src/contrib/fb303/if/fb303.thrift"
 
@@ -265,9 +269,7 @@ TIP："hive-schema-2.3.0.mysql.sql" 内部会执行 "hive-txn-schema-2.3.0.mysql
 
 ## 编译
 
-mvn clean package -DskipTests -Pdist -X
-
-mvn clean compile -Dmaven.test.skip=true -P thrift,protobuf -X
+mvn clean compile -DskipTests -P thriftif,protobuf  -X
 
 
 
