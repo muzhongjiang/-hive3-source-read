@@ -1322,6 +1322,7 @@ public class BeeLine implements Closeable {
   }
 
   /**
+   * Test whether a line is a comment.
    * 判断这一行是否为"注释"
    *
    * @param line

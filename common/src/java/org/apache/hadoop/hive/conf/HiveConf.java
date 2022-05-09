@@ -19,29 +19,51 @@
 package org.apache.hadoop.hive.conf;
 
 import com.google.common.base.Joiner;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.common.classification.InterfaceAudience;
 import org.apache.hadoop.hive.common.classification.InterfaceAudience.LimitedPrivate;
-import org.apache.hadoop.hive.conf.Validator.*;
+import org.apache.hadoop.hive.conf.Validator.PatternSet;
+import org.apache.hadoop.hive.conf.Validator.RangeValidator;
+import org.apache.hadoop.hive.conf.Validator.RatioValidator;
+import org.apache.hadoop.hive.conf.Validator.SizeValidator;
+import org.apache.hadoop.hive.conf.Validator.StringSet;
+import org.apache.hadoop.hive.conf.Validator.TimeValidator;
+import org.apache.hadoop.hive.conf.Validator.WritableDirectoryValidator;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Shell;
 import org.apache.hive.common.HiveCompat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.security.auth.login.LoginException;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -531,12 +553,12 @@ public class HiveConf extends Configuration {
         "String used as a file extension for output files. \n" +
         "If not set, defaults to the codec extension for text files (e.g. \".gz\"), or no extension otherwise."),
 
-    HIVE_IN_TEST("hive.in.test", true, "internal usage only, true in test mode", true),
+    HIVE_IN_TEST("hive.in.test", false, "internal usage only, true in test mode", true),
 
-    HIVE_IN_TEZ_TEST("hive.in.tez.test", true, "internal use only, true when in testing tez",
+    HIVE_IN_TEZ_TEST("hive.in.tez.test", false, "internal use only, true when in testing tez",
         true),
 
-    LOCALMODEAUTO("hive.exec.mode.local.auto", true,
+    LOCALMODEAUTO("hive.exec.mode.local.auto", false,
         "Let Hive determine whether to run in local mode automatically"),
     LOCALMODEMAXBYTES("hive.exec.mode.local.auto.inputbytes.max", 134217728L,
         "When hive.exec.mode.local.auto is true, input bytes should less than this for local mode."),

@@ -15,17 +15,10 @@ Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理�
 
 # Getting Started
 
-- 官方文档：
-  http://hive.apache.org
+  [官方文档](http://hive.apache.org)
+  [安装文档](https://cwiki.apache.org/confluence/display/Hive/GettingStarted)
+  [HiveQL语法](https://cwiki.apache.org/confluence/display/Hive/LanguageManual)
 
-- Installation Instructions and a quick tutorial:
-  https://cwiki.apache.org/confluence/display/Hive/GettingStarted
-
-- A longer tutorial that covers more features of HiveQL:
-  https://cwiki.apache.org/confluence/display/Hive/Tutorial
-
-- The HiveQL Language Manual:
-  https://cwiki.apache.org/confluence/display/Hive/LanguageManual
 
 # Requirements
 
@@ -42,9 +35,35 @@ Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理�
 - Hadoop 2.x, 2.x
 - Hadoop 3.x (Hive 3.x)
 
+## 编译 
+```shell script
+# hive-1.x：
+mvn clean package -DskipTests -Phadoop-2 -Pdist -Dmaven.javadoc.skip=true
+# hive-2.x：
+mvn clean package -DskipTests -Dmaven.javadoc.skip=true
+```
+
 ## 打包
 
-mvn clean package -DskipTests -Pdist
+```shell script
+mvn clean package  -Pdist -DskipTests -Dmaven.javadoc.skip=true
+```
+
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for Hive 2.3.9:
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  03:05 min
+[INFO] Finished at: 2022-05-09T23:57:59+08:00
+[INFO] ------------------------------------------------------------------------
+
+编译成功 会在源码目录下面的 packaging/target 目录下面生成 hive安装压缩包和jdbc驱动包。
+-rw-r--r--   1 muzhongjiang  staff   273M May  9 23:57 apache-hive-2.3.9-bin.tar.gz
+-rw-r--r--   1 muzhongjiang  staff    57M May  9 23:57 apache-hive-2.3.9-jdbc.jar
+-rw-r--r--   1 muzhongjiang  staff    21M May  9 23:57 apache-hive-2.3.9-src.tar.gz
+
+
 
 # 本地调试：
 
@@ -267,9 +286,6 @@ SOURCE /Users/muzhongjiang/storage/git/github/Hive/hive2-source-read/metastore/s
 
 TIP："hive-schema-2.3.0.mysql.sql" 内部会执行 "hive-txn-schema-2.3.0.mysql.sql"脚本。
 
-## 编译
-
-mvn clean compile -DskipTests -P thriftif,protobuf  -X
 
 
 

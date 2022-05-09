@@ -125,7 +125,7 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-core</artifactId>
       <version>${hadoop.version}</version>
-      <scope>runtime</scope>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
