@@ -24,11 +24,11 @@
     </property>
     <property>
         <name>hive.metastore.warehouse.dir</name>
-        <value>file:///Users/muzhongjiang/storage/data/hive/warehouse</value>
+        <value>file:///Users/mzj/storage/data/hive/warehouse</value>
     </property>
     <property>
         <name>fs.default.name</name>
-        <value>file:///Users/muzhongjiang/storage/data/hive</value>
+        <value>file:///Users/mzj/storage/data/hive</value>
     </property>
     <property>
         <name>hive.security.authorization.manager</name>

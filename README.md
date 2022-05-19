@@ -60,9 +60,9 @@ mvn clean package  -Pdist -DskipTests -Dmaven.javadoc.skip=true
 [INFO] ------------------------------------------------------------------------
 
 编译成功 会在源码目录下面的 packaging/target 目录下面生成 hive安装压缩包和jdbc驱动包。
--rw-r--r--   1 muzhongjiang  staff   273M May  9 23:57 apache-hive-2.3.9-bin.tar.gz
--rw-r--r--   1 muzhongjiang  staff    57M May  9 23:57 apache-hive-2.3.9-jdbc.jar
--rw-r--r--   1 muzhongjiang  staff    21M May  9 23:57 apache-hive-2.3.9-src.tar.gz
+-rw-r--r--   1 mzj  staff   273M May  9 23:57 apache-hive-2.3.9-bin.tar.gz
+-rw-r--r--   1 mzj  staff    57M May  9 23:57 apache-hive-2.3.9-jdbc.jar
+-rw-r--r--   1 mzj  staff    21M May  9 23:57 apache-hive-2.3.9-src.tar.gz
 
 
 
@@ -74,7 +74,7 @@ mvn clean package  -Pdist -DskipTests -Dmaven.javadoc.skip=true
 
 由于Hive的HiveServer2和Metastore组件本质上都是一个Thrift Server，可以满足跨语言间的RPC通信。 
 注意:Thrift有严格的版本要求，环境的版本需要与代码里保持一致,在pom.xml文件 <libthrift.version>标识即版本。
-[thrift安装文档](https://www.cnblogs.com/muzhongjiang/p/15794135.html)
+[thrift安装文档](https://www.cnblogs.com/mzj/p/15794135.html)
 
 
 ### 安装fb303.thrift
@@ -121,11 +121,11 @@ mvn clean package  -Pdist -DskipTests -Dmaven.javadoc.skip=true
     </property>
     <property>
         <name>hive.metastore.warehouse.dir</name>
-        <value>file:///Users/muzhongjiang/storage/data/hive/warehouse</value>
+        <value>file:///Users/mzj/storage/data/hive/warehouse</value>
     </property>
     <property>
         <name>fs.default.name</name>
-        <value>file:///Users/muzhongjiang/storage/data/hive</value>
+        <value>file:///Users/mzj/storage/data/hive</value>
     </property>
     <property>
         <name>hive.security.authorization.manager</name>
