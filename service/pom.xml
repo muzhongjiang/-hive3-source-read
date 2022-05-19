@@ -216,6 +216,12 @@
           <include>hive-webapps/**</include>
         </includes>
       </resource>
+        <resource>
+            <directory>../conf</directory>
+            <includes>
+                <include>*.*</include>
+            </includes>
+        </resource>
     </resources>
     <plugins>
       <plugin>

@@ -37,7 +37,7 @@ public class JdbcStorageConfigManagerTest {
     props.put(JdbcStorageConfig.DATABASE_TYPE.getPropertyName(), DatabaseType.MYSQL.toString());
     props.put(JdbcStorageConfig.JDBC_URL.getPropertyName(), "jdbc://localhost:3306/hive");
     props.put(JdbcStorageConfig.QUERY.getPropertyName(), "SELECT col1,col2,col3 FROM sometable");
-    props.put(JdbcStorageConfig.JDBC_DRIVER_CLASS.getPropertyName(), "com.mysql.jdbc.Driver");
+    props.put(JdbcStorageConfig.JDBC_DRIVER_CLASS.getPropertyName(), "com.mysql.cj.jdbc.Driver");
 
     Map<String, String> jobMap = new HashMap<String, String>();
     JdbcStorageConfigManager.copyConfigurationToJob(props, jobMap);

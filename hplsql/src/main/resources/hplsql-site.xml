@@ -57,7 +57,7 @@
 </property>
 <property>
   <name>hplsql.conn.mysqlconn</name>
-  <value>com.mysql.jdbc.Driver;jdbc:mysql://localhost/test;user;password</value>
+  <value>com.mysql.cj.jdbc.Driver;jdbc:mysql://localhost/test;user;password</value>
   <description>MySQL connection</description>
 </property>
 <property>

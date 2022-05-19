@@ -36,6 +36,7 @@ Apache Hive (TM) 数据仓库软件有助于使用 SQL 读取、写入和管理�
 - Hadoop 3.x (Hive 3.x)
 
 ## 编译 
+在命令行执行：
 ```shell script
 # hive-1.x：
 mvn clean package -DskipTests -Phadoop-2 -Pdist -Dmaven.javadoc.skip=true
@@ -44,7 +45,7 @@ mvn clean package -DskipTests -Dmaven.javadoc.skip=true
 ```
 
 ## 打包
-
+在命令行执行：
 ```shell script
 mvn clean package  -Pdist -DskipTests -Dmaven.javadoc.skip=true
 ```
@@ -99,7 +100,7 @@ mvn clean package  -Pdist -DskipTests -Dmaven.javadoc.skip=true
 <configuration>
     <property>
         <name>javax.jdo.option.ConnectionURL</name>
-        <value>jdbc:mysql://tencent:3306/hive?createDatabaseIfNotExist=true</value>
+        <value><![CDATA[jdbc:mysql://tencent:3306/hive2?createDatabaseIfNotExist=true&autoReconnect=true&allowMultiQueries=true&useTimezone=true&serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf8&useSSL=false]]></value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionUserName</name>
@@ -111,7 +112,7 @@ mvn clean package  -Pdist -DskipTests -Dmaven.javadoc.skip=true
     </property>
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>
-        <value>com.mysql.jdbc.Driver</value>
+        <value>com.mysql.cj.jdbc.Driver</value>
     </property>
     <property>
         <name>datanucleus.schema.autocreateall</name>
@@ -281,7 +282,7 @@ include "/usr/local/thrift/thrift-0.14.1.src/contrib/fb303/if/fb303.thrift"
 ```mysql
 CREATE database IF NOT EXISTS hive;
 use hive;
-SOURCE /Users/muzhongjiang/storage/git/github/Hive/hive2-source-read/metastore/scripts/upgrade/mysql/hive-schema-2.3.0.mysql.sql ;
+SOURCE /root/hive-schema-2.3.0.mysql.sql ;
 ```
 
 TIP："hive-schema-2.3.0.mysql.sql" 内部会执行 "hive-txn-schema-2.3.0.mysql.sql"脚本。

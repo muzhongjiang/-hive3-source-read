@@ -1437,7 +1437,7 @@ public class TestTxnHandler {
    *     conf.setVar(HiveConf.ConfVars.METASTORECONNECTURLKEY, "jdbc:mysql://localhost/metastore");
    *      conf.setVar(HiveConf.ConfVars.METASTORE_CONNECTION_USER_NAME, "hive");
    *      conf.setVar(HiveConf.ConfVars.METASTOREPWD, "hive");
-   *      conf.setVar(HiveConf.ConfVars.METASTORE_CONNECTION_DRIVER, "com.mysql.jdbc.Driver");
+   *      conf.setVar(HiveConf.ConfVars.METASTORE_CONNECTION_DRIVER, "com.mysql.cj.jdbc.Driver");
    * 3. Remove TxnDbUtil.prepDb(); in TxnHandler.checkQFileTestHack()
    *      
    */

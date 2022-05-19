@@ -253,7 +253,12 @@
       <groupId>com.lmax</groupId>
       <artifactId>disruptor</artifactId>
       <version>${disruptor.version}</version>
-      <scope>test</scope>
+<!--      <scope>test</scope>-->
+    </dependency>
+    <dependency>
+      <groupId>mysql</groupId>
+      <artifactId>mysql-connector-java</artifactId>
+      <version>8.0.21</version>
     </dependency>
     <dependency>
       <groupId>org.skyscreamer</groupId>
@@ -345,6 +350,12 @@
         <directory>${basedir}/src/model</directory>
         <includes>
           <include>package.jdo</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>../conf</directory>
+        <includes>
+          <include>*.*</include>
         </includes>
       </resource>
     </resources>

@@ -62,7 +62,7 @@ usage: $0 <parameters>
      --dbhost=DBHOST             Hostname of server on which database server is setup
      --dbname=hcatmetastoredb    Database name
      --dbjars=/opt/dbjars/       JDBC connector driver directory
-     --dbdriver=com.mysql.jdbc.Driver
+     --dbdriver=com.mysql.cj.jdbc.Driver
                                  JDBC connector driver to use
      --dbproto=mysql             JDBC protocol to talk to driver
      --dbuser=DBUSER             Database user for hcat-server to use
@@ -270,7 +270,7 @@ DBHOST=${SVR_DBHOST:-localhost}
 DBNAME=${SVR_DBNAME:-hcatmetastoredb}
 DBJARS=${SVR_DBJARS:-/opt/dbjars}
 DBPROTO=${SVR_DBPROTO:-mysql}
-DBDRIVER=${SVR_DBDRIVER:-com.mysql.jdbc.Driver}
+DBDRIVER=${SVR_DBDRIVER:-com.mysql.cj.jdbc.Driver}
 DBUSER=${SVR_DBUSER:-DBUSER}
 DBPASSWD=${SVR_DBPASSWD:-DBPASSWD}
 KEYTAB_PATH=${SVR_KEYTAB_PATH:-KEYTAB_PATH}

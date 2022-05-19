@@ -135,7 +135,7 @@ public class BeeLine implements Closeable {
   });
 
   private List<String> supportedLocalDriver =
-    new ArrayList<String>(Arrays.asList("com.mysql.jdbc.Driver", "org.postgresql.Driver"));
+    new ArrayList<String>(Arrays.asList("com.mysql.cj.jdbc.Driver", "org.postgresql.Driver"));
 
   final CommandHandler[] commandHandlers = new CommandHandler[] {
       new ReflectiveCommandHandler(this, new String[] {"quit", "done", "exit"},

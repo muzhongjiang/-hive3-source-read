@@ -168,7 +168,7 @@
         </tr>
         <tr>
             <td>javax.jdo.option.ConnectionDriverName</td>
-            <td>com.mysql.jdbc.Driver</td>
+            <td>com.mysql.cj.jdbc.Driver</td>
         </tr>
 
         <tr>

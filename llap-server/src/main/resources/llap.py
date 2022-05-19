@@ -52,7 +52,7 @@ class Llap(Script):
     os.environ['LLAP_DAEMON_PID_DIR'] = dirname(format("{pid_file}"))
     os.environ['LLAP_DAEMON_LD_PATH'] = format('{library_path}')
     os.environ['LLAP_DAEMON_OPTS'] = format('{daemon_args}')
-    print "Debug from LLAP python script"
+    print "DebugHiveMetaStore from LLAP python script"
     print os.environ['LLAP_DAEMON_CONF_DIR']
     self.configure(env)
     location = "bash -x {app_root}/bin/llapDaemon.sh start &> {app_log_dir}/shell.out"
