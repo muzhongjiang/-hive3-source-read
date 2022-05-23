@@ -126,6 +126,7 @@ public class CliDriver {
     String[] tokens = tokenizeCmd(cmd_trimmed);
     int ret = 0;
 
+    //1.如果命令为"quit"或者"exit",则退出
     if (cmd_trimmed.toLowerCase().equals("quit") || cmd_trimmed.toLowerCase().equals("exit")) {
 
       // if we have come this far - either the previous commands
@@ -134,6 +135,7 @@ public class CliDriver {
       ss.close();
       System.exit(0);
 
+      //2.如果命令为"source"开头,则表示执行 HQL 文件,继续读取文件并解析
     } else if (tokens[0].equalsIgnoreCase("source")) {
       String cmd_1 = getFirstCmd(cmd_trimmed, tokens[0].length());
       cmd_1 = new VariableSubstitution(new HiveVariableSource() {
@@ -156,6 +158,7 @@ public class CliDriver {
           ret = 1;
         }
       }
+      //3.如果命令以"!"开头,则表示用户需要执行 Linux 命令
     } else if (cmd_trimmed.startsWith("!")) {
 
       String shell_cmd = cmd_trimmed.substring(1);
@@ -178,7 +181,8 @@ public class CliDriver {
             stringifyException(e));
         ret = 1;
       }
-    }  else { // local mode
+      //4.以上三者都不是,则认为用户输入的为正常的增删改查 HQL 语句,则进 行HQL解析
+    }  else {
       try {
         CommandProcessor proc = CommandProcessorFactory.get(tokens, (HiveConf) conf);
         ret = processLocalCmd(cmd, proc, ss);
@@ -224,26 +228,31 @@ public class CliDriver {
           if (proc instanceof Driver) {
             Driver qp = (Driver) proc;
             PrintStream out = ss.out;
+            //获取系统时间作为开始时间,以便后续计算 HQL 执行时长：
             long start = System.currentTimeMillis();
             if (ss.getIsVerbose()) {
               out.println(cmd);
             }
 
             qp.setTryCount(tryCount);
+            //HQL 执行的核心方法：
             ret = qp.run(cmd).getResponseCode();
             if (ret != 0) {
               qp.close();
               return ret;
             }
 
+            //获取系统时间作为结束时间,以便后续计算 HQL 执行时长
             // query has run capture the time
             long end = System.currentTimeMillis();
             double timeTaken = (end - start) / 1000.0;
 
-            ArrayList<String> res = new ArrayList<String>();
+            ArrayList<String> res = new ArrayList<>();
 
+            //打印头信息：
             printHeader(qp, out);
 
+            //包含结果集并获取抓取到数据的条数
             // print the results
             int counter = 0;
             try {
@@ -276,6 +285,7 @@ public class CliDriver {
               ((FetchConverter)out).fetchFinished();
             }
 
+            //打印 HQL 执行时间以及抓取数据的条数(就是执行完一个 HQL 最后打印的那句话)
             console.printInfo("Time taken: " + timeTaken + " seconds" +
                 (counter == 0 ? "" : ", Fetched: " + counter + " row(s)"));
           } else {
@@ -400,6 +410,7 @@ public class CliDriver {
           continue;
         }
 
+        //解析单行 HQL：
         ret = processCmd(command);
         command = "";
         lastRet = ret;
@@ -706,6 +717,7 @@ public class CliDriver {
     }
 
     CliSessionState ss = new CliSessionState(new HiveConf(SessionState.class));
+    //标准输入输出以及错误输出流的定义,后续需要输入 HQL 以及打印控制台信息：
     ss.in = System.in;
     try {
       ss.out = new PrintStream(System.out, true, "UTF-8");
@@ -715,6 +727,7 @@ public class CliDriver {
       return 3;
     }
 
+    //解析用户参数,包含"-e -f -v -database"等等
     if (!oproc.process_stage2(ss)) {
       return 2;
     }
@@ -809,6 +822,7 @@ public class CliDriver {
     String curPrompt = prompt + curDB;
     String dbSpaces = spacesForString(curDB);
 
+    //读取客户端的输入 HQL：
     while ((line = reader.readLine(curPrompt + "> ")) != null) {
       if (!prefix.equals("")) {
         prefix += '\n';
@@ -816,6 +830,7 @@ public class CliDriver {
       if (line.trim().startsWith("--")) {
         continue;
       }
+      //以按照“;”分割的方式解析
       if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
         line = prefix + line;
         ret = cli.processLine(line, true);

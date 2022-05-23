@@ -465,6 +465,7 @@ public class Driver implements CommandProcessor {
       ctx.setHDFSCleanup(true);
 
       perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.PARSE);
+      //HQL 生成 AST：
       ASTNode tree = ParseUtils.parse(command, ctx);
       perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.PARSE);
 
@@ -1453,6 +1454,8 @@ public class Driver implements CommandProcessor {
 
       int ret;
       if (!alreadyCompiled) {
+
+        //1.编译 HQL 语句：
         // compile internal will automatically reset the perf logger
         ret = compileInternal(command, true);
         // then we continue to use this perf logger
@@ -1523,6 +1526,7 @@ public class Driver implements CommandProcessor {
           return rollback(createProcessorResponse(ret));
         }
       }
+      //2.执行：
       ret = execute(true);
       if (ret != 0) {
         //if needRequireLock is false, the release here will do nothing because there is no lock
@@ -1782,6 +1786,7 @@ public class Driver implements CommandProcessor {
         }
       }
 
+      //1.构建任务:根据任务树构建 MrJob
       setQueryDisplays(plan.getRootTasks());
       int mrJobs = Utilities.getMRTasks(plan.getRootTasks()).size();
       int jobs = mrJobs + Utilities.getTezTasks(plan.getRootTasks()).size()
@@ -1836,6 +1841,7 @@ public class Driver implements CommandProcessor {
         // Launch upto maxthreads tasks
         Task<? extends Serializable> task;
         while ((task = driverCxt.getRunnable(maxthreads)) != null) {
+          //2.启动任务
           TaskRunner runner = launchTask(task, queryId, noName, jobname, jobs, driverCxt);
           if (!runner.isRunning()) {
             break;
@@ -2052,6 +2058,7 @@ public class Driver implements CommandProcessor {
     }
 
     if (console != null) {
+      //打印 OK
       console.printInfo("OK");
     }
 
@@ -2167,19 +2174,22 @@ public class Driver implements CommandProcessor {
     TaskResult tskRes = new TaskResult();
     TaskRunner tskRun = new TaskRunner(tsk, tskRes);
 
+    //添加启动任务：
     cxt.launching(tskRun);
-    // Launch Task
+    // Launch Task:根据是否可以并行来决定是否并行启动 Task
     if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.EXECPARALLEL) && tsk.isMapRedTask()) {
       // Launch it in the parallel mode, as a separate thread only for MR tasks
       if (LOG.isInfoEnabled()){
         LOG.info("Starting task [" + tsk + "] in parallel");
       }
       tskRun.setOperationLog(OperationLog.getCurrentOperationLog());
+      //可并行任务启动,实际上还是执行 tskRun.runSequential();
       tskRun.start();
     } else {
       if (LOG.isInfoEnabled()){
         LOG.info("Starting task [" + tsk + "] in serial mode");
       }
+      //不可并行任务,则按照序列顺序执行任务
       tskRun.runSequential();
     }
     return tskRun;

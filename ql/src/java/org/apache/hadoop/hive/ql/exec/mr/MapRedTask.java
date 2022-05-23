@@ -148,7 +148,7 @@ public class MapRedTask extends ExecDriver implements Serializable {
         }
         // we are not running this mapred task via child jvm
         // so directly invoke ExecDriver
-        int ret = super.execute(driverContext);
+        int ret = super.execute(driverContext);//设置 MR 任务的 InputFormat、OutputFormat 等等这些 MRJob 的执行类
 
         // restore the previous properties for framework name, RM address etc.
         if (this.isLocalMode()) {
@@ -189,6 +189,7 @@ public class MapRedTask extends ExecDriver implements Serializable {
         IOUtils.closeQuietly(out);
       }
 
+      //构建执行 MR 任务的命令：
       String isSilent = "true".equalsIgnoreCase(System
           .getProperty("test.silent")) ? "-nolog" : "";
 

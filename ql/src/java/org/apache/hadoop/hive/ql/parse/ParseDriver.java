@@ -186,7 +186,10 @@ public class ParseDriver {
       LOG.debug("Parsing command: " + command);
     }
 
+    //1.构建词法解析器：
     HiveLexerX lexer = new HiveLexerX(new ANTLRNoCaseStringStream(command));
+
+    //2.将 HQL 中的关键词替换为 Token
     TokenRewriteStream tokens = new TokenRewriteStream(lexer);
     if (ctx != null) {
       if (viewFullyQualifiedName == null) {
@@ -205,6 +208,7 @@ public class ParseDriver {
     parser.setTreeAdaptor(adaptor);
     HiveParser.statement_return r = null;
     try {
+      //3.进行语法解析，生成最终的 AST
       r = parser.statement();
     } catch (RecognitionException e) {
       e.printStackTrace();

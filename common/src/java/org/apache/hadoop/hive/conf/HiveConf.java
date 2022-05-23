@@ -1011,9 +1011,9 @@ public class HiveConf extends Configuration {
 
     // hive jar
     HIVEJAR("hive.jar.path", "",
-        "The location of hive_cli.jar that is used when submitting jobs in a separate jvm."),
+        "在单独的 jvm 中提交job时使用的 hive_cli.jar 的路径。"),
     HIVEAUXJARS("hive.aux.jars.path", "",
-        "The location of the plugin jars that contain implementations of user defined functions and serdes."),
+        "包含用户定义function和 serdes 实现的插件 jar 的位置。"),
 
     // reloadable jars
     HIVERELOADABLEJARS("hive.reloadable.aux.jars.path", "",
@@ -1067,7 +1067,7 @@ public class HiveConf extends Configuration {
     HIVEMAPREDMODE("hive.mapred.mode", null,
         "Deprecated; use hive.strict.checks.* settings instead."),
     HIVEALIAS("hive.alias", "", ""),
-    HIVEMAPSIDEAGGREGATE("hive.map.aggr", true, "Whether to use map-side aggregation in Hive Group By queries"),
+    HIVEMAPSIDEAGGREGATE("hive.map.aggr", true, "Group By 查询，开启map端聚合功能"),
     HIVEGROUPBYSKEW("hive.groupby.skewindata", false, "Whether there is skew in data to optimize group by queries"),
     HIVEJOINEMITINTERVAL("hive.join.emit.interval", 1000,
         "How many rows in the right-most join operand Hive should buffer before emitting the join result."),

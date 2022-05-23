@@ -11241,9 +11241,12 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Before logical optimization\n" + Operator.toString(pCtx.getTopOps().values()));
     }
+    //创建优化器：
     Optimizer optm = new Optimizer();
     optm.setPctx(pCtx);
     optm.initialize(conf);
+
+    //执行优化：
     pCtx = optm.optimize();
     if (pCtx.getColumnAccessInfo() != null) {
       // set ColumnAccessInfo for view column authorization
@@ -11270,6 +11273,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     if (!ctx.getExplainLogical()) {
       TaskCompiler compiler = TaskCompilerFactory.getCompiler(conf, pCtx);
       compiler.init(queryState, console, db);
+      //compile 为抽象方法，对应的实现类分别为 MapReduceCompiler、TezCompiler 和 SparkCompiler   ：
       compiler.compile(pCtx, rootTasks, inputs, outputs);
       fetchTask = pCtx.getFetchTask();
     }
